@@ -1,0 +1,10 @@
+{
+  "name": "wavey-gist-api-rendering",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@wooorm/starry-night": "^3.9.0",
+    "hast-util-to-html": "^9.0.5"
+  }
+}

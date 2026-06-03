@@ -1,0 +1,55 @@
+import type { Metadata } from "next";
+import { GistViewer } from "../../components/GistViewer";
+import {
+  PublicGistNotFoundError,
+  fetchPublicGist,
+  fetchPublicGistPayload
+} from "../../lib/gists";
+import { getGistDocumentTitle } from "../../lib/gist-title";
+import { getSiteChromeConfig } from "../../lib/site-config";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type PageProps = {
+  params: Promise<{
+    gistId: string;
+  }>;
+};
+
+const robots: Metadata["robots"] = {
+  index: false,
+  follow: false
+};
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { gistId } = await params;
+
+  try {
+    const gist = await fetchPublicGistPayload(gistId);
+    return {
+      title: getGistDocumentTitle(gist),
+      robots
+    };
+  } catch (error) {
+    if (error instanceof PublicGistNotFoundError) {
+      return {
+        title: "Gist",
+        robots
+      };
+    }
+    throw error;
+  }
+}
+
+export default async function GistPage({ params }: PageProps) {
+  const { gistId } = await params;
+  const gist = await fetchPublicGist(gistId);
+  const chrome = getSiteChromeConfig();
+
+  return (
+    <main className="page-shell">
+      <GistViewer chrome={chrome} gist={gist} />
+    </main>
+  );
+}

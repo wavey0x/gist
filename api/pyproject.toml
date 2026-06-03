@@ -1,0 +1,33 @@
+[project]
+name = "wavey-gist-api"
+version = "0.1.0"
+description = "Standalone self-hosted Wavey Gist API"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "bleach>=6.2.0",
+    "cmarkgfm>=2024.11.20",
+    "flask>=3.1.0",
+    "gunicorn>=23.0.0",
+    "lxml>=5.3.0",
+    "python-dotenv>=1.0.1",
+]
+
+[project.scripts]
+admin = "gist_api.admin:main"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
