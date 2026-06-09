@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "github-markdown-css/github-markdown.css";
+import { AppHeader } from "../components/AppHeader";
 import "./markdown-theme.css";
 import "./globals.css";
 import "./syntax.css";
@@ -52,7 +53,10 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{ __html: themeScript }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <AppHeader />
+        {children}
+      </body>
     </html>
   );
 }

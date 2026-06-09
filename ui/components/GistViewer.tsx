@@ -5,8 +5,6 @@ import {
   Copy,
   FileCode,
   History,
-  Moon,
-  Sun,
   TextSearch
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -14,7 +12,6 @@ import { getGistHeaderTitle } from "../lib/gist-title";
 import type { PublicGistPayload } from "../lib/gists";
 import type { SiteChromeConfig } from "../lib/site-config";
 
-type Theme = "light" | "dark";
 type ViewMode = "rendered" | "raw";
 
 type GistViewerProps = {
@@ -24,15 +21,8 @@ type GistViewerProps = {
 
 export function GistViewer({ chrome, gist }: GistViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("rendered");
-  const [theme, setTheme] = useState<Theme>("light");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [rawCopied, setRawCopied] = useState(false);
-
-  useEffect(() => {
-    const current =
-      document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-    setTheme(current);
-  }, []);
 
   useEffect(() => {
     if (!rawCopied) {
@@ -41,12 +31,6 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
     const timeout = window.setTimeout(() => setRawCopied(false), 1500);
     return () => window.clearTimeout(timeout);
   }, [rawCopied]);
-
-  function applyTheme(nextTheme: Theme) {
-    document.documentElement.dataset.theme = nextTheme;
-    localStorage.setItem("theme", nextTheme);
-    setTheme(nextTheme);
-  }
 
   function applyViewMode(nextViewMode: ViewMode) {
     setViewMode(nextViewMode);
@@ -66,7 +50,6 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
     }
   }
 
-  const nextTheme = theme === "dark" ? "light" : "dark";
   const nextViewMode = viewMode === "rendered" ? "raw" : "rendered";
   const headerTitle = getGistHeaderTitle(gist);
 
@@ -155,19 +138,6 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
               </div>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={`Switch to ${nextTheme} mode`}
-            title={nextTheme === "dark" ? "Dark" : "Light"}
-            onClick={() => applyTheme(nextTheme)}
-          >
-            {theme === "dark" ? (
-              <Sun aria-hidden="true" size={18} strokeWidth={1.8} />
-            ) : (
-              <Moon aria-hidden="true" size={18} strokeWidth={1.8} />
-            )}
-          </button>
         </div>
       </header>
 

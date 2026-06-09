@@ -43,6 +43,10 @@ body {
     sans-serif;
 }
 
+a {
+  color: inherit;
+}
+
 button {
   font: inherit;
 }
@@ -71,10 +75,90 @@ button {
 }
 
 .auth-login {
-  min-height: 100vh;
+  min-height: calc(100vh - 58px);
   display: grid;
   align-content: center;
   gap: 10px;
+}
+
+.app-header {
+  min-height: 58px;
+  border-bottom: 1px solid var(--border);
+  background: var(--page-bg);
+}
+
+.app-header-inner {
+  width: min(100%, 980px);
+  min-height: 58px;
+  margin: 0 auto;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.app-brand {
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  color: var(--page-fg);
+  font-size: 20px;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.app-brand:hover,
+.app-brand:focus-visible {
+  color: var(--page-fg);
+}
+
+.app-nav {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.app-link {
+  border: 0;
+  background: transparent;
+  color: var(--muted-fg);
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.app-link:hover,
+.app-link:focus-visible {
+  color: var(--page-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.app-link:focus-visible,
+.app-theme-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.app-link-button {
+  cursor: pointer;
+}
+
+.app-logout-form {
+  display: contents;
+}
+
+.app-theme-button {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
 }
 
 .login-form {
@@ -455,7 +539,7 @@ button {
 
 .not-found,
 .error-state {
-  min-height: 100vh;
+  min-height: calc(100vh - 58px);
   display: grid;
   place-content: center;
   gap: 6px;
@@ -500,6 +584,22 @@ button {
 }
 
 @media (max-width: 640px) {
+  .app-header-inner {
+    min-height: auto;
+    padding: 10px 16px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .app-nav {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
   .page-shell {
     padding: 10px 16px 20px;
   }

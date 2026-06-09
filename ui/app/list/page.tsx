@@ -45,14 +45,6 @@ export default async function GistListPage() {
             />
           ) : null}
           <span className="auth-name">{session.name}</span>
-          <span className="auth-separator" aria-hidden="true">
-            |
-          </span>
-          <form action="/logout" method="post">
-            <button className="text-link-button" type="submit">
-              logout
-            </button>
-          </form>
         </div>
       </header>
 
