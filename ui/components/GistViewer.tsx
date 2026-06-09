@@ -30,10 +30,15 @@ function authorAvatarUrl(authorName: string) {
     : null;
 }
 
+function authorAvatarInitial(authorName: string) {
+  return authorName.trim().charAt(0).toUpperCase() || "?";
+}
+
 export function GistViewer({ chrome, gist }: GistViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("rendered");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [rawCopied, setRawCopied] = useState(false);
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!rawCopied) {
@@ -64,6 +69,8 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
   const nextViewMode = viewMode === "rendered" ? "raw" : "rendered";
   const headerTitle = getGistHeaderTitle(gist);
   const avatarUrl = authorAvatarUrl(gist.author_name);
+  const visibleAvatarUrl =
+    avatarUrl && avatarUrl !== failedAvatarUrl ? avatarUrl : null;
 
   return (
     <>
@@ -83,15 +90,23 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
           {headerTitle ? <h1 className="gist-title">{headerTitle}</h1> : null}
           <div className="gist-meta">
             <span className="gist-author-line">
-              {avatarUrl ? (
+              {visibleAvatarUrl ? (
                 <img
                   className="gist-author-avatar"
-                  src={avatarUrl}
+                  src={visibleAvatarUrl}
                   alt=""
                   width={18}
                   height={18}
+                  onError={() => setFailedAvatarUrl(visibleAvatarUrl)}
                 />
-              ) : null}
+              ) : (
+                <span
+                  className="gist-author-avatar gist-author-avatar-placeholder"
+                  aria-hidden="true"
+                >
+                  {authorAvatarInitial(gist.author_name)}
+                </span>
+              )}
               by <span className="gist-author-name">{gist.author_name}</span>
             </span>
             {gist.revision_number < gist.latest_revision_number ? (

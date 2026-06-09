@@ -825,6 +825,19 @@ button {
   border-radius: 50%;
 }
 
+.gist-author-avatar-placeholder {
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(135deg, rgb(68 147 248 / 18%), transparent 55%),
+    var(--button-bg-active);
+  color: var(--muted-fg);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+}
+
 .toolbar {
   grid-column: 3;
   justify-self: end;
