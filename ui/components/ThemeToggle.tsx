@@ -5,7 +5,13 @@ import { useEffect, useState } from "react";
 
 type Theme = "light" | "dark";
 
-export function ThemeToggle() {
+type ThemeToggleProps = {
+  className?: string;
+};
+
+export function ThemeToggle({
+  className = "icon-button theme-toggle-button"
+}: ThemeToggleProps) {
   const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
@@ -23,7 +29,7 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      className="icon-button app-theme-button"
+      className={className}
       aria-label={`Switch to ${nextTheme} mode`}
       title={nextTheme === "dark" ? "Dark" : "Light"}
       onClick={() => applyTheme(nextTheme)}

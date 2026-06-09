@@ -148,7 +148,7 @@ button {
 }
 
 .app-link:focus-visible,
-.app-theme-button:focus-visible {
+.theme-toggle-button:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -169,6 +169,18 @@ button {
   color: var(--muted-fg);
   font-size: 13px;
   line-height: 1.4;
+  text-decoration: none;
+}
+
+.app-identity-link:hover .app-name,
+.app-identity-link:focus-visible .app-name {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.app-identity-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .app-avatar {
@@ -186,7 +198,7 @@ button {
   white-space: nowrap;
 }
 
-.app-theme-button {
+.theme-toggle-button {
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
@@ -402,6 +414,19 @@ button {
 
 .gist-author-name {
   color: var(--page-fg);
+}
+
+.gist-author-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.gist-author-avatar {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 50%;
 }
 
 .toolbar {

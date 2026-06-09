@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { getGistHeaderTitle } from "../lib/gist-title";
 import type { PublicGistPayload } from "../lib/gists";
 import type { SiteChromeConfig } from "../lib/site-config";
+import { ThemeToggle } from "./ThemeToggle";
 
 type ViewMode = "rendered" | "raw";
 
@@ -18,6 +19,15 @@ type GistViewerProps = {
   chrome: SiteChromeConfig;
   gist: PublicGistPayload;
 };
+
+const GITHUB_LOGIN_RE =
+  /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+
+function authorAvatarUrl(authorName: string) {
+  return GITHUB_LOGIN_RE.test(authorName)
+    ? `https://github.com/${authorName}.png?size=64`
+    : null;
+}
 
 export function GistViewer({ chrome, gist }: GistViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("rendered");
@@ -52,6 +62,7 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
 
   const nextViewMode = viewMode === "rendered" ? "raw" : "rendered";
   const headerTitle = getGistHeaderTitle(gist);
+  const avatarUrl = authorAvatarUrl(gist.author_name);
 
   return (
     <>
@@ -69,7 +80,16 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
         <div className="gist-heading">
           {headerTitle ? <h1 className="gist-title">{headerTitle}</h1> : null}
           <div className="gist-meta">
-            <span>
+            <span className="gist-author-line">
+              {avatarUrl ? (
+                <img
+                  className="gist-author-avatar"
+                  src={avatarUrl}
+                  alt=""
+                  width={18}
+                  height={18}
+                />
+              ) : null}
               by <span className="gist-author-name">{gist.author_name}</span>
             </span>
             {gist.revision_number < gist.latest_revision_number ? (
@@ -138,6 +158,7 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
               </div>
             ) : null}
           </div>
+          <ThemeToggle />
         </div>
       </header>
 

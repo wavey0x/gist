@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { fetchCurrentSession } from "../lib/auth";
-import { ThemeToggle } from "./ThemeToggle";
 
 async function getHeaderSession() {
   try {
@@ -21,15 +20,9 @@ export async function AppHeader() {
           <span className="brand-mark-light">gist</span>
         </Link>
         <nav className="app-nav" aria-label="Site">
-          <Link className="app-link" href="/">
-            Home
-          </Link>
           {session ? (
             <>
-              <Link className="app-link" href="/list">
-                List
-              </Link>
-              <span className="app-identity">
+              <Link className="app-identity app-identity-link" href="/list">
                 {session.avatar_url ? (
                   <img
                     className="app-avatar"
@@ -40,7 +33,7 @@ export async function AppHeader() {
                   />
                 ) : null}
                 <span className="app-name">{session.name}</span>
-              </span>
+              </Link>
               <form className="app-logout-form" action="/logout" method="post">
                 <button className="app-link app-link-button" type="submit">
                   Log out
@@ -52,7 +45,6 @@ export async function AppHeader() {
               Log in
             </Link>
           )}
-          <ThemeToggle />
         </nav>
       </div>
     </header>
