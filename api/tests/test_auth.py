@@ -249,6 +249,24 @@ def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
     assert after_logout.status_code == 401
 
 
+def test_auth_session_identity_exposes_delete_capability(client, app):
+    with gist_connection(app) as conn:
+        created = create_api_key(
+            conn,
+            "gist",
+            "admin",
+            ["gist:read", "gist:write", "gist:delete"],
+        )
+
+    response = client.post(
+        "/api/v1/auth/session",
+        json={"api_key": created["key"]},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["can_delete_gists"] is True
+
+
 def test_auth_session_login_forbids_gist_key_without_read_scope(client, app):
     with gist_connection(app) as conn:
         created = create_api_key(conn, "gist", "writer", ["gist:write"])
