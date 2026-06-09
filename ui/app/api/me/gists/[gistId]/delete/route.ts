@@ -46,12 +46,8 @@ function isSameOrigin(request: NextRequest) {
   return candidateHosts.has(originHost);
 }
 
-function redirectToMe(request: NextRequest, code?: string) {
-  const url = new URL("/me", request.url);
-  if (code) {
-    url.searchParams.set("delete_status", code);
-  }
-  return NextResponse.redirect(url, { status: 303 });
+function redirectToMe(request: NextRequest) {
+  return NextResponse.redirect(new URL("/me", request.url), { status: 303 });
 }
 
 export async function POST(request: NextRequest, { params }: RouteProps) {
@@ -74,20 +70,12 @@ export async function POST(request: NextRequest, { params }: RouteProps) {
   }
 
   let response: NextResponse;
-  if (backendResponse.status === 204) {
-    response = redirectToMe(request);
-  } else if (backendResponse.status === 401) {
+  if (backendResponse.status === 401) {
     response = NextResponse.redirect(new URL("/login", request.url), {
       status: 303
     });
-  } else if (backendResponse.status === 403) {
-    response = redirectToMe(request, "forbidden");
-  } else if (backendResponse.status === 404) {
-    response = redirectToMe(request, "not_found");
-  } else if (backendResponse.status === 429) {
-    response = redirectToMe(request, "rate_limited");
   } else {
-    response = redirectToMe(request, "server");
+    response = redirectToMe(request);
   }
 
   forwardBackendSetCookie(response, backendResponse);

@@ -11,12 +11,6 @@ export const metadata: Metadata = {
   title: "Your gists - Wavey Gist"
 };
 
-type PageProps = {
-  searchParams: Promise<{
-    delete_status?: string | string[];
-  }>;
-};
-
 function formatUpdatedAt(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) {
@@ -28,24 +22,7 @@ function formatUpdatedAt(value: string) {
   }).format(date);
 }
 
-function deleteStatusMessage(value: string | string[] | undefined) {
-  const code = Array.isArray(value) ? value[0] : value;
-  if (code === "forbidden") {
-    return "This API key cannot delete gists.";
-  }
-  if (code === "not_found") {
-    return "That gist is no longer available to delete.";
-  }
-  if (code === "rate_limited") {
-    return "Too many changes. Try again shortly.";
-  }
-  if (code === "server") {
-    return "Delete is unavailable right now.";
-  }
-  return null;
-}
-
-export default async function MePage({ searchParams }: PageProps) {
+export default async function MePage() {
   const session = await fetchCurrentSession();
   if (!session) {
     redirect("/login");
@@ -55,9 +32,6 @@ export default async function MePage({ searchParams }: PageProps) {
   if (!payload) {
     redirect("/login");
   }
-
-  const params = await searchParams;
-  const deleteMessage = deleteStatusMessage(params.delete_status);
 
   return (
     <main className="auth-shell" aria-label="Your gists">
@@ -88,8 +62,6 @@ export default async function MePage({ searchParams }: PageProps) {
           </div>
         </div>
       </section>
-
-      {deleteMessage ? <p className="auth-error">{deleteMessage}</p> : null}
 
       {payload.gists.length > 0 ? (
         <ul className="gist-list">
