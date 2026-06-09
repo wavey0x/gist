@@ -34,9 +34,7 @@ export function ApiKeyCopyButton({ apiKey }: ApiKeyCopyButtonProps) {
       aria-live="polite"
       onClick={copyApiKey}
     >
-      <span className={copied ? "api-key-copy-feedback" : undefined}>
-        {copied ? "Copied!" : "Copy API key"}
-      </span>
+      <span>{copied ? "Copied!" : "Copy API key"}</span>
     </button>
   );
 }

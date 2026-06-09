@@ -368,28 +368,6 @@ button {
   outline-offset: 2px;
 }
 
-.api-key-copy-feedback {
-  display: inline-block;
-  animation: copy-pulse 600ms ease;
-}
-
-@keyframes copy-pulse {
-  0% {
-    opacity: 0.55;
-    transform: translateY(1px);
-  }
-
-  55% {
-    opacity: 1;
-    transform: translateY(-1px);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 .auth-identity {
   display: inline-flex;
   align-items: center;
