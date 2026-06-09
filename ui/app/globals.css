@@ -117,12 +117,15 @@ button {
 .home-gist-history {
   margin-top: clamp(96px, 18vh, 170px);
   padding-top: 22px;
-  border-top: 1px solid var(--border);
   text-align: left;
 }
 
 .home-gist-history .me-tabs {
-  justify-content: flex-start;
+  justify-content: center;
+}
+
+.home-gist-history .me-tab-button[aria-selected="true"] {
+  color: var(--muted-fg);
 }
 
 .app-header {
@@ -948,6 +951,39 @@ button {
 .markdown-body table {
   max-width: 100%;
   overflow-x: auto;
+}
+
+.markdown-body table {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  overflow-y: hidden;
+  table-layout: auto;
+}
+
+.markdown-body th,
+.markdown-body td {
+  min-width: 8ch;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.markdown-body th {
+  white-space: nowrap;
+}
+
+.markdown-body th:last-child,
+.markdown-body td:last-child {
+  min-width: 36ch;
+  max-width: 90ch;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.markdown-body table a,
+.markdown-body table code,
+.markdown-body table .eth-entity {
+  white-space: nowrap;
 }
 
 .raw-viewer {
