@@ -17,9 +17,9 @@ from lxml import etree, html
 
 logger = logging.getLogger(__name__)
 
-SANITIZER_CONFIG_VERSION = "2026-06-02.3"
+SANITIZER_CONFIG_VERSION = "2026-06-02.4"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
-ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-09.2"
+ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-09.3"
 HIGHLIGHT_GRAMMAR_SET = "all"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -94,7 +94,12 @@ SAFE_CLASS_PATTERNS = (
     re.compile(r"^language-[A-Za-z0-9_.+-]+$"),
     re.compile(r"^pl-[A-Za-z0-9_-]+$"),
     re.compile(r"^eth-id-[a-f0-9]{12}$"),
+    re.compile(r"^eth-party-color-(?:[0-3][0-9]|4[0-7])$"),
+    re.compile(r"^eth-tx-color-(?:0[0-9]|1[0-5])$"),
 )
+ETHEREUM_PARTY_COLOR_KINDS = {"address", "ens"}
+ETHEREUM_PARTY_COLOR_COUNT = 48
+ETHEREUM_TX_COLOR_COUNT = 16
 ETHEREUM_FULL_VALUE_PATTERN = r"0x(?:[0-9A-Fa-f]{64}|[0-9A-Fa-f]{40})"
 ETHEREUM_FULL_ENTITY_RE = re.compile(
     rf"(?<![0-9A-Za-z])({ETHEREUM_FULL_VALUE_PATTERN})(?![0-9A-Za-z])"
@@ -372,7 +377,14 @@ def _ethereum_entity_digest(entity):
 
 def _ethereum_entity_classes(entity):
     digest = _ethereum_entity_digest(entity)
-    return f"eth-entity eth-{entity.kind} eth-id-{digest[:12]}"
+    classes = ["eth-entity", f"eth-{entity.kind}", f"eth-id-{digest[:12]}"]
+    if entity.kind in ETHEREUM_PARTY_COLOR_KINDS:
+        color_index = int(digest[:8], 16) % ETHEREUM_PARTY_COLOR_COUNT
+        classes.append(f"eth-party-color-{color_index:02d}")
+    elif entity.kind == "tx":
+        color_index = int(digest[:8], 16) % ETHEREUM_TX_COLOR_COUNT
+        classes.append(f"eth-tx-color-{color_index:02d}")
+    return " ".join(classes)
 
 
 def _set_ethereum_entity_classes(element, entity):

@@ -11,7 +11,9 @@ from .conftest import create_gist, make_key
 
 FIXTURE_DIR = Path(__file__).with_name("fixtures")
 ETH_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678"
+ETH_ADDRESS_2 = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
 ETH_TX_HASH = "0x" + "a1" * 32
+ETH_TX_HASH_2 = "0x" + "b2" * 32
 ETH_SELECTOR = "0xa9059cbb"
 ENS_NAME = "vaults.yearn.eth"
 
@@ -23,6 +25,13 @@ def _class_tokens(element):
 def _entity_id(element):
     return next(
         token for token in _class_tokens(element) if token.startswith("eth-id-")
+    )
+
+
+def _class_token_with_prefix(element, prefix):
+    return next(
+        (token for token in _class_tokens(element) if token.startswith(prefix)),
+        None,
     )
 
 
@@ -123,6 +132,88 @@ Inline code `{ETH_ADDRESS}` gets colored.
         method="html",
     )
     assert "ethereum-entities/on@" in result.version
+
+
+def test_ethereum_entity_rendering_assigns_stable_categorical_colors():
+    short_address = f"{ETH_ADDRESS[:5]}..{ETH_ADDRESS[-3:]}"
+    short_tx = f"{ETH_TX_HASH[:5]}..{ETH_TX_HASH[-3:]}"
+    result = render_markdown_result(
+        f"""
+Address {ETH_ADDRESS} repeated {ETH_ADDRESS}.
+Different address {ETH_ADDRESS_2}.
+Linked short address [{short_address}](https://etherscan.io/address/{ETH_ADDRESS})
+
+ENS {ENS_NAME} repeated {ENS_NAME}.
+
+Tx {ETH_TX_HASH} repeated {ETH_TX_HASH}.
+Different tx {ETH_TX_HASH_2}.
+Linked short tx [{short_tx}](https://etherscan.io/tx/{ETH_TX_HASH})
+
+Selector {ETH_SELECTOR}.
+At block 22481234.
+"""
+    )
+
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+    address_entities = root.xpath(
+        f'.//*[normalize-space()="{ETH_ADDRESS}" and '
+        'contains(concat(" ", @class, " "), " eth-address ")]'
+    )
+    short_address_links = root.xpath(f'.//a[normalize-space()="{short_address}"]')
+    second_address = root.xpath(
+        f'.//*[normalize-space()="{ETH_ADDRESS_2}" and '
+        'contains(concat(" ", @class, " "), " eth-address ")]'
+    )
+    ens_entities = root.xpath(
+        f'.//*[normalize-space()="{ENS_NAME}" and '
+        'contains(concat(" ", @class, " "), " eth-ens ")]'
+    )
+    tx_entities = root.xpath(
+        f'.//*[normalize-space()="{ETH_TX_HASH}" and '
+        'contains(concat(" ", @class, " "), " eth-tx ")]'
+    )
+    short_tx_links = root.xpath(f'.//a[normalize-space()="{short_tx}"]')
+    second_tx = root.xpath(
+        f'.//*[normalize-space()="{ETH_TX_HASH_2}" and '
+        'contains(concat(" ", @class, " "), " eth-tx ")]'
+    )
+    selector_entities = root.xpath(
+        './/*[contains(concat(" ", @class, " "), " eth-selector ")]'
+    )
+    block_entities = root.xpath(
+        './/*[contains(concat(" ", @class, " "), " eth-block ")]'
+    )
+
+    address_color = _class_token_with_prefix(address_entities[0], "eth-party-color-")
+    assert address_color is not None
+    assert {address_color} == {
+        _class_token_with_prefix(element, "eth-party-color-")
+        for element in [*address_entities, *short_address_links]
+    }
+    assert _class_token_with_prefix(second_address[0], "eth-party-color-") not in {
+        None,
+        address_color,
+    }
+    assert {
+        _class_token_with_prefix(element, "eth-party-color-")
+        for element in ens_entities
+    } == {_class_token_with_prefix(ens_entities[0], "eth-party-color-")}
+
+    tx_color = _class_token_with_prefix(tx_entities[0], "eth-tx-color-")
+    assert tx_color is not None
+    assert {tx_color} == {
+        _class_token_with_prefix(element, "eth-tx-color-")
+        for element in [*tx_entities, *short_tx_links]
+    }
+    assert _class_token_with_prefix(second_tx[0], "eth-tx-color-") not in {
+        None,
+        tx_color,
+    }
+    assert _class_token_with_prefix(tx_entities[0], "eth-party-color-") is None
+
+    for element in [*selector_entities, *block_entities]:
+        assert _class_token_with_prefix(element, "eth-party-color-") is None
+        assert _class_token_with_prefix(element, "eth-tx-color-") is None
 
 
 def test_ethereum_entity_rendering_inferrs_compact_abbreviated_links():
@@ -244,21 +335,27 @@ def test_ethereum_entity_rendering_leaves_unlinked_abbreviations_plain():
 
 def test_ethereum_entity_sanitizer_allows_only_expected_classes():
     result = render_markdown_result(
-        '<span class="eth-entity eth-id-nope eth-weird">not an address</span>'
+        '<span class="eth-entity eth-id-nope eth-weird eth-party-color-48 '
+        'eth-tx-color-16">not an address</span>'
     )
 
     assert "eth-id-nope" not in result.html
     assert "eth-weird" not in result.html
+    assert "eth-party-color-48" not in result.html
+    assert "eth-tx-color-16" not in result.html
     assert "<span>not an address</span>" in result.html
 
     allowed = render_markdown_result(
-        '<span class="eth-entity eth-ens eth-selector eth-block eth-id-abcdef123456">'
+        '<span class="eth-entity eth-ens eth-selector eth-block '
+        'eth-id-abcdef123456 eth-party-color-47 eth-tx-color-15">'
         "entity</span>"
     )
 
     assert "eth-ens" in allowed.html
     assert "eth-selector" in allowed.html
     assert "eth-block" in allowed.html
+    assert "eth-party-color-47" in allowed.html
+    assert "eth-tx-color-15" in allowed.html
 
 
 def test_markdown_rendering_marks_degraded_when_node_is_missing(monkeypatch):
