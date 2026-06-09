@@ -17,6 +17,10 @@ function isSameOrigin(request: NextRequest) {
   if (!origin) {
     return true;
   }
+  if (origin === "null") {
+    const fetchSite = request.headers.get("sec-fetch-site");
+    return fetchSite === "same-origin" || fetchSite === "same-site";
+  }
 
   let originHost: string;
   try {

@@ -256,19 +256,17 @@ button {
 }
 
 .account-panel {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 18px;
-  padding-bottom: 16px;
+  display: grid;
+  gap: 7px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border);
 }
 
 .account-profile {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: 5px;
 }
 
 .account-identity {
@@ -276,12 +274,11 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding-top: 3px;
 }
 
 .account-avatar {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
   border-radius: 50%;
 }
@@ -290,16 +287,24 @@ button {
   min-width: 0;
   overflow: hidden;
   color: var(--page-fg);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.account-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  padding-left: 32px;
+}
+
 .account-logout-form {
   margin: 0;
-  padding-left: 36px;
 }
 
 .account-logout-button {
@@ -325,12 +330,21 @@ button {
   outline-offset: 2px;
 }
 
+.account-action-separator {
+  color: var(--border);
+  font-size: 12px;
+  line-height: 1;
+}
+
 .api-key-disclosure {
   min-width: 0;
-  flex: 0 1 520px;
-  max-width: 520px;
   display: grid;
-  justify-items: end;
+  justify-items: start;
+}
+
+.api-key-disclosure[open] {
+  width: min(100%, 520px);
+  flex-basis: 100%;
 }
 
 .api-key-summary {
@@ -338,8 +352,8 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: var(--page-fg);
-  font-size: 13px;
+  color: var(--muted-fg);
+  font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
   list-style: none;
@@ -355,9 +369,14 @@ button {
 }
 
 .api-key-toggle-icon {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   cursor: pointer;
+}
+
+.api-key-summary:hover,
+.api-key-summary:focus-visible {
+  color: var(--page-fg);
 }
 
 .api-key-toggle-label {
@@ -830,18 +849,12 @@ button {
     padding: 14px 16px 24px;
   }
 
-  .account-panel {
-    display: grid;
-    gap: 10px;
+  .account-actions {
+    padding-left: 32px;
   }
 
-  .api-key-disclosure {
+  .api-key-disclosure[open] {
     width: 100%;
-    max-width: none;
-  }
-
-  .api-key-summary {
-    justify-self: end;
   }
 
   .login-form {

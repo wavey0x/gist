@@ -69,19 +69,24 @@ export default async function MePage({ searchParams }: PageProps) {
                 className="account-avatar"
                 src={session.avatar_url}
                 alt=""
-                width={28}
-                height={28}
+                width={24}
+                height={24}
               />
             ) : null}
             <span className="account-name">{session.name}</span>
           </div>
-          <form className="account-logout-form" action="/logout" method="post">
-            <button className="account-logout-button" type="submit">
-              Log out
-            </button>
-          </form>
+          <div className="account-actions">
+            <form className="account-logout-form" action="/logout" method="post">
+              <button className="account-logout-button" type="submit">
+                Log out
+              </button>
+            </form>
+            <span className="account-action-separator" aria-hidden="true">
+              /
+            </span>
+            <ApiKeyDisclosure apiKey={session.key} />
+          </div>
         </div>
-        <ApiKeyDisclosure apiKey={session.key} />
       </section>
 
       {deleteMessage ? <p className="auth-error">{deleteMessage}</p> : null}
