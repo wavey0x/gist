@@ -82,7 +82,7 @@ export default async function MePage({ searchParams }: PageProps) {
               </button>
             </form>
             <span className="account-action-separator" aria-hidden="true">
-              /
+              |
             </span>
             <ApiKeyDisclosure apiKey={session.key} />
           </div>
