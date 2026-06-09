@@ -11,9 +11,9 @@ async function apiKeyFromRequest(request: NextRequest) {
   try {
     const formData = await request.formData();
     const apiKey = formData.get("api_key");
-    return typeof apiKey === "string" ? apiKey : "";
+    return typeof apiKey === "string" && apiKey ? apiKey : null;
   } catch {
-    return "";
+    return null;
   }
 }
 
@@ -27,6 +27,10 @@ function loginRedirect(request: NextRequest, error?: string) {
 
 export async function POST(request: NextRequest) {
   const apiKey = await apiKeyFromRequest(request);
+  if (!apiKey) {
+    return loginRedirect(request, "invalid");
+  }
+
   const backendResponse = await fetch(await apiUrl("/api/v1/auth/session"), {
     cache: "no-store",
     method: "POST",
