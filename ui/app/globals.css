@@ -297,17 +297,21 @@ button {
 .account-actions {
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   flex-wrap: wrap;
   gap: 6px 8px;
   padding-left: 32px;
 }
 
 .account-logout-form {
+  display: inline-flex;
+  align-items: baseline;
   margin: 0;
 }
 
 .account-logout-button {
+  display: inline-flex;
+  align-items: baseline;
   border: 0;
   background: transparent;
   color: var(--muted-fg);
@@ -333,10 +337,13 @@ button {
 .account-action-separator {
   color: var(--border);
   font-size: 12px;
-  line-height: 1;
+  line-height: 1.4;
 }
 
 .api-key-copy-action {
+  min-width: 74px;
+  display: inline-flex;
+  align-items: baseline;
   border: 0;
   background: transparent;
   color: var(--muted-fg);
@@ -345,6 +352,7 @@ button {
   font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
+  text-align: left;
 }
 
 .api-key-copy-action:hover {
