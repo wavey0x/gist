@@ -22,7 +22,7 @@ def test_fresh_database_records_all_known_migration_slots(tmp_path):
             )
         ]
 
-    assert versions == [1, 2, 3]
+    assert versions == [1, 2, 3, 4]
 
 
 def test_existing_production_schema_history_migrates_forward_without_reset(tmp_path):
@@ -82,14 +82,14 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
             id, domain, name, key_hash, key_prefix, scopes_json, created_at
         )
         values (
-            1, 'gist', 'existing', 'redacted', 'wapi_gist_existing', '["gist:read"]', '2026-01-01T00:00:00.000Z'
+            1, 'gist', 'wavey', 'redacted', 'wapi_gist_existing', '["gist:read"]', '2026-01-01T00:00:00.000Z'
         );
         insert into gists(
             id, external_id, title, author_name, markdown, rendered_html,
             render_version, content_sha256, latest_revision_number, created_at, updated_at
         )
         values (
-            1, 'AAAAAAAAAAAAAAAA', null, 'existing', '# Existing', '<h1>Existing</h1>',
+            1, 'AAAAAAAAAAAAAAAA', null, 'wavey', '# Existing', '<h1>Existing</h1>',
             'old', '0', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
         );
         insert into gist_revisions(
@@ -97,7 +97,7 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
             render_version, content_sha256, created_at, created_by_key_id
         )
         values (
-            1, 1, null, 'existing', '# Existing', '<h1>Existing</h1>',
+            1, 1, null, 'wavey', '# Existing', '<h1>Existing</h1>',
             'old', '0', '2026-01-01T00:00:00.000Z', 1
         );
         """
@@ -120,7 +120,25 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
             )
         ]
         existing = migrated.execute(
-            "select external_id, markdown from gists where external_id = 'AAAAAAAAAAAAAAAA'"
+            """
+            select external_id, markdown, author_name
+            from gists
+            where external_id = 'AAAAAAAAAAAAAAAA'
+            """
+        ).fetchone()
+        existing_key = migrated.execute(
+            """
+            select name, github_login
+            from api_keys
+            where id = 1
+            """
+        ).fetchone()
+        existing_revision = migrated.execute(
+            """
+            select author_name
+            from gist_revisions
+            where gist_id = 1 and revision_number = 1
+            """
         ).fetchone()
         write_table = migrated.execute(
             """
@@ -129,13 +147,44 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
             where type = 'table' and name = 'api_write_events'
             """
         ).fetchone()
+        session_table = migrated.execute(
+            """
+            select name
+            from sqlite_master
+            where type = 'table' and name = 'web_sessions'
+            """
+        ).fetchone()
+        github_login_column = migrated.execute(
+            """
+            select name
+            from pragma_table_info('api_keys')
+            where name = 'github_login'
+            """
+        ).fetchone()
+        ownership_index = migrated.execute(
+            """
+            select name
+            from sqlite_master
+            where type = 'index'
+              and name = 'idx_gist_revisions_creator_revision'
+            """
+        ).fetchone()
 
-    assert versions == [1, 2, 3]
+    assert versions == [1, 2, 3, 4]
     assert dict(existing) == {
         "external_id": "AAAAAAAAAAAAAAAA",
         "markdown": "# Existing",
+        "author_name": "wavey0x",
     }
+    assert dict(existing_key) == {
+        "name": "wavey0x",
+        "github_login": "wavey0x",
+    }
+    assert existing_revision["author_name"] == "wavey0x"
     assert write_table["name"] == "api_write_events"
+    assert session_table["name"] == "web_sessions"
+    assert github_login_column["name"] == "github_login"
+    assert ownership_index["name"] == "idx_gist_revisions_creator_revision"
 
 
 def test_migrations_ignore_current_working_directory(monkeypatch, tmp_path):

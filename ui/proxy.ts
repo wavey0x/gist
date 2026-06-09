@@ -6,7 +6,7 @@ export function proxy(request: NextRequest) {
   const csp = [
     "default-src 'none'",
     "base-uri 'none'",
-    "form-action 'none'",
+    "form-action 'self'",
     "frame-ancestors 'none'",
     "img-src 'self' https:",
     "font-src 'self'",

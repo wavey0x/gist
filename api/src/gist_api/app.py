@@ -9,7 +9,7 @@ from .settings import load_settings
 
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
-        "default-src 'none'; base-uri 'none'; form-action 'none'; "
+        "default-src 'none'; base-uri 'none'; form-action 'self'; "
         "frame-ancestors 'none'"
     ),
     "Referrer-Policy": "no-referrer",

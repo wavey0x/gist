@@ -196,6 +196,56 @@ def test_legacy_base64url_gist_ids_remain_readable(client, app):
     assert body["markdown"] == "# Legacy ID"
 
 
+def test_me_gists_lists_only_gists_created_by_session_key(client, app):
+    owner_key = make_key(
+        app,
+        ["gist:read", "gist:write"],
+        name="owner",
+        github_login="owner",
+    )
+    editor_key = make_key(app, ["gist:read", "gist:write"], name="editor")
+
+    owner_created = create_gist(client, owner_key, "# Owner", title="Owner")
+    other_created = create_gist(client, editor_key, "# Other", title="Other")
+    assert owner_created.status_code == 201
+    assert other_created.status_code == 201
+    owner_body = owner_created.get_json()
+    other_body = other_created.get_json()
+
+    updated_owner = client.patch(
+        f"/api/v1/gists/{owner_body['id']}",
+        headers=auth_header(editor_key),
+        json={"title": "Edited by someone else"},
+    )
+    assert updated_owner.status_code == 200
+    updated_other = client.patch(
+        f"/api/v1/gists/{other_body['id']}",
+        headers=auth_header(owner_key),
+        json={"title": "Edited by owner"},
+    )
+    assert updated_other.status_code == 200
+
+    assert client.get("/api/v1/me/gists").status_code == 401
+
+    login = client.post("/api/v1/auth/session", json={"api_key": owner_key})
+    assert login.status_code == 200
+
+    response = client.get("/api/v1/me/gists")
+    assert response.status_code == 200
+    body = response.get_json()
+    assert len(body["gists"]) == 1
+    assert body["gists"][0] == {
+        "id": owner_body["id"],
+        "url": owner_body["url"],
+        "title": "Edited by someone else",
+        "author_name": "editor",
+        "revision_number": 2,
+        "updated_at": body["gists"][0]["updated_at"],
+    }
+    assert "markdown" not in body["gists"][0]
+    assert "rendered_html" not in body["gists"][0]
+
+
 def test_sanitizer_strips_scriptable_content(client, app):
     write_key = make_key(app, ["gist:write"])
     markdown = """
@@ -287,6 +337,6 @@ def test_api_responses_include_security_headers(client):
     assert response.headers["Referrer-Policy"] == "no-referrer"
     assert response.headers["X-Robots-Tag"] == "noindex, nofollow"
     assert response.headers["Content-Security-Policy"] == (
-        "default-src 'none'; base-uri 'none'; form-action 'none'; "
+        "default-src 'none'; base-uri 'none'; form-action 'self'; "
         "frame-ancestors 'none'"
     )

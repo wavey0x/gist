@@ -2,7 +2,15 @@ from ipaddress import ip_address
 
 from flask import Blueprint, current_app, jsonify, request
 
-from .auth import verify_api_key
+from .auth import (
+    WEB_SESSION_COOKIE_NAME,
+    WEB_SESSION_TTL_DAYS,
+    create_web_session,
+    revoke_web_session,
+    session_identity,
+    verify_api_key,
+    verify_web_session,
+)
 from .db import gist_connection
 from .errors import GistError, error_response
 from .rate_limits import check_write_rate_limit, record_auth_failure_and_check_limit
@@ -11,6 +19,7 @@ from .service import (
     delete_gist,
     get_gist,
     get_public_render,
+    list_gists_created_by_key,
     patch_gist,
 )
 
@@ -85,6 +94,52 @@ def require_gist_auth(scope):
     return auth, None
 
 
+def _set_session_cookie(response, token):
+    response.set_cookie(
+        WEB_SESSION_COOKIE_NAME,
+        token,
+        max_age=WEB_SESSION_TTL_DAYS * 24 * 60 * 60,
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="Lax",
+    )
+
+
+def _clear_session_cookie(response):
+    response.delete_cookie(
+        WEB_SESSION_COOKIE_NAME,
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="Lax",
+    )
+
+
+def _clear_session_cookie_on_error(code, message, status):
+    response, status = error_response(code, message, status)
+    _clear_session_cookie(response)
+    return response, status
+
+
+def require_web_session():
+    with gist_connection(current_app) as conn:
+        auth, error_code = verify_web_session(
+            conn,
+            request.cookies.get(WEB_SESSION_COOKIE_NAME),
+        )
+
+    if error_code == "forbidden":
+        return None, error_response("forbidden", "Forbidden", 403)
+    if error_code:
+        return None, _clear_session_cookie_on_error(
+            "unauthorized",
+            "Unauthorized",
+            401,
+        )
+    return auth, None
+
+
 def check_write_limit(auth):
     with gist_connection(current_app) as conn:
         limited = check_write_rate_limit(
@@ -101,6 +156,62 @@ def check_write_limit(auth):
 @gists_api.route("/api/v1/healthz", methods=["GET"])
 def healthz():
     return jsonify({"ok": True})
+
+
+@gists_api.route("/api/v1/auth/session", methods=["POST"])
+def post_auth_session():
+    try:
+        payload = parse_json_body()
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
+
+    api_key = payload.get("api_key")
+    if not isinstance(api_key, str):
+        return error_response("unauthorized", "Unauthorized", 401)
+
+    with gist_connection(current_app) as conn:
+        token, auth, error_code = create_web_session(conn, api_key)
+        if error_code == "unauthorized":
+            limited = record_auth_failure_and_check_limit(
+                conn,
+                _client_ip(),
+                current_app.config.get("API_AUTH_FAILURE_LIMIT_PER_MINUTE", 20),
+            )
+            if limited:
+                return error_response("rate_limited", "Rate limited", 429)
+            return error_response("unauthorized", "Unauthorized", 401)
+
+    if error_code == "forbidden":
+        return error_response("forbidden", "Forbidden", 403)
+
+    response = jsonify(session_identity(auth))
+    _set_session_cookie(response, token)
+    return response
+
+
+@gists_api.route("/api/v1/auth/session", methods=["GET"])
+def get_auth_session():
+    auth, response = require_web_session()
+    if response:
+        return response
+    return jsonify(session_identity(auth))
+
+
+@gists_api.route("/api/v1/auth/session", methods=["DELETE"])
+def delete_auth_session():
+    with gist_connection(current_app) as conn:
+        revoke_web_session(conn, request.cookies.get(WEB_SESSION_COOKIE_NAME))
+    response = current_app.response_class(status=204)
+    _clear_session_cookie(response)
+    return response
+
+
+@gists_api.route("/api/v1/me/gists", methods=["GET"])
+def list_my_gists():
+    auth, response = require_web_session()
+    if response:
+        return response
+    return jsonify(list_gists_created_by_key(current_app, auth.key_id))
 
 
 @gists_api.route("/api/v1/gists", methods=["POST"])

@@ -212,6 +212,40 @@ def get_gist(app, external_id, *, include_markdown=False):
         return _row_to_api(app, row, include_markdown=include_markdown)
 
 
+def list_gists_created_by_key(app, key_id, *, limit=100):
+    limit = max(1, min(int(limit), 100))
+    with gist_connection(app) as conn:
+        rows = conn.execute(
+            """
+            select gists.external_id, gists.title, gists.author_name,
+                   gists.latest_revision_number, gists.created_at, gists.updated_at
+            from gists
+            join gist_revisions as first_revision
+              on first_revision.gist_id = gists.id
+             and first_revision.revision_number = 1
+            where first_revision.created_by_key_id = ?
+              and gists.deleted_at is null
+            order by gists.updated_at desc
+            limit ?
+            """,
+            (key_id, limit),
+        ).fetchall()
+
+    return {
+        "gists": [
+            {
+                "id": row["external_id"],
+                "url": public_url(app, row["external_id"]),
+                "title": row["title"],
+                "author_name": row["author_name"],
+                "revision_number": row["latest_revision_number"],
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        ]
+    }
+
+
 def _history_payload(app, conn, external_id, gist_id, latest_revision_number):
     rows = conn.execute(
         """

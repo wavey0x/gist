@@ -14,6 +14,7 @@ anyone with a random gist URL can read the rendered page and raw source.
 - Sanitized stored HTML.
 - Immutable revision URLs.
 - Read-only rendered/raw browser views.
+- Key-backed private list of gists created by the logged-in API key.
 - Scoped API keys.
 - SQLite persistence by default.
 
@@ -26,8 +27,8 @@ This repository has two deployable apps:
   gist API routes.
 
 The frontend fetches rendered gist payloads from the backend. The backend stores
-Markdown, sanitized rendered HTML, revision snapshots, API keys, and rate-limit
-events in a dedicated SQLite database.
+Markdown, sanitized rendered HTML, revision snapshots, API keys, web sessions,
+and rate-limit events in a dedicated SQLite database.
 
 ## Local Development
 
@@ -78,7 +79,10 @@ In another terminal, create an admin key:
 
 ```sh
 cd api
-SQLITE_DB_PATH=.local/gists.sqlite3 uv run admin keys create --name admin --role admin
+SQLITE_DB_PATH=.local/gists.sqlite3 uv run admin keys create \
+  --name admin \
+  --github-login <github_login> \
+  --role admin
 ```
 
 Save the printed key. It is shown only once.
@@ -95,6 +99,12 @@ curl -sS http://localhost:3001/api/v1/gists \
 ```
 
 Open the returned `url` in the browser.
+
+## List Your Gists
+
+Open `http://localhost:3000/login`, enter the API key once, then visit
+`/list`. The browser stores only an HttpOnly `wg_session` cookie; the API key is
+not stored in browser-readable storage.
 
 ## Configuration
 
@@ -132,10 +142,12 @@ Run admin commands from `api/` with `SQLITE_DB_PATH` set.
 
 ```sh
 uv run admin keys create --name <name>
-uv run admin keys create --name <name> --role admin
+uv run admin keys create --name <name> --github-login <github_login>
+uv run admin keys create --name <name> --role admin --github-login <github_login>
 uv run admin keys list
 uv run admin keys revoke <key_prefix_or_id>
 uv run admin keys rotate <key_prefix_or_id> --name <new_name>
+uv run admin keys rotate <key_prefix_or_id> --github-login <github_login>
 uv run admin gists rerender --all
 ```
 
@@ -154,6 +166,10 @@ Routes:
 
 ```text
 GET    /api/v1/healthz
+POST   /api/v1/auth/session
+GET    /api/v1/auth/session
+DELETE /api/v1/auth/session
+GET    /api/v1/me/gists
 POST   /api/v1/gists
 GET    /api/v1/gists/{gist_id}
 GET    /api/v1/gists/{gist_id}/render
@@ -167,6 +183,9 @@ Protected routes use:
 ```text
 Authorization: Bearer <api_key>
 ```
+
+The web-session routes use the `wg_session` HttpOnly cookie minted from an API
+key with `gist:read`.
 
 Public render routes do not require auth because anyone with the random gist
 URL can view the rendered page and raw Markdown source.
@@ -194,12 +213,14 @@ forwarded IP for rate limits.
 ## Security Model
 
 Gist URLs are bearer-capability URLs: anyone with the URL can read that gist.
-There is no public listing, account system, editor, comments, analytics, or
-social graph.
+The private `/list` page is backed by the existing API key and shows only gists
+created by that key. There is no public listing, account system, editor,
+comments, analytics, or social graph.
 
-The backend sanitizes rendered HTML before storage. API keys are hashed, scoped,
-and shown only once when created or rotated. Do not log Markdown bodies,
-rendered HTML, authorization headers, or raw API keys in production.
+The backend sanitizes rendered HTML before storage. API keys are hashed,
+scoped, and shown only once when created or rotated; web session tokens are
+stored only as hashes. Do not log Markdown bodies, rendered HTML,
+authorization headers, session cookies, or raw API keys in production.
 
 ## License
 

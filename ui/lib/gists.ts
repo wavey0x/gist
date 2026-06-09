@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { headers } from "next/headers";
+import { apiUrl } from "./api-base";
 
 const GIST_ID_RE = /^(?:[A-Za-z0-9]{16}|[A-Za-z0-9_-]{32})$/;
 const REVISION_NUMBER_RE = /^[1-9][0-9]*$/;
@@ -94,24 +94,6 @@ function normalizePayload(gistId: string, payload: unknown): PublicGistPayload {
   };
 }
 
-async function resolveApiBaseUrl() {
-  const configuredBaseUrl =
-    process.env.GIST_API_BASE_URL ?? process.env.WAVEY_API_BASE_URL;
-
-  if (configuredBaseUrl) {
-    return configuredBaseUrl;
-  }
-
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("host")?.toLowerCase();
-
-  if (host === "gist.wavey.info") {
-    return "https://api.wavey.info";
-  }
-
-  return "http://localhost:3001";
-}
-
 export async function fetchPublicGistPayload(
   gistId: string,
   revisionNumber?: string
@@ -126,9 +108,7 @@ export async function fetchPublicGistPayload(
   const path = revisionNumber
     ? `/api/v1/gists/${gistId}/revisions/${revisionNumber}/render`
     : `/api/v1/gists/${gistId}/render`;
-  const baseUrl = await resolveApiBaseUrl();
-
-  const response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
+  const response = await fetch(await apiUrl(path), {
     cache: "no-store",
     headers: {
       Accept: "application/json"

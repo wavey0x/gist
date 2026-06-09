@@ -49,6 +49,7 @@ def main(argv=None):
     create = key_commands.add_parser("create")
     create.add_argument("--domain")
     create.add_argument("--name", required=True)
+    create.add_argument("--github-login")
     create.add_argument("--role", choices=sorted(GIST_ROLE_SCOPES), default="user")
     create.add_argument("--scopes", type=_scopes)
 
@@ -61,6 +62,7 @@ def main(argv=None):
     rotate = key_commands.add_parser("rotate")
     rotate.add_argument("key_prefix_or_id")
     rotate.add_argument("--name")
+    rotate.add_argument("--github-login")
 
     gists = subparsers.add_parser("gists")
     gist_commands = gists.add_subparsers(dest="command", required=True)
@@ -82,7 +84,13 @@ def main(argv=None):
                     domain, scopes = _resolve_create_args(args)
                 except ValueError as exc:
                     parser.error(str(exc))
-                result = create_api_key(conn, domain, args.name, scopes)
+                result = create_api_key(
+                    conn,
+                    domain,
+                    args.name,
+                    scopes,
+                    github_login=args.github_login,
+                )
                 print(json.dumps(result, indent=2))
                 print("Save this key now. It cannot be recovered.")
             elif args.command == "list":
@@ -91,7 +99,15 @@ def main(argv=None):
                 revoke_api_key(conn, args.key_prefix_or_id)
                 print(json.dumps({"revoked": True}, indent=2))
             elif args.command == "rotate":
-                result = rotate_api_key(conn, args.key_prefix_or_id, args.name)
+                if args.github_login is None:
+                    result = rotate_api_key(conn, args.key_prefix_or_id, args.name)
+                else:
+                    result = rotate_api_key(
+                        conn,
+                        args.key_prefix_or_id,
+                        args.name,
+                        github_login=args.github_login,
+                    )
                 print(json.dumps(result, indent=2))
                 print("Save this key now. It cannot be recovered.")
     elif args.resource == "gists":

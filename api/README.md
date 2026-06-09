@@ -44,3 +44,31 @@ rate limits.
 
 Run migrations during app startup with the configured `SQLITE_DB_PATH`. Back up
 the SQLite database before upgrading.
+
+## Admin Keys
+
+Create gist API keys from this directory with `SQLITE_DB_PATH` set:
+
+```sh
+uv run admin keys create --name <name> --github-login <github_login>
+uv run admin keys create --name <name> --role admin --github-login <github_login>
+uv run admin keys rotate <key_prefix_or_id> --github-login <github_login>
+```
+
+The `github_login` value is used only to derive the browser avatar URL for the
+key-backed web session.
+
+## Auth Routes
+
+The browser login flow mints an HttpOnly `wg_session` cookie from an existing
+gist API key:
+
+```text
+POST   /api/v1/auth/session
+GET    /api/v1/auth/session
+DELETE /api/v1/auth/session
+GET    /api/v1/me/gists
+```
+
+`/api/v1/me/gists` returns gists whose first revision was created by the logged
+in key and does not include Markdown or rendered HTML.
