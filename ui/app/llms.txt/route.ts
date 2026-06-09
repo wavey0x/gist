@@ -8,7 +8,7 @@ Wavey Gist publishes Markdown gists at https://gist.wavey.info.
 - GET /login: HTML login form for a gist API key.
 - POST /api/auth/session: form field api_key; sets wg_session and redirects to /me.
 - POST /logout: clears wg_session and redirects to /login.
-- GET /me: authenticated HTML account page with the current key and gist list.
+- GET /me: HTML account/history page; logged-out users see browser-local recent views, logged-in users also see the current key and gist list.
 - GET /me/raw: authenticated plain-text list of gists created by the current key.
 - GET /api/me/gists: authenticated JSON list of those gists.
 - DELETE /api/me/gists/{gist_id}: authenticated JSON delete for a gist created by the current key.
@@ -28,9 +28,10 @@ Use https://api.wavey.info with Authorization: Bearer <gist API key>.
 
 ## Agent Guidance
 
-- Prefer /raw for Markdown and /me/raw or /api/me/gists for listing.
+- Prefer /raw for Markdown and /me/raw or /api/me/gists for authenticated listing.
 - Public gist viewing does not require auth.
-- Listing and logout require the wg_session cookie from login.
+- /me recent views are browser-local and do not require auth.
+- My gists, /me/raw, /api/me/gists, delete, and logout require the wg_session cookie from login.
 `;
 
 export const dynamic = "force-static";

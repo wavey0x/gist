@@ -14,6 +14,7 @@ anyone with a random gist URL can read the rendered page and raw source.
 - Sanitized stored HTML.
 - Immutable revision URLs.
 - Read-only rendered/raw browser views.
+- Browser-local recently viewed gist list.
 - Key-backed private list of gists created by the logged-in API key.
 - Scoped API keys.
 - SQLite persistence by default.
@@ -103,9 +104,10 @@ Open the returned `url` in the browser.
 
 ## List Your Gists
 
-Open `http://localhost:3000/login`, enter the API key once, then visit
-`/me`. The browser stores an HttpOnly `wg_session` cookie, and the `/me` page
-can disclose the current API key after the session is authenticated.
+Visit `/me` to see recently viewed gists stored in this browser. To list your
+own gists, open `http://localhost:3000/login` and enter the API key once. The
+browser stores an HttpOnly `wg_session` cookie, and the authenticated `/me`
+page can copy the current API key.
 
 ## Configuration
 
@@ -218,9 +220,10 @@ forwarded IP for rate limits.
 ## Security Model
 
 Gist URLs are bearer-capability URLs: anyone with the URL can read that gist.
-The private `/me` page is backed by the current web session, shows the current
-API key, and lists only gists created by that key. There is no public listing,
-account system, editor, comments, analytics, or social graph.
+The `/me` page stores recently viewed gists only in browser `localStorage`.
+When authenticated, `/me` can copy the current API key and lists only gists
+created by that key. There is no public listing, account system, editor,
+comments, analytics, or social graph.
 
 The backend sanitizes rendered HTML before storage. API keys are stored in
 cleartext for account-page disclosure; web session tokens are stored only as

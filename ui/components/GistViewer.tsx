@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { getGistHeaderTitle } from "../lib/gist-title";
 import type { PublicGistPayload } from "../lib/gists";
 import type { SiteChromeConfig } from "../lib/site-config";
+import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
 import { ThemeToggle } from "./ThemeToggle";
 
 type ViewMode = "rendered" | "raw";
@@ -66,6 +67,7 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
 
   return (
     <>
+      <RecentlyViewedRecorder gist={gist} />
       <header
         className={
           chrome.showBrandMark ? "page-header" : "page-header page-header-no-brand"

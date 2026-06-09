@@ -420,6 +420,48 @@ button {
   color: var(--page-fg);
 }
 
+.me-tabs-section {
+  display: grid;
+  gap: 12px;
+}
+
+.me-tabs {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted-fg);
+}
+
+.me-tab-button {
+  border: 0;
+  background: transparent;
+  color: var(--muted-fg);
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.me-tab-button:hover,
+.me-tab-button:focus-visible,
+.me-tab-button[aria-selected="true"] {
+  color: var(--page-fg);
+}
+
+.me-tab-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.me-tab-separator {
+  color: var(--border);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .gist-list {
   display: grid;
   gap: 0;
@@ -474,6 +516,54 @@ button {
   color: var(--muted-fg);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.gist-list-action {
+  flex: 0 0 auto;
+}
+
+.gist-pagination {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  color: var(--muted-fg);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.gist-pagination-button {
+  border: 0;
+  background: transparent;
+  color: var(--muted-fg);
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.gist-pagination-button:hover:not(:disabled),
+.gist-pagination-button:focus-visible {
+  color: var(--page-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.gist-pagination-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.gist-pagination-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.gist-pagination-status {
+  min-width: 72px;
+  text-align: center;
 }
 
 .gist-delete-button {
