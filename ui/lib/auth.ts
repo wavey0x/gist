@@ -181,6 +181,51 @@ export async function proxyJsonWithSession(
   return response;
 }
 
+export async function deleteWithSession(
+  request: NextRequest,
+  path: string
+) {
+  const cookieHeader = requestSessionCookieHeader(request);
+  if (!cookieHeader) {
+    return null;
+  }
+
+  return fetch(await apiUrl(path), {
+    cache: "no-store",
+    method: "DELETE",
+    headers: {
+      Accept: "application/json",
+      Cookie: cookieHeader
+    }
+  });
+}
+
+export async function proxyDeleteWithSession(
+  request: NextRequest,
+  path: string
+) {
+  const backendResponse = await deleteWithSession(request, path);
+  if (!backendResponse) {
+    return NextResponse.json(
+      { error: { code: "unauthorized", message: "Unauthorized" } },
+      { status: 401 }
+    );
+  }
+
+  const body = await backendResponse.text();
+  const headers = new Headers();
+  const contentType = backendResponse.headers.get("content-type");
+  if (contentType) {
+    headers.set("Content-Type", contentType);
+  }
+  const response = new NextResponse(body, {
+    status: backendResponse.status,
+    headers
+  });
+  forwardBackendSetCookie(response, backendResponse);
+  return response;
+}
+
 function clearSessionCookie(response: NextResponse) {
   response.cookies.set(SESSION_COOKIE_NAME, "", {
     httpOnly: true,

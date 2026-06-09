@@ -152,8 +152,8 @@ uv run admin keys rotate <key_prefix_or_id> --github-login <github_login>
 uv run admin gists rerender --all
 ```
 
-User keys can create, update, and read raw gist API payloads. Admin keys also
-delete gists.
+User keys can create, update, and read raw gist API payloads. Admin keys add
+`gist:delete`, which can delete only gists originally created by that key.
 
 ## API
 
@@ -171,6 +171,7 @@ POST   /api/v1/auth/session
 GET    /api/v1/auth/session
 DELETE /api/v1/auth/session
 GET    /api/v1/me/gists
+DELETE /api/v1/me/gists/{gist_id}
 POST   /api/v1/gists
 GET    /api/v1/gists/{gist_id}
 GET    /api/v1/gists/{gist_id}/render
@@ -187,6 +188,9 @@ Authorization: Bearer <api_key>
 
 The web-session routes use the `wg_session` HttpOnly cookie minted from an API
 key with `gist:read`.
+
+Delete routes require `gist:delete` and only delete gists whose first revision
+was created by the authenticated key. A non-owned gist returns `404`.
 
 Public render routes do not require auth because anyone with the random gist
 URL can view the rendered page and raw Markdown source.

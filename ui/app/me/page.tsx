@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ApiKeyDisclosure } from "../../components/ApiKeyDisclosure";
+import { DeleteGistButton } from "../../components/DeleteGistButton";
 import { fetchCurrentSession, fetchMyGists } from "../../lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +9,12 @@ export const revalidate = 0;
 
 export const metadata: Metadata = {
   title: "Your gists - Wavey Gist"
+};
+
+type PageProps = {
+  searchParams: Promise<{
+    delete_status?: string | string[];
+  }>;
 };
 
 function formatUpdatedAt(value: string) {
@@ -21,7 +28,24 @@ function formatUpdatedAt(value: string) {
   }).format(date);
 }
 
-export default async function MePage() {
+function deleteStatusMessage(value: string | string[] | undefined) {
+  const code = Array.isArray(value) ? value[0] : value;
+  if (code === "forbidden") {
+    return "This API key cannot delete gists.";
+  }
+  if (code === "not_found") {
+    return "That gist is no longer available to delete.";
+  }
+  if (code === "rate_limited") {
+    return "Too many changes. Try again shortly.";
+  }
+  if (code === "server") {
+    return "Delete is unavailable right now.";
+  }
+  return null;
+}
+
+export default async function MePage({ searchParams }: PageProps) {
   const session = await fetchCurrentSession();
   if (!session) {
     redirect("/login");
@@ -31,6 +55,9 @@ export default async function MePage() {
   if (!payload) {
     redirect("/login");
   }
+
+  const params = await searchParams;
+  const deleteMessage = deleteStatusMessage(params.delete_status);
 
   return (
     <main className="auth-shell" aria-label="Your gists">
@@ -50,21 +77,37 @@ export default async function MePage() {
         <ApiKeyDisclosure apiKey={session.key} />
       </section>
 
+      {deleteMessage ? <p className="auth-error">{deleteMessage}</p> : null}
+
       {payload.gists.length > 0 ? (
         <ul className="gist-list">
-          {payload.gists.map((gist) => (
-            <li className="gist-list-item" key={gist.id}>
-              <a className="gist-list-link" href={gist.url}>
-                <span className="gist-list-title">{gist.title ?? gist.id}</span>
-                <span className="gist-list-meta">
-                  {gist.author_name} - revision {gist.revision_number} -{" "}
-                  <time dateTime={gist.updated_at}>
-                    {formatUpdatedAt(gist.updated_at)}
-                  </time>
-                </span>
-              </a>
-            </li>
-          ))}
+          {payload.gists.map((gist) => {
+            const gistTitle = gist.title ?? gist.id;
+            return (
+              <li className="gist-list-item" key={gist.id}>
+                <div className="gist-list-row">
+                  <a className="gist-list-link" href={gist.url}>
+                    <span className="gist-list-title">{gistTitle}</span>
+                    <span className="gist-list-meta">
+                      {gist.author_name} - revision {gist.revision_number} -{" "}
+                      <time dateTime={gist.updated_at}>
+                        {formatUpdatedAt(gist.updated_at)}
+                      </time>
+                    </span>
+                  </a>
+                  {session.can_delete_gists ? (
+                    <form
+                      className="gist-delete-form"
+                      action={`/api/me/gists/${encodeURIComponent(gist.id)}/delete`}
+                      method="post"
+                    >
+                      <DeleteGistButton gistTitle={gistTitle} />
+                    </form>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="empty-list">No gists yet.</p>

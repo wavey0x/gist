@@ -37,7 +37,7 @@ export function ApiKeyDisclosure({ apiKey }: ApiKeyDisclosureProps) {
         title="View API key"
       >
         <Eye aria-hidden="true" size={17} strokeWidth={1.8} />
-        <span className="sr-only">View API key</span>
+        <span>View API key</span>
       </summary>
       <div className="api-key-row">
         <input

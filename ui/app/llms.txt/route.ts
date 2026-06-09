@@ -11,6 +11,7 @@ Wavey Gist publishes Markdown gists at https://gist.wavey.info.
 - GET /me: authenticated HTML account page with the current key and gist list.
 - GET /me/raw: authenticated plain-text list of gists created by the current key.
 - GET /api/me/gists: authenticated JSON list of those gists.
+- DELETE /api/me/gists/{gist_id}: authenticated JSON delete for a gist created by the current key.
 - GET /{gist_id}: public rendered gist page.
 - GET /{gist_id}/raw: public raw Markdown for the latest revision.
 - GET /{gist_id}/revisions/{revision_number}: public rendered revision.
@@ -22,7 +23,7 @@ Use https://api.wavey.info with Authorization: Bearer <gist API key>.
 
 - POST /api/v1/gists with JSON {"title": "optional", "markdown": "..."} creates a gist.
 - PATCH /api/v1/gists/{gist_id} with JSON {"title": "optional", "markdown": "..."} creates a new revision.
-- DELETE /api/v1/gists/{gist_id} deletes a gist.
+- DELETE /api/v1/gists/{gist_id} deletes a gist created by the authenticated key.
 - Gist keys should have gist:read and gist:write; deleting requires gist:delete.
 
 ## Agent Guidance

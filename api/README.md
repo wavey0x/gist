@@ -69,7 +69,11 @@ POST   /api/v1/auth/session
 GET    /api/v1/auth/session
 DELETE /api/v1/auth/session
 GET    /api/v1/me/gists
+DELETE /api/v1/me/gists/{gist_id}
 ```
 
 `/api/v1/me/gists` returns gists whose first revision was created by the logged
 in key and does not include Markdown or rendered HTML.
+
+`DELETE /api/v1/me/gists/{gist_id}` requires a session key with `gist:delete`
+and only deletes gists whose first revision was created by that key.
