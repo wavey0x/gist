@@ -27,6 +27,10 @@ def load_settings():
         "MAX_MARKDOWN_BYTES": max_markdown_bytes,
         "MAX_REQUEST_BYTES": _int_env("MAX_REQUEST_BYTES", None),
         "ALLOW_EMPTY_MARKDOWN": _bool_env("ALLOW_EMPTY_MARKDOWN", False),
+        "ETHEREUM_ENTITY_RENDERING": _bool_env(
+            "GIST_ETHEREUM_ENTITY_RENDERING",
+            True,
+        ),
         "SQLITE_BUSY_TIMEOUT_MS": _int_env("SQLITE_BUSY_TIMEOUT_MS", 5000),
         "API_WRITE_LIMIT_PER_24H": _int_env("API_WRITE_LIMIT_PER_24H", 150),
         "API_AUTH_FAILURE_LIMIT_PER_MINUTE": _int_env(

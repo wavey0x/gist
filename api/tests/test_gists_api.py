@@ -4,6 +4,9 @@ from gist_api.db import gist_connection
 
 from .conftest import auth_header, create_gist, make_key
 
+ETH_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678"
+ETH_TX_HASH = "0x" + "a1" * 32
+
 
 def test_create_public_render_raw_read_patch_and_delete(client, app):
     write_key = make_key(app, ["gist:write", "gist:delete"], name="creator")
@@ -151,6 +154,46 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     assert client.get(f"/api/v1/gists/{body['id']}/revisions/1/render").status_code == 404
     assert client.get(f"/api/v1/gists/{body['id']}", headers=auth_header(read_key)).status_code == 404
     assert client.delete(f"/api/v1/gists/{body['id']}", headers=auth_header(write_key)).status_code == 404
+
+
+def test_api_ethereum_entity_rendering_defaults_on_and_can_be_disabled(client, app):
+    write_key = make_key(app, ["gist:write"], name="ethereum")
+
+    created = create_gist(client, write_key, markdown=f"Address {ETH_ADDRESS}")
+    assert created.status_code == 201
+    gist_id = created.get_json()["id"]
+
+    public = client.get(f"/api/v1/gists/{gist_id}/render").get_json()
+    assert "eth-entity" in public["rendered_html"]
+    assert "eth-address" in public["rendered_html"]
+
+    updated = client.patch(
+        f"/api/v1/gists/{gist_id}",
+        headers=auth_header(write_key),
+        json={"markdown": f"Tx {ETH_TX_HASH}"},
+    )
+    assert updated.status_code == 200
+    latest = client.get(f"/api/v1/gists/{gist_id}/render").get_json()
+    assert "eth-entity" in latest["rendered_html"]
+    assert "eth-tx" in latest["rendered_html"]
+
+    app.config["ETHEREUM_ENTITY_RENDERING"] = False
+    disabled = create_gist(client, write_key, markdown=f"Address {ETH_ADDRESS}")
+    assert disabled.status_code == 201
+    disabled_id = disabled.get_json()["id"]
+    disabled_public = client.get(f"/api/v1/gists/{disabled_id}/render").get_json()
+    assert ETH_ADDRESS in disabled_public["rendered_html"]
+    assert "eth-entity" not in disabled_public["rendered_html"]
+
+    disabled_update = client.patch(
+        f"/api/v1/gists/{disabled_id}",
+        headers=auth_header(write_key),
+        json={"markdown": f"Tx {ETH_TX_HASH}"},
+    )
+    assert disabled_update.status_code == 200
+    disabled_latest = client.get(f"/api/v1/gists/{disabled_id}/render").get_json()
+    assert ETH_TX_HASH in disabled_latest["rendered_html"]
+    assert "eth-entity" not in disabled_latest["rendered_html"]
 
 
 def test_delete_gist_requires_delete_scope_and_original_creator(client, app):

@@ -62,6 +62,23 @@ def content_sha256(markdown):
     return hashlib.sha256(markdown.encode("utf-8")).hexdigest()
 
 
+def ethereum_entity_rendering_enabled(app):
+    return app.config.get("ETHEREUM_ENTITY_RENDERING", True)
+
+
+def render_markdown_for_app(app, markdown):
+    return render_markdown_result(
+        markdown,
+        ethereum_entities=ethereum_entity_rendering_enabled(app),
+    )
+
+
+def render_version_for_app(app):
+    return render_version(
+        ethereum_entities=ethereum_entity_rendering_enabled(app),
+    )
+
+
 def generate_external_id():
     return "".join(secrets.choice(EXTERNAL_ID_ALPHABET) for _ in range(16))
 
@@ -140,7 +157,7 @@ def create_gist(app, key_id, author_name, payload):
     markdown = normalize_markdown(payload.get("markdown"))
     validate_markdown(app, markdown)
     title = normalize_title(payload.get("title"), present="title" in payload)
-    rendered = render_markdown_result(markdown)
+    rendered = render_markdown_for_app(app, markdown)
     rendered_html = rendered.html
     version = rendered.version
     digest = content_sha256(markdown)
@@ -350,7 +367,7 @@ def patch_gist(app, key_id, author_name, external_id, payload):
     if "markdown" in payload:
         markdown = normalize_markdown(payload["markdown"])
         validate_markdown(app, markdown)
-        rendered = render_markdown_result(markdown)
+        rendered = render_markdown_for_app(app, markdown)
         rendered_html = rendered.html
         version = rendered.version
         digest = content_sha256(markdown)
@@ -487,12 +504,12 @@ def rerender_gists(app, *, external_id=None, dry_run=False):
 
         rendered_gists = []
         for row in gists:
-            rendered = render_markdown_result(row["markdown"])
+            rendered = render_markdown_for_app(app, row["markdown"])
             rendered_gists.append((row["id"], rendered.html, rendered.version))
 
         rendered_revisions = []
         for row in revisions:
-            rendered = render_markdown_result(row["markdown"])
+            rendered = render_markdown_for_app(app, row["markdown"])
             rendered_revisions.append((row["id"], rendered.html, rendered.version))
 
         if not dry_run:
@@ -524,5 +541,5 @@ def rerender_gists(app, *, external_id=None, dry_run=False):
         "dry_run": dry_run,
         "gists": len(rendered_gists),
         "revisions": len(rendered_revisions),
-        "render_version": render_version(),
+        "render_version": render_version_for_app(app),
     }

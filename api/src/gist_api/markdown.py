@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 SANITIZER_CONFIG_VERSION = "2026-06-02.2"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
+ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-09.1"
 HIGHLIGHT_GRAMMAR_SET = "all"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -78,11 +80,29 @@ ALLOWED_TAGS = {
 SAFE_REL_TOKENS = {"nofollow", "noopener", "noreferrer"}
 SAFE_DIR_VALUES = {"auto", "ltr", "rtl"}
 SAFE_TASK_CLASSES = {"contains-task-list", "task-list-item"}
-SAFE_EXACT_CLASSES = {"highlight"}
+SAFE_ETHEREUM_CLASSES = {"eth-entity", "eth-address", "eth-tx"}
+SAFE_EXACT_CLASSES = {"highlight", *SAFE_ETHEREUM_CLASSES}
 SAFE_CLASS_PATTERNS = (
     re.compile(r"^highlight-(source|text)-[A-Za-z0-9_.+-]+$"),
     re.compile(r"^language-[A-Za-z0-9_.+-]+$"),
     re.compile(r"^pl-[A-Za-z0-9_-]+$"),
+    re.compile(r"^eth-id-[a-f0-9]{12}$"),
+)
+ETHEREUM_FULL_VALUE_PATTERN = r"0x(?:[0-9A-Fa-f]{64}|[0-9A-Fa-f]{40})"
+ETHEREUM_FULL_ENTITY_RE = re.compile(
+    rf"(?<![0-9A-Za-z])({ETHEREUM_FULL_VALUE_PATTERN})(?![0-9A-Za-z])"
+)
+ETHEREUM_FULL_VALUE_RE = re.compile(rf"^{ETHEREUM_FULL_VALUE_PATTERN}$")
+ETHEREUM_ABBREVIATED_VALUE_RE = re.compile(
+    r"^0x[0-9A-Fa-f]{3,}(?:\.{2,3}|…)[0-9A-Fa-f]{3,}$"
+)
+ETHEREUM_TX_HREF_RE = re.compile(
+    r"/tx/(0x[0-9A-Fa-f]{64})(?=$|[/?#])",
+    re.IGNORECASE,
+)
+ETHEREUM_ADDRESS_HREF_RE = re.compile(
+    r"/address/(0x[0-9A-Fa-f]{40})(?=$|[/?#])",
+    re.IGNORECASE,
 )
 
 
@@ -90,6 +110,12 @@ SAFE_CLASS_PATTERNS = (
 class RenderedMarkdown:
     html: str
     version: str
+
+
+@dataclass(frozen=True)
+class EthereumEntity:
+    kind: str
+    value: str
 
 
 @dataclass
@@ -159,6 +185,28 @@ def _is_code_context(element):
     return False
 
 
+def _is_link_context(element):
+    current = element
+    while current is not None:
+        if current.tag == "a":
+            return True
+        current = current.getparent()
+    return False
+
+
+def _is_code_block_context(element):
+    current = element
+    while current is not None:
+        if current.tag == "pre":
+            return True
+        current = current.getparent()
+    return False
+
+
+def _is_inline_code_element(element):
+    return element.tag == "code" and not _is_code_block_context(element)
+
+
 def _strip_scriptable_text(value):
     if not value:
         return value
@@ -195,6 +243,170 @@ def _post_process_links(root):
         }
         rel.add("nofollow")
         element.attrib["rel"] = " ".join(sorted(rel))
+
+
+def _ethereum_kind(value):
+    hex_length = len(value) - 2
+    if hex_length == 64:
+        return "tx"
+    if hex_length == 40:
+        return "address"
+    return None
+
+
+def _ethereum_entity_from_value(value):
+    if not ETHEREUM_FULL_VALUE_RE.fullmatch(value):
+        return None
+    kind = _ethereum_kind(value)
+    if kind is None:
+        return None
+    return EthereumEntity(kind=kind, value=value.lower())
+
+
+def _ethereum_entity_from_href(href):
+    for pattern, kind in (
+        (ETHEREUM_TX_HREF_RE, "tx"),
+        (ETHEREUM_ADDRESS_HREF_RE, "address"),
+    ):
+        match = pattern.search(href)
+        if match:
+            return EthereumEntity(kind=kind, value=match.group(1).lower())
+
+    fallback_entities = [
+        _ethereum_entity_from_value(match.group(1))
+        for match in ETHEREUM_FULL_ENTITY_RE.finditer(href)
+    ]
+    for entity in fallback_entities:
+        if entity is not None and entity.kind == "tx":
+            return entity
+    for entity in fallback_entities:
+        if entity is not None:
+            return entity
+    return None
+
+
+def _ethereum_entity_digest(entity):
+    return hashlib.sha256(entity.value.encode("ascii")).hexdigest()
+
+
+def _ethereum_entity_classes(entity):
+    digest = _ethereum_entity_digest(entity)
+    return f"eth-entity eth-{entity.kind} eth-id-{digest[:12]}"
+
+
+def _set_ethereum_entity_classes(element, entity):
+    element.attrib["class"] = _ethereum_entity_classes(entity)
+
+
+def _ethereum_span_for_token(token):
+    entity = _ethereum_entity_from_value(token)
+    if entity is None:
+        return None
+    span = etree.Element("span")
+    _set_ethereum_entity_classes(span, entity)
+    span.text = token
+    return span
+
+
+def _ethereum_fragments(value):
+    if not value:
+        return None
+
+    fragments = []
+    previous_end = 0
+    for match in ETHEREUM_FULL_ENTITY_RE.finditer(value):
+        entity_span = _ethereum_span_for_token(match.group(1))
+        if entity_span is None:
+            continue
+        if match.start() > previous_end:
+            fragments.append(value[previous_end:match.start()])
+        fragments.append(entity_span)
+        previous_end = match.end()
+
+    if not fragments:
+        return None
+    if previous_end < len(value):
+        fragments.append(value[previous_end:])
+    return fragments
+
+
+def _replace_element_text(element, fragments):
+    element.text = None
+    insert_at = 0
+    previous_element = None
+    for fragment in fragments:
+        if isinstance(fragment, str):
+            if previous_element is None:
+                element.text = (element.text or "") + fragment
+            else:
+                previous_element.tail = (previous_element.tail or "") + fragment
+            continue
+
+        element.insert(insert_at, fragment)
+        insert_at += 1
+        previous_element = fragment
+
+
+def _replace_child_tail(parent, child, fragments):
+    child.tail = None
+    insert_at = parent.index(child) + 1
+    previous_element = child
+    for fragment in fragments:
+        if isinstance(fragment, str):
+            previous_element.tail = (previous_element.tail or "") + fragment
+            continue
+
+        parent.insert(insert_at, fragment)
+        insert_at += 1
+        previous_element = fragment
+
+
+def _post_process_ethereum_links(root):
+    for element in root.iter("a"):
+        if _is_code_block_context(element):
+            continue
+        text = element.text_content().strip()
+        entity = _ethereum_entity_from_value(text)
+        if entity is None and ETHEREUM_ABBREVIATED_VALUE_RE.fullmatch(text):
+            entity = _ethereum_entity_from_href(element.attrib.get("href", ""))
+        if entity is not None:
+            _set_ethereum_entity_classes(element, entity)
+
+
+def _post_process_ethereum_inline_code(root):
+    for element in root.iter("code"):
+        if _is_code_block_context(element):
+            continue
+        entity = _ethereum_entity_from_value(element.text_content().strip())
+        if entity is not None:
+            _set_ethereum_entity_classes(element, entity)
+
+
+def _wrap_plain_ethereum_entities(root):
+    for element in list(root.iter()):
+        if not isinstance(element.tag, str):
+            continue
+        if (
+            _is_code_block_context(element)
+            or _is_link_context(element)
+            or _is_inline_code_element(element)
+        ):
+            continue
+
+        text_fragments = _ethereum_fragments(element.text)
+        if text_fragments is not None:
+            _replace_element_text(element, text_fragments)
+
+        for child in list(element):
+            tail_fragments = _ethereum_fragments(child.tail)
+            if tail_fragments is not None:
+                _replace_child_tail(element, child, tail_fragments)
+
+
+def _post_process_ethereum_entities(root):
+    _post_process_ethereum_links(root)
+    _post_process_ethereum_inline_code(root)
+    _wrap_plain_ethereum_entities(root)
 
 
 def _code_text(pre):
@@ -414,7 +626,7 @@ def _safe_class_value(value):
 
 def _allow_attribute(tag, name, value):
     if name == "class":
-        return tag in {"code", "div", "li", "pre", "span", "ul"} and _safe_class_value(
+        return tag in {"a", "code", "div", "li", "pre", "span", "ul"} and _safe_class_value(
             value
         )
 
@@ -445,12 +657,14 @@ def _allow_attribute(tag, name, value):
     return False
 
 
-def render_markdown_result(markdown):
+def render_markdown_result(markdown, *, ethereum_entities=True):
     raw_html = _render_gfm(markdown)
     root = _parse_fragment(raw_html)
     _drop_scriptable_content(root)
     highlight_stats = _highlight_blocks(root)
     _post_process_links(root)
+    if ethereum_entities:
+        _post_process_ethereum_entities(root)
     processed_html = _serialize_fragment(root)
 
     cleaned_html = bleach.clean(
@@ -463,16 +677,23 @@ def render_markdown_result(markdown):
     )
     return RenderedMarkdown(
         html=cleaned_html,
-        version=render_version(highlight_stats.status),
+        version=render_version(
+            highlight_stats.status,
+            ethereum_entities=ethereum_entities,
+        ),
     )
 
 
-def render_version(highlight_status="unknown"):
+def render_version(highlight_status="unknown", *, ethereum_entities=True):
+    ethereum_status = (
+        f"on@{ETHEREUM_ENTITY_RENDER_VERSION}" if ethereum_entities else "off"
+    )
     return (
         f"cmarkgfm/{_package_version('cmarkgfm')};"
         f"starry-night/{_node_package_version('@wooorm/starry-night')};"
         f"grammar/{HIGHLIGHT_GRAMMAR_SET};"
         f"highlight/{highlight_status};"
+        f"ethereum-entities/{ethereum_status};"
         f"bleach/{_package_version('bleach')};"
         f"lxml/{_package_version('lxml')};"
         f"syntax-css/{SYNTAX_CSS_VERSION};"

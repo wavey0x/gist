@@ -7,7 +7,7 @@ import {
   History,
   TextSearch
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getGistHeaderTitle } from "../lib/gist-title";
 import type { PublicGistPayload } from "../lib/gists";
 import type { SiteChromeConfig } from "../lib/site-config";
@@ -23,6 +23,8 @@ type GistViewerProps = {
 
 const GITHUB_LOGIN_RE =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+const ETH_ENTITY_ID_CLASS_RE = /^eth-id-[a-f0-9]{12}$/;
+const ETH_ENTITY_GROUP_HOVER_CLASS = "eth-entity-group-hover";
 
 function authorAvatarUrl(authorName: string) {
   return GITHUB_LOGIN_RE.test(authorName)
@@ -39,6 +41,7 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [rawCopied, setRawCopied] = useState(false);
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const markdownRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!rawCopied) {
@@ -47,6 +50,106 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
     const timeout = window.setTimeout(() => setRawCopied(false), 1500);
     return () => window.clearTimeout(timeout);
   }, [rawCopied]);
+
+  useEffect(() => {
+    if (viewMode !== "rendered") {
+      return undefined;
+    }
+
+    const markdownRoot = markdownRef.current;
+    if (!markdownRoot) {
+      return undefined;
+    }
+    const root: HTMLElement = markdownRoot;
+
+    let activeEntityId: string | null = null;
+
+    function entityIdForTarget(target: EventTarget | null) {
+      if (!(target instanceof Element)) {
+        return null;
+      }
+      const entity = target.closest(".eth-entity");
+      if (!entity || !root.contains(entity)) {
+        return null;
+      }
+      return Array.from(entity.classList).find((className) =>
+        ETH_ENTITY_ID_CLASS_RE.test(className)
+      ) ?? null;
+    }
+
+    function clearGroupHover() {
+      if (!activeEntityId) {
+        return;
+      }
+      root.querySelectorAll(`.${activeEntityId}`).forEach((element) => {
+        element.classList.remove(ETH_ENTITY_GROUP_HOVER_CLASS);
+      });
+      activeEntityId = null;
+    }
+
+    function setGroupHover(entityId: string | null) {
+      if (!entityId || entityId === activeEntityId) {
+        return;
+      }
+      clearGroupHover();
+      activeEntityId = entityId;
+      root.querySelectorAll(`.${entityId}`).forEach((element) => {
+        element.classList.add(ETH_ENTITY_GROUP_HOVER_CLASS);
+      });
+    }
+
+    function relatedTargetHasEntityId(
+      relatedTarget: EventTarget | null,
+      entityId: string
+    ) {
+      return (
+        relatedTarget instanceof Element &&
+        root.contains(relatedTarget) &&
+        Boolean(relatedTarget.closest(`.${entityId}`))
+      );
+    }
+
+    function handlePointerOver(event: PointerEvent) {
+      setGroupHover(entityIdForTarget(event.target));
+    }
+
+    function handlePointerOut(event: PointerEvent) {
+      if (
+        activeEntityId &&
+        entityIdForTarget(event.target) === activeEntityId &&
+        !relatedTargetHasEntityId(event.relatedTarget, activeEntityId)
+      ) {
+        clearGroupHover();
+      }
+    }
+
+    function handleFocusIn(event: FocusEvent) {
+      setGroupHover(entityIdForTarget(event.target));
+    }
+
+    function handleFocusOut(event: FocusEvent) {
+      if (
+        activeEntityId &&
+        entityIdForTarget(event.target) === activeEntityId &&
+        !relatedTargetHasEntityId(event.relatedTarget, activeEntityId)
+      ) {
+        clearGroupHover();
+      }
+    }
+
+    root.addEventListener("pointerover", handlePointerOver);
+    root.addEventListener("pointerout", handlePointerOut);
+    root.addEventListener("focusin", handleFocusIn);
+    root.addEventListener("focusout", handleFocusOut);
+
+    return () => {
+      clearGroupHover();
+      root.removeEventListener("pointerover", handlePointerOver);
+      root.removeEventListener("pointerout", handlePointerOut);
+      root.removeEventListener("focusin", handleFocusIn);
+      root.removeEventListener("focusout", handleFocusOut);
+    };
+  }, [gist.rendered_html, viewMode]);
 
   function applyViewMode(nextViewMode: ViewMode) {
     setViewMode(nextViewMode);
@@ -181,6 +284,7 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
 
       {viewMode === "rendered" ? (
         <article
+          ref={markdownRef}
           className="markdown-body"
           dangerouslySetInnerHTML={{ __html: gist.rendered_html }}
         />
