@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ApiKeyCopyButton } from "../../components/ApiKeyCopyButton";
 import { DeleteGistButton } from "../../components/DeleteGistButton";
+import { LogoutButton } from "../../components/LogoutButton";
 import { fetchCurrentSession, fetchMyGists } from "../../lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -50,11 +51,7 @@ export default async function MePage() {
             <span className="account-name">{session.name}</span>
           </div>
           <div className="account-actions">
-            <form className="account-logout-form" action="/logout" method="post">
-              <button className="account-logout-button" type="submit">
-                Log out
-              </button>
-            </form>
+            <LogoutButton />
             <span className="account-action-separator" aria-hidden="true">
               |
             </span>
@@ -80,13 +77,7 @@ export default async function MePage() {
                     </span>
                   </a>
                   {session.can_delete_gists ? (
-                    <form
-                      className="gist-delete-form"
-                      action={`/api/me/gists/${encodeURIComponent(gist.id)}/delete`}
-                      method="post"
-                    >
-                      <DeleteGistButton gistTitle={gistTitle} />
-                    </form>
+                    <DeleteGistButton gistId={gist.id} gistTitle={gistTitle} />
                   ) : null}
                 </div>
               </li>

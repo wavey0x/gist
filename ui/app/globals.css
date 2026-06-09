@@ -476,11 +476,6 @@ button {
   line-height: 1.4;
 }
 
-.gist-delete-form {
-  flex: 0 0 auto;
-  margin: 0;
-}
-
 .gist-delete-button {
   width: 32px;
   height: 32px;
@@ -493,6 +488,125 @@ button {
 
 :root[data-theme="dark"] .gist-delete-button:hover {
   color: #ff7b72;
+}
+
+.confirm-modal-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(13 17 23 / 52%);
+  padding: 20px;
+}
+
+.confirm-modal {
+  width: min(100%, 340px);
+  display: grid;
+  gap: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--page-bg);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+
+.confirm-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.confirm-modal-title {
+  margin: 0;
+  color: var(--page-fg);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.confirm-modal-close {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
+.confirm-modal-body {
+  min-width: 0;
+  color: var(--muted-fg);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.confirm-modal-body p,
+.confirm-modal-error {
+  margin: 0;
+}
+
+.confirm-modal-error {
+  color: #cf222e;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+:root[data-theme="dark"] .confirm-modal-error {
+  color: #ff7b72;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-modal-button {
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: var(--button-fg);
+  padding: 0 11px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.confirm-modal-button:hover:not(:disabled),
+.confirm-modal-button:focus-visible {
+  background: var(--button-bg-active);
+}
+
+.confirm-modal-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.confirm-modal-button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.confirm-modal-confirm-danger {
+  border-color: rgb(207 34 46 / 55%);
+  color: #cf222e;
+}
+
+.confirm-modal-confirm-danger:hover:not(:disabled),
+.confirm-modal-confirm-danger:focus-visible {
+  background: rgb(255 235 233);
+}
+
+:root[data-theme="dark"] .confirm-modal-confirm-danger {
+  border-color: rgb(255 123 114 / 45%);
+  color: #ff7b72;
+}
+
+:root[data-theme="dark"] .confirm-modal-confirm-danger:hover:not(:disabled),
+:root[data-theme="dark"] .confirm-modal-confirm-danger:focus-visible {
+  background: rgb(73 21 23);
 }
 
 .page-header {

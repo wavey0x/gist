@@ -169,7 +169,9 @@ export async function proxyJsonWithSession(
       Cookie: cookieHeader
     }
   });
-  const body = await backendResponse.text();
+  const hasBody =
+    backendResponse.status !== 204 && backendResponse.status !== 304;
+  const body = hasBody ? await backendResponse.text() : null;
   const response = new NextResponse(body, {
     status: backendResponse.status,
     headers: {
@@ -212,7 +214,9 @@ export async function proxyDeleteWithSession(
     );
   }
 
-  const body = await backendResponse.text();
+  const hasBody =
+    backendResponse.status !== 204 && backendResponse.status !== 304;
+  const body = hasBody ? await backendResponse.text() : null;
   const headers = new Headers();
   const contentType = backendResponse.headers.get("content-type");
   if (contentType) {
