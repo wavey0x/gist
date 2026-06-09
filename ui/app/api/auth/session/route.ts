@@ -8,20 +8,13 @@ import {
 export const dynamic = "force-dynamic";
 
 async function apiKeyFromRequest(request: NextRequest) {
-  const contentType = request.headers.get("content-type") ?? "";
-
-  if (contentType.includes("application/json")) {
-    const body = await request.json().catch(() => null);
-    const apiKey = body?.api_key;
+  try {
+    const formData = await request.formData();
+    const apiKey = formData.get("api_key");
     return typeof apiKey === "string" ? apiKey : "";
-  }
-
-  const formData = await request.formData().catch(() => null);
-  if (!formData) {
+  } catch {
     return "";
   }
-  const apiKey = formData.get("api_key");
-  return typeof apiKey === "string" ? apiKey : "";
 }
 
 function loginRedirect(request: NextRequest, error?: string) {
