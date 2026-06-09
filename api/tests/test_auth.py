@@ -11,6 +11,56 @@ from gist_api.auth import (
 from gist_api.db import gist_connection
 
 
+def test_api_keys_are_stored_and_verified_as_cleartext(app):
+    with gist_connection(app) as conn:
+        created = create_api_key(conn, "gist", "reader", ["gist:read"])
+        stored = conn.execute(
+            "select key_value, key_prefix from api_keys where id = ?",
+            (created["id"],),
+        ).fetchone()
+
+        auth, error = verify_api_key(
+            conn,
+            f"Bearer {created['key']}",
+            "gist",
+            "gist:read",
+        )
+
+    assert stored["key_value"] == created["key"]
+    assert stored["key_prefix"] == created["key_prefix"]
+    assert auth is not None
+    assert auth.key_value == created["key"]
+    assert error is None
+
+
+def test_hash_only_key_storage_is_not_accepted(app):
+    old_key = "wapi_gist_oldprefx_" + ("A" * 43)
+    with gist_connection(app) as conn:
+        with conn:
+            conn.execute(
+                """
+                insert into api_keys(
+                    domain, name, github_login, key_value, key_prefix,
+                    scopes_json, created_at
+                )
+                values (
+                    'gist',
+                    'old',
+                    null,
+                    'scrypt:32768:8:1$redacted$redacted',
+                    'wapi_gist_oldprefx',
+                    '["gist:read"]',
+                    '2026-01-01T00:00:00.000Z'
+                )
+                """
+            )
+
+        auth, error = verify_api_key(conn, f"Bearer {old_key}", "gist", "gist:read")
+
+    assert auth is None
+    assert error == "unauthorized"
+
+
 def test_key_rotation_revokes_old_key_and_returns_new_secret(app):
     with gist_connection(app) as conn:
         created = create_api_key(
@@ -170,10 +220,13 @@ def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
     body = response.get_json()
     assert body == {
         "name": "wavey0x",
+        "key": created["key"],
+        "key_prefix": created["key_prefix"],
+        "scopes": ["gist:read", "gist:write"],
+        "can_delete_gists": False,
         "github_login": "wavey0x",
         "avatar_url": "https://github.com/wavey0x.png?size=64",
     }
-    assert "key" not in body
     assert "token" not in body
 
     cookie = response.headers["Set-Cookie"]

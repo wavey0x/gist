@@ -16,7 +16,7 @@ from .errors import GistError, error_response
 from .rate_limits import check_write_rate_limit, record_auth_failure_and_check_limit
 from .service import (
     create_gist,
-    delete_gist,
+    delete_gist_created_by_key,
     get_gist,
     get_public_render,
     list_gists_created_by_key,
@@ -140,6 +140,15 @@ def require_web_session():
     return auth, None
 
 
+def require_web_session_scope(scope):
+    auth, response = require_web_session()
+    if response:
+        return None, response
+    if scope not in auth.scopes:
+        return None, error_response("forbidden", "Forbidden", 403)
+    return auth, None
+
+
 def check_write_limit(auth):
     with gist_connection(current_app) as conn:
         limited = check_write_rate_limit(
@@ -212,6 +221,22 @@ def list_my_gists():
     if response:
         return response
     return jsonify(list_gists_created_by_key(current_app, auth.key_id))
+
+
+@gists_api.route("/api/v1/me/gists/<gist_id>", methods=["DELETE"])
+def remove_my_gist(gist_id):
+    auth, response = require_web_session_scope("gist:delete")
+    if response:
+        return response
+    response = check_write_limit(auth)
+    if response:
+        return response
+
+    try:
+        delete_gist_created_by_key(current_app, auth.key_id, gist_id)
+        return "", 204
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
 
 
 @gists_api.route("/api/v1/gists", methods=["POST"])
@@ -292,5 +317,8 @@ def remove_gist(gist_id):
     if response:
         return response
 
-    delete_gist(current_app, gist_id)
-    return "", 204
+    try:
+        delete_gist_created_by_key(current_app, auth.key_id, gist_id)
+        return "", 204
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)

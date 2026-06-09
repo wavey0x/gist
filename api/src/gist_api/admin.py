@@ -92,7 +92,7 @@ def main(argv=None):
                     github_login=args.github_login,
                 )
                 print(json.dumps(result, indent=2))
-                print("Save this key now. It cannot be recovered.")
+                print("Save this key securely.")
             elif args.command == "list":
                 print(json.dumps(list_api_keys(conn, args.domain), indent=2))
             elif args.command == "revoke":
@@ -107,9 +107,9 @@ def main(argv=None):
                         args.key_prefix_or_id,
                         args.name,
                         github_login=args.github_login,
-                    )
+                )
                 print(json.dumps(result, indent=2))
-                print("Save this key now. It cannot be recovered.")
+                print("Save this key securely.")
     elif args.resource == "gists":
         if args.command == "rerender":
             result = rerender_gists(

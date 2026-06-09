@@ -85,7 +85,8 @@ SQLITE_DB_PATH=.local/gists.sqlite3 uv run admin keys create \
   --role admin
 ```
 
-Save the printed key. It is shown only once.
+Save the printed key securely. Logged-in users can also view their current key
+from the account page.
 
 ## Create A Gist
 
@@ -103,8 +104,8 @@ Open the returned `url` in the browser.
 ## List Your Gists
 
 Open `http://localhost:3000/login`, enter the API key once, then visit
-`/list`. The browser stores only an HttpOnly `wg_session` cookie; the API key is
-not stored in browser-readable storage.
+`/me`. The browser stores an HttpOnly `wg_session` cookie, and the `/me` page
+can disclose the current API key after the session is authenticated.
 
 ## Configuration
 
@@ -213,14 +214,14 @@ forwarded IP for rate limits.
 ## Security Model
 
 Gist URLs are bearer-capability URLs: anyone with the URL can read that gist.
-The private `/list` page is backed by the existing API key and shows only gists
-created by that key. There is no public listing, account system, editor,
-comments, analytics, or social graph.
+The private `/me` page is backed by the current web session, shows the current
+API key, and lists only gists created by that key. There is no public listing,
+account system, editor, comments, analytics, or social graph.
 
-The backend sanitizes rendered HTML before storage. API keys are hashed,
-scoped, and shown only once when created or rotated; web session tokens are
-stored only as hashes. Do not log Markdown bodies, rendered HTML,
-authorization headers, session cookies, or raw API keys in production.
+The backend sanitizes rendered HTML before storage. API keys are stored in
+cleartext for account-page disclosure; web session tokens are stored only as
+hashes. Do not log Markdown bodies, rendered HTML, authorization headers,
+session cookies, or raw API keys in production.
 
 ## License
 

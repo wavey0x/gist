@@ -4,7 +4,7 @@ from gist_api.admin import main as admin_main
 
 
 def _admin_json(output):
-    return json.loads(output.split("\nSave this key now.", 1)[0])
+    return json.loads(output.split("\nSave this key securely.", 1)[0])
 
 
 def test_admin_key_create_defaults_to_gist_user_role(monkeypatch, tmp_path, capsys):

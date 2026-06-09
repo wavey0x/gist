@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { ApiKeyDisclosure } from "../../components/ApiKeyDisclosure";
 import { fetchCurrentSession, fetchMyGists } from "../../lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ function formatUpdatedAt(value: string) {
   }).format(date);
 }
 
-export default async function GistListPage() {
+export default async function MePage() {
   const session = await fetchCurrentSession();
   if (!session) {
     redirect("/login");
@@ -33,6 +34,25 @@ export default async function GistListPage() {
 
   return (
     <main className="auth-shell" aria-label="Your gists">
+      <section className="account-panel" aria-label="Account">
+        <div className="account-identity">
+          {session.avatar_url ? (
+            <img
+              className="account-avatar"
+              src={session.avatar_url}
+              alt=""
+              width={28}
+              height={28}
+            />
+          ) : null}
+          <span className="account-name">{session.name}</span>
+        </div>
+        <ApiKeyDisclosure
+          apiKey={session.key}
+          keyPrefix={session.key_prefix}
+        />
+      </section>
+
       {payload.gists.length > 0 ? (
         <ul className="gist-list">
           {payload.gists.map((gist) => (

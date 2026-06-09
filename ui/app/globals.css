@@ -259,6 +259,117 @@ button {
   margin-bottom: 18px;
 }
 
+.account-panel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.account-identity {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 3px;
+}
+
+.account-avatar {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.account-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--page-fg);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-key-disclosure {
+  min-width: 0;
+  flex: 1 1 430px;
+  max-width: 520px;
+}
+
+.api-key-disclosure summary {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  color: var(--page-fg);
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  list-style: none;
+}
+
+.api-key-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.api-key-disclosure summary span {
+  color: var(--muted-fg);
+}
+
+.api-key-disclosure summary code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--page-fg);
+  font-family:
+    ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono,
+    monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-key-disclosure summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.api-key-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.api-key-field {
+  min-width: 0;
+  flex: 1;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--page-bg);
+  color: var(--page-fg);
+  padding: 0 10px;
+  font-family:
+    ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono,
+    monospace;
+  font-size: 12px;
+}
+
+.api-key-field:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.api-key-copy-button {
+  width: 34px;
+  height: 34px;
+}
+
 .auth-identity {
   display: inline-flex;
   align-items: center;
@@ -664,6 +775,20 @@ button {
 
   .auth-shell {
     padding: 14px 16px 24px;
+  }
+
+  .account-panel {
+    display: grid;
+    gap: 10px;
+  }
+
+  .api-key-disclosure {
+    width: 100%;
+    max-width: none;
+  }
+
+  .api-key-disclosure summary {
+    justify-content: space-between;
   }
 
   .login-form {

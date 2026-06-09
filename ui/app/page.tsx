@@ -16,7 +16,7 @@ export const revalidate = 0;
 export default async function Home() {
   const session = await getHomeSession();
   if (session) {
-    redirect("/list");
+    redirect("/me");
   }
 
   return (

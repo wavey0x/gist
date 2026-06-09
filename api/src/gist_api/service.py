@@ -431,17 +431,31 @@ def patch_gist(app, key_id, author_name, external_id, payload):
         return _row_to_api(app, row)
 
 
-def delete_gist(app, external_id):
+def delete_gist_created_by_key(app, key_id, external_id):
     if not validate_external_id(external_id):
-        return
+        raise GistError("not_found", "Not found", 404)
 
     now = utc_now()
     with gist_connection(app) as conn:
         with conn:
-            conn.execute(
-                "update gists set deleted_at = coalesce(deleted_at, ?) where external_id = ?",
-                (now, external_id),
+            cursor = conn.execute(
+                """
+                update gists
+                set deleted_at = ?
+                where external_id = ?
+                  and deleted_at is null
+                  and exists (
+                      select 1
+                      from gist_revisions
+                      where gist_revisions.gist_id = gists.id
+                        and gist_revisions.revision_number = 1
+                        and gist_revisions.created_by_key_id = ?
+                  )
+                """,
+                (now, external_id, key_id),
             )
+            if cursor.rowcount == 0:
+                raise GistError("not_found", "Not found", 404)
 
 
 def rerender_gists(app, *, external_id=None, dry_run=False):

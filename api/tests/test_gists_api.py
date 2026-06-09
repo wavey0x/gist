@@ -138,7 +138,13 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     assert client.get(f"/api/v1/gists/{body['id']}/revisions/0/render").status_code == 404
     assert client.get(f"/api/v1/gists/{body['id']}/revisions/nope/render").status_code == 404
 
-    deleted = client.delete(f"/api/v1/gists/{body['id']}", headers=auth_header(editor_key))
+    other_delete = client.delete(
+        f"/api/v1/gists/{body['id']}",
+        headers=auth_header(editor_key),
+    )
+    assert other_delete.status_code == 404
+
+    deleted = client.delete(f"/api/v1/gists/{body['id']}", headers=auth_header(write_key))
     assert deleted.status_code == 204
 
     assert client.get(f"/api/v1/gists/{body['id']}/render").status_code == 404

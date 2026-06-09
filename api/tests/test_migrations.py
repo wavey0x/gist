@@ -2,6 +2,7 @@ import importlib
 import sqlite3
 
 from gist_api.app import create_app
+from gist_api.auth import verify_api_key
 from gist_api.db import gist_connection
 from gist_api import migrations as migration_module
 
@@ -22,7 +23,7 @@ def test_fresh_database_records_all_known_migration_slots(tmp_path):
             )
         ]
 
-    assert versions == [1, 2, 3, 4]
+    assert versions == [1, 2, 3, 4, 5]
 
 
 def test_existing_production_schema_history_migrates_forward_without_reset(tmp_path):
@@ -128,11 +129,15 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
         ).fetchone()
         existing_key = migrated.execute(
             """
-            select name, github_login
+            select name, github_login, key_value
             from api_keys
             where id = 1
             """
         ).fetchone()
+        api_key_columns = {
+            row["name"]
+            for row in migrated.execute("select name from pragma_table_info('api_keys')")
+        }
         existing_revision = migrated.execute(
             """
             select author_name
@@ -161,6 +166,12 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
             where name = 'github_login'
             """
         ).fetchone()
+        auth, auth_error = verify_api_key(
+            migrated,
+            f"Bearer wapi_gist_existing_{'A' * 43}",
+            "gist",
+            "gist:read",
+        )
         ownership_index = migrated.execute(
             """
             select name
@@ -170,7 +181,7 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
             """
         ).fetchone()
 
-    assert versions == [1, 2, 3, 4]
+    assert versions == [1, 2, 3, 4, 5]
     assert dict(existing) == {
         "external_id": "AAAAAAAAAAAAAAAA",
         "markdown": "# Existing",
@@ -179,7 +190,13 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
     assert dict(existing_key) == {
         "name": "wavey0x",
         "github_login": "wavey0x",
+        "key_value": existing_key["key_value"],
     }
+    assert existing_key["key_value"].startswith("migrated_unusable_1_")
+    assert "key_value" in api_key_columns
+    assert "key_hash" not in api_key_columns
+    assert auth is None
+    assert auth_error == "unauthorized"
     assert existing_revision["author_name"] == "wavey0x"
     assert write_table["name"] == "api_write_events"
     assert session_table["name"] == "web_sessions"

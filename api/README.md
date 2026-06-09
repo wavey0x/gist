@@ -61,7 +61,8 @@ key-backed web session.
 ## Auth Routes
 
 The browser login flow mints an HttpOnly `wg_session` cookie from an existing
-gist API key:
+gist API key. Authenticated session responses include the current cleartext key
+so the frontend account page can display it:
 
 ```text
 POST   /api/v1/auth/session

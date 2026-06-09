@@ -22,7 +22,7 @@ export async function AppHeader() {
         <nav className="app-nav" aria-label="Site">
           {session ? (
             <>
-              <Link className="app-identity app-identity-link" href="/list">
+              <Link className="app-identity app-identity-link" href="/me">
                 {session.avatar_url ? (
                   <img
                     className="app-avatar"
