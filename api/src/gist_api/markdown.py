@@ -17,9 +17,9 @@ from lxml import etree, html
 
 logger = logging.getLogger(__name__)
 
-SANITIZER_CONFIG_VERSION = "2026-06-02.2"
+SANITIZER_CONFIG_VERSION = "2026-06-02.3"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
-ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-09.1"
+ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-09.2"
 HIGHLIGHT_GRAMMAR_SET = "all"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -80,7 +80,14 @@ ALLOWED_TAGS = {
 SAFE_REL_TOKENS = {"nofollow", "noopener", "noreferrer"}
 SAFE_DIR_VALUES = {"auto", "ltr", "rtl"}
 SAFE_TASK_CLASSES = {"contains-task-list", "task-list-item"}
-SAFE_ETHEREUM_CLASSES = {"eth-entity", "eth-address", "eth-tx"}
+SAFE_ETHEREUM_CLASSES = {
+    "eth-entity",
+    "eth-address",
+    "eth-block",
+    "eth-ens",
+    "eth-selector",
+    "eth-tx",
+}
 SAFE_EXACT_CLASSES = {"highlight", *SAFE_ETHEREUM_CLASSES}
 SAFE_CLASS_PATTERNS = (
     re.compile(r"^highlight-(source|text)-[A-Za-z0-9_.+-]+$"),
@@ -96,12 +103,40 @@ ETHEREUM_FULL_VALUE_RE = re.compile(rf"^{ETHEREUM_FULL_VALUE_PATTERN}$")
 ETHEREUM_ABBREVIATED_VALUE_RE = re.compile(
     r"^0x[0-9A-Fa-f]{3,}(?:\.{2,3}|…)[0-9A-Fa-f]{3,}$"
 )
+ETHEREUM_SELECTOR_RE = re.compile(
+    r"(?<![0-9A-Za-z])(0x[0-9A-Fa-f]{8})(?![0-9A-Za-z])"
+)
+ETHEREUM_SELECTOR_VALUE_RE = re.compile(r"^0x[0-9A-Fa-f]{8}$")
+ETHEREUM_ENS_LABEL_PATTERN = (
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+)
+ETHEREUM_ENS_NAME_PATTERN = (
+    rf"{ETHEREUM_ENS_LABEL_PATTERN}(?:\.{ETHEREUM_ENS_LABEL_PATTERN})*\.eth"
+)
+ETHEREUM_ENS_NAME_RE = re.compile(
+    rf"(?<![A-Za-z0-9_.-])({ETHEREUM_ENS_NAME_PATTERN})(?![A-Za-z0-9_.-])",
+    re.IGNORECASE,
+)
+ETHEREUM_ENS_VALUE_RE = re.compile(
+    rf"^{ETHEREUM_ENS_NAME_PATTERN}$",
+    re.IGNORECASE,
+)
+ETHEREUM_BLOCK_LABEL_RE = re.compile(
+    r"\b(?:block(?:\s*(?:number|no\.?))?|blocks?)\s*(?:#|:)?\s*"
+    r"([0-9][0-9,]{4,})\b",
+    re.IGNORECASE,
+)
+ETHEREUM_BLOCK_VALUE_RE = re.compile(r"^#?([0-9][0-9,]{4,})$")
 ETHEREUM_TX_HREF_RE = re.compile(
     r"/tx/(0x[0-9A-Fa-f]{64})(?=$|[/?#])",
     re.IGNORECASE,
 )
 ETHEREUM_ADDRESS_HREF_RE = re.compile(
     r"/address/(0x[0-9A-Fa-f]{40})(?=$|[/?#])",
+    re.IGNORECASE,
+)
+ETHEREUM_BLOCK_HREF_RE = re.compile(
+    r"/blocks?/([0-9][0-9,]*)(?=$|[/?#])",
     re.IGNORECASE,
 )
 
@@ -116,6 +151,13 @@ class RenderedMarkdown:
 class EthereumEntity:
     kind: str
     value: str
+
+
+@dataclass(frozen=True)
+class EthereumEntityTextMatch:
+    start: int
+    end: int
+    entity: EthereumEntity
 
 
 @dataclass
@@ -256,11 +298,22 @@ def _ethereum_kind(value):
 
 def _ethereum_entity_from_value(value):
     if not ETHEREUM_FULL_VALUE_RE.fullmatch(value):
+        if ETHEREUM_SELECTOR_VALUE_RE.fullmatch(value):
+            return EthereumEntity(kind="selector", value=value.lower())
+        if ETHEREUM_ENS_VALUE_RE.fullmatch(value):
+            return EthereumEntity(kind="ens", value=value.lower())
         return None
     kind = _ethereum_kind(value)
     if kind is None:
         return None
     return EthereumEntity(kind=kind, value=value.lower())
+
+
+def _ethereum_block_entity(value):
+    digits = value.replace(",", "")
+    if len(digits) < 5 or not digits.isdecimal():
+        return None
+    return EthereumEntity(kind="block", value=str(int(digits)))
 
 
 def _ethereum_entity_from_href(href):
@@ -272,6 +325,12 @@ def _ethereum_entity_from_href(href):
         if match:
             return EthereumEntity(kind=kind, value=match.group(1).lower())
 
+    match = ETHEREUM_BLOCK_HREF_RE.search(href)
+    if match:
+        entity = _ethereum_block_entity(match.group(1))
+        if entity is not None:
+            return entity
+
     fallback_entities = [
         _ethereum_entity_from_value(match.group(1))
         for match in ETHEREUM_FULL_ENTITY_RE.finditer(href)
@@ -282,7 +341,29 @@ def _ethereum_entity_from_href(href):
     for entity in fallback_entities:
         if entity is not None:
             return entity
+
+    match = ETHEREUM_ENS_NAME_RE.search(href)
+    if match:
+        return EthereumEntity(kind="ens", value=match.group(1).lower())
     return None
+
+
+def _ethereum_link_text_matches_href_entity(text, entity):
+    if entity.kind in {"address", "tx"}:
+        return ETHEREUM_ABBREVIATED_VALUE_RE.fullmatch(text) is not None
+
+    if entity.kind == "block":
+        block_match = ETHEREUM_BLOCK_VALUE_RE.fullmatch(text)
+        if block_match:
+            text_entity = _ethereum_block_entity(block_match.group(1))
+            return text_entity == entity
+
+        for block_match in ETHEREUM_BLOCK_LABEL_RE.finditer(text):
+            text_entity = _ethereum_block_entity(block_match.group(1))
+            if text_entity == entity:
+                return True
+
+    return False
 
 
 def _ethereum_entity_digest(entity):
@@ -298,13 +379,52 @@ def _set_ethereum_entity_classes(element, entity):
     element.attrib["class"] = _ethereum_entity_classes(entity)
 
 
-def _ethereum_span_for_token(token):
-    entity = _ethereum_entity_from_value(token)
-    if entity is None:
-        return None
+def _ethereum_text_matches(value):
+    candidates = []
+
+    for match in ETHEREUM_FULL_ENTITY_RE.finditer(value):
+        entity = _ethereum_entity_from_value(match.group(1))
+        if entity is not None:
+            candidates.append(
+                EthereumEntityTextMatch(match.start(1), match.end(1), entity)
+            )
+
+    for match in ETHEREUM_SELECTOR_RE.finditer(value):
+        entity = _ethereum_entity_from_value(match.group(1))
+        if entity is not None:
+            candidates.append(
+                EthereumEntityTextMatch(match.start(1), match.end(1), entity)
+            )
+
+    for match in ETHEREUM_ENS_NAME_RE.finditer(value):
+        entity = _ethereum_entity_from_value(match.group(1))
+        if entity is not None:
+            candidates.append(
+                EthereumEntityTextMatch(match.start(1), match.end(1), entity)
+            )
+
+    for match in ETHEREUM_BLOCK_LABEL_RE.finditer(value):
+        entity = _ethereum_block_entity(match.group(1))
+        if entity is not None:
+            candidates.append(
+                EthereumEntityTextMatch(match.start(1), match.end(1), entity)
+            )
+
+    candidates.sort(key=lambda candidate: (candidate.start, -candidate.end))
+    matches = []
+    previous_end = 0
+    for candidate in candidates:
+        if candidate.start < previous_end:
+            continue
+        matches.append(candidate)
+        previous_end = candidate.end
+    return matches
+
+
+def _ethereum_span_for_entity(text, entity):
     span = etree.Element("span")
     _set_ethereum_entity_classes(span, entity)
-    span.text = token
+    span.text = text
     return span
 
 
@@ -314,14 +434,15 @@ def _ethereum_fragments(value):
 
     fragments = []
     previous_end = 0
-    for match in ETHEREUM_FULL_ENTITY_RE.finditer(value):
-        entity_span = _ethereum_span_for_token(match.group(1))
-        if entity_span is None:
-            continue
-        if match.start() > previous_end:
-            fragments.append(value[previous_end:match.start()])
+    for match in _ethereum_text_matches(value):
+        if match.start > previous_end:
+            fragments.append(value[previous_end:match.start])
+        entity_span = _ethereum_span_for_entity(
+            value[match.start:match.end],
+            match.entity,
+        )
         fragments.append(entity_span)
-        previous_end = match.end()
+        previous_end = match.end
 
     if not fragments:
         return None
@@ -366,9 +487,14 @@ def _post_process_ethereum_links(root):
         if _is_code_block_context(element):
             continue
         text = element.text_content().strip()
+        href_entity = _ethereum_entity_from_href(element.attrib.get("href", ""))
         entity = _ethereum_entity_from_value(text)
-        if entity is None and ETHEREUM_ABBREVIATED_VALUE_RE.fullmatch(text):
-            entity = _ethereum_entity_from_href(element.attrib.get("href", ""))
+        if (
+            entity is None
+            and href_entity is not None
+            and _ethereum_link_text_matches_href_entity(text, href_entity)
+        ):
+            entity = href_entity
         if entity is not None:
             _set_ethereum_entity_classes(element, entity)
 

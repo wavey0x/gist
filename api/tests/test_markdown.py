@@ -12,6 +12,8 @@ from .conftest import create_gist, make_key
 FIXTURE_DIR = Path(__file__).with_name("fixtures")
 ETH_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678"
 ETH_TX_HASH = "0x" + "a1" * 32
+ETH_SELECTOR = "0xa9059cbb"
+ENS_NAME = "vaults.yearn.eth"
 
 
 def _class_tokens(element):
@@ -143,15 +145,92 @@ Short tx [{short_tx}](https://etherscan.io/tx/{ETH_TX_HASH})
     assert "eth-tx" in _class_tokens(short_tx_links[0])
 
 
+def test_ethereum_entity_rendering_marks_ens_selectors_and_blocks():
+    result = render_markdown_result(
+        f"""
+ENS {ENS_NAME} and linked [Yearn.ETH](https://app.ens.domains/Yearn.ETH).
+
+Selector {ETH_SELECTOR} and repeated {ETH_SELECTOR}.
+
+At block 22481234 and later block #22,481,234.
+Linked block [22481235](https://etherscan.io/block/22481235)
+
+Bare number should stay plain 22481236.
+Bare short hex should stay plain 0x123456789.
+
+Inline selector `{ETH_SELECTOR}` gets colored.
+Inline ENS `{ENS_NAME}` gets colored.
+
+```
+{ENS_NAME}
+{ETH_SELECTOR}
+block 22481234
+```
+"""
+    )
+
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+    ens_entities = root.xpath(
+        './/*[contains(concat(" ", @class, " "), " eth-ens ")]'
+    )
+    selector_entities = root.xpath(
+        './/*[contains(concat(" ", @class, " "), " eth-selector ")]'
+    )
+    block_entities = root.xpath(
+        './/*[contains(concat(" ", @class, " "), " eth-block ")]'
+    )
+
+    assert len(ens_entities) == 3
+    assert len(selector_entities) == 3
+    assert len(block_entities) == 3
+
+    repeated_selectors = root.xpath(
+        f'.//*[normalize-space()="{ETH_SELECTOR}" and '
+        'contains(concat(" ", @class, " "), " eth-selector ")]'
+    )
+    assert len({_entity_id(element) for element in repeated_selectors}) == 1
+
+    repeated_blocks = root.xpath(
+        './/*[normalize-space()="22481234" or normalize-space()="22,481,234"]'
+    )
+    repeated_blocks = [
+        element
+        for element in repeated_blocks
+        if "eth-block" in _class_tokens(element)
+    ]
+    assert len(repeated_blocks) == 2
+    assert len({_entity_id(element) for element in repeated_blocks}) == 1
+
+    linked_block = root.xpath('.//a[normalize-space()="22481235"]')
+    assert len(linked_block) == 1
+    assert "eth-block" in _class_tokens(linked_block[0])
+
+    assert "22481236" in result.html
+    assert "0x123456789" in result.html
+    assert "eth-id-nope" not in result.html
+
+    code_block = root.xpath(".//pre/code")
+    assert len(code_block) == 1
+    code_block_html = html_parser.tostring(
+        code_block[0],
+        encoding="unicode",
+        method="html",
+    )
+    assert "eth-entity" not in code_block_html
+
+
 def test_ethereum_entity_rendering_can_be_disabled():
     result = render_markdown_result(
-        f"{ETH_ADDRESS} {ETH_TX_HASH}",
+        f"{ETH_ADDRESS} {ETH_TX_HASH} {ENS_NAME} {ETH_SELECTOR} block 22481234",
         ethereum_entities=False,
     )
 
     assert "eth-entity" not in result.html
     assert ETH_ADDRESS in result.html
     assert ETH_TX_HASH in result.html
+    assert ENS_NAME in result.html
+    assert ETH_SELECTOR in result.html
+    assert "22481234" in result.html
     assert "ethereum-entities/off" in result.version
 
 
@@ -171,6 +250,15 @@ def test_ethereum_entity_sanitizer_allows_only_expected_classes():
     assert "eth-id-nope" not in result.html
     assert "eth-weird" not in result.html
     assert "<span>not an address</span>" in result.html
+
+    allowed = render_markdown_result(
+        '<span class="eth-entity eth-ens eth-selector eth-block eth-id-abcdef123456">'
+        "entity</span>"
+    )
+
+    assert "eth-ens" in allowed.html
+    assert "eth-selector" in allowed.html
+    assert "eth-block" in allowed.html
 
 
 def test_markdown_rendering_marks_degraded_when_node_is_missing(monkeypatch):
