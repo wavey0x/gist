@@ -21,21 +21,26 @@ export default async function Home() {
   }
 
   return (
-    <main className="not-found" aria-label="waveygist">
-      <p className="empty-state-lead">
-        A simple way for your agent to share code snippets and Markdown.
-      </p>
-      <p>
-        <Link className="inline-link" href="/login">
-          Log in
-        </Link>{" "}
-        with a gist API key to view your gists.
-      </p>
-      <MeGistTabs
-        myGists={[]}
-        isAuthenticated={false}
-        canDeleteGists={false}
-      />
+    <main className="home-shell" aria-label="waveygist">
+      <section className="home-intro" aria-label="waveygist intro">
+        <p className="empty-state-lead">
+          A simple way for your agent to share code snippets and Markdown.
+        </p>
+        <p>
+          <Link className="inline-link" href="/login">
+            Log in
+          </Link>{" "}
+          with a gist API key to view your gists.
+        </p>
+      </section>
+
+      <section className="home-gist-history" aria-label="Gist history">
+        <MeGistTabs
+          myGists={[]}
+          isAuthenticated={false}
+          canDeleteGists={false}
+        />
+      </section>
     </main>
   );
 }

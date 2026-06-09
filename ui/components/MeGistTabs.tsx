@@ -184,6 +184,12 @@ export function MeGistTabs({
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setActiveTab("recent");
+    }
+  }, [isAuthenticated]);
+
   const recentItems = useMemo(
     () => (recentGists ?? []).map(recentGistToListItem),
     [recentGists]
@@ -218,18 +224,22 @@ export function MeGistTabs({
         >
           RECENTLY VIEWED
         </button>
-        <span className="me-tab-separator" aria-hidden="true">
-          |
-        </span>
-        <button
-          type="button"
-          className="me-tab-button"
-          role="tab"
-          aria-selected={activeTab === "mine"}
-          onClick={() => setActiveTab("mine")}
-        >
-          MY GISTS
-        </button>
+        {isAuthenticated ? (
+          <>
+            <span className="me-tab-separator" aria-hidden="true">
+              |
+            </span>
+            <button
+              type="button"
+              className="me-tab-button"
+              role="tab"
+              aria-selected={activeTab === "mine"}
+              onClick={() => setActiveTab("mine")}
+            >
+              MY GISTS
+            </button>
+          </>
+        ) : null}
       </div>
 
       {activeTab === "recent" ? (

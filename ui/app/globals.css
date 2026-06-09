@@ -81,6 +81,50 @@ button {
   gap: 10px;
 }
 
+.home-shell {
+  width: min(100%, 760px);
+  min-height: calc(100vh - 44px);
+  margin: 0 auto;
+  padding: 32px 32px 64px;
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+}
+
+.home-intro {
+  margin-top: clamp(48px, 10vh, 92px);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.home-intro p {
+  margin: 0;
+  color: var(--muted-fg);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.home-intro .empty-state-lead {
+  max-width: 460px;
+  color: var(--page-fg);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.home-gist-history {
+  margin-top: clamp(96px, 18vh, 170px);
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  text-align: left;
+}
+
+.home-gist-history .me-tabs {
+  justify-content: flex-start;
+}
+
 .app-header {
   min-height: 44px;
   border-bottom: 1px solid var(--border);
@@ -1013,6 +1057,15 @@ button {
 
   .auth-shell {
     padding: 14px 16px 24px;
+  }
+
+  .home-shell {
+    padding: 28px 16px 36px;
+  }
+
+  .home-gist-history {
+    margin-top: 72px;
+    padding-top: 18px;
   }
 
   .account-actions {
