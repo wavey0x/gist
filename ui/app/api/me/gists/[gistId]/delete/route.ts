@@ -14,7 +14,32 @@ type RouteProps = {
 
 function isSameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
+  if (!origin) {
+    return true;
+  }
+
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return false;
+  }
+
+  const candidateHosts = new Set<string>();
+  candidateHosts.add(request.nextUrl.host);
+  candidateHosts.add(new URL(request.url).host);
+
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  if (forwardedHost) {
+    candidateHosts.add(forwardedHost.split(",")[0].trim());
+  }
+
+  const host = request.headers.get("host");
+  if (host) {
+    candidateHosts.add(host);
+  }
+
+  return candidateHosts.has(originHost);
 }
 
 function redirectToMe(request: NextRequest, code?: string) {
