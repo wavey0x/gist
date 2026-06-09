@@ -349,14 +349,13 @@ button {
 
 .api-key-summary {
   min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
   color: var(--muted-fg);
   font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
   list-style: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .api-key-disclosure summary::-webkit-details-marker {
@@ -368,19 +367,9 @@ button {
   outline-offset: 2px;
 }
 
-.api-key-toggle-icon {
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-}
-
 .api-key-summary:hover,
 .api-key-summary:focus-visible {
   color: var(--page-fg);
-}
-
-.api-key-toggle-label {
-  overflow-wrap: anywhere;
 }
 
 .api-key-row {
