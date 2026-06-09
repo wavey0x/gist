@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { MeGistTabs } from "../components/MeGistTabs";
 import { fetchCurrentSession } from "../lib/auth";
 
 async function getHomeSession() {
@@ -30,6 +31,11 @@ export default async function Home() {
         </Link>{" "}
         with a gist API key to view your gists.
       </p>
+      <MeGistTabs
+        myGists={[]}
+        isAuthenticated={false}
+        canDeleteGists={false}
+      />
     </main>
   );
 }
