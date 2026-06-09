@@ -336,72 +336,58 @@ button {
   line-height: 1;
 }
 
-.api-key-disclosure {
-  min-width: 0;
-  display: grid;
-  justify-items: start;
-}
-
-.api-key-disclosure[open] {
-  width: min(100%, 520px);
-  flex-basis: 100%;
-}
-
-.api-key-summary {
-  min-width: 0;
+.api-key-copy-action {
+  border: 0;
+  background: transparent;
   color: var(--muted-fg);
+  padding: 0;
+  font: inherit;
   font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
-  list-style: none;
+}
+
+.api-key-copy-action:hover {
+  color: var(--page-fg);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.api-key-disclosure summary::-webkit-details-marker {
-  display: none;
+.api-key-copy-action[data-copied="true"] {
+  color: var(--page-fg);
 }
 
-.api-key-summary:focus-visible {
+.api-key-copy-action:focus-visible {
+  color: var(--page-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.api-key-copy-action:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
-.api-key-summary:hover,
-.api-key-summary:focus-visible {
-  color: var(--page-fg);
+.api-key-copy-feedback {
+  display: inline-block;
+  animation: copy-pulse 600ms ease;
 }
 
-.api-key-row {
-  width: 100%;
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
+@keyframes copy-pulse {
+  0% {
+    opacity: 0.55;
+    transform: translateY(1px);
+  }
 
-.api-key-field {
-  min-width: 0;
-  flex: 1;
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--page-bg);
-  color: var(--page-fg);
-  padding: 0 10px;
-  font-family:
-    ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono,
-    monospace;
-  font-size: 12px;
-}
+  55% {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
 
-.api-key-field:focus {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.api-key-copy-button {
-  width: 34px;
-  height: 34px;
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .auth-identity {
@@ -840,10 +826,6 @@ button {
 
   .account-actions {
     padding-left: 32px;
-  }
-
-  .api-key-disclosure[open] {
-    width: 100%;
   }
 
   .login-form {

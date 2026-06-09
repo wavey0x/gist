@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { ApiKeyDisclosure } from "../../components/ApiKeyDisclosure";
+import { ApiKeyCopyButton } from "../../components/ApiKeyCopyButton";
 import { DeleteGistButton } from "../../components/DeleteGistButton";
 import { fetchCurrentSession, fetchMyGists } from "../../lib/auth";
 
@@ -84,7 +84,7 @@ export default async function MePage({ searchParams }: PageProps) {
             <span className="account-action-separator" aria-hidden="true">
               |
             </span>
-            <ApiKeyDisclosure apiKey={session.key} />
+            <ApiKeyCopyButton apiKey={session.key} />
           </div>
         </div>
       </section>
