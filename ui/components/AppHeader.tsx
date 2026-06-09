@@ -1,61 +1,58 @@
-"use client";
-
-import { Moon, Sun } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { fetchCurrentSession } from "../lib/auth";
+import { ThemeToggle } from "./ThemeToggle";
 
-type Theme = "light" | "dark";
-
-export function AppHeader() {
-  const [theme, setTheme] = useState<Theme>("light");
-
-  useEffect(() => {
-    setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
-  }, []);
-
-  function applyTheme(nextTheme: Theme) {
-    document.documentElement.dataset.theme = nextTheme;
-    localStorage.setItem("theme", nextTheme);
-    setTheme(nextTheme);
+async function getHeaderSession() {
+  try {
+    return await fetchCurrentSession();
+  } catch {
+    return null;
   }
+}
 
-  const nextTheme = theme === "dark" ? "light" : "dark";
+export async function AppHeader() {
+  const session = await getHeaderSession();
 
   return (
     <header className="app-header">
       <div className="app-header-inner">
-        <Link className="app-brand" href="/" aria-label="Wavey Gist home">
-          <span className="brand-mark-strong">Wavey</span>
+        <Link className="app-brand" href="/" aria-label="waveygist home">
+          <span className="brand-mark-strong">wavey</span>
           <span className="brand-mark-light">gist</span>
         </Link>
         <nav className="app-nav" aria-label="Site">
           <Link className="app-link" href="/">
             Home
           </Link>
-          <Link className="app-link" href="/list">
-            List
-          </Link>
-          <Link className="app-link" href="/login">
-            Log in
-          </Link>
-          <form className="app-logout-form" action="/logout" method="post">
-            <button className="app-link app-link-button" type="submit">
-              Log out
-            </button>
-          </form>
-          <button
-            type="button"
-            className="icon-button app-theme-button"
-            aria-label={`Switch to ${nextTheme} mode`}
-            title={nextTheme === "dark" ? "Dark" : "Light"}
-            onClick={() => applyTheme(nextTheme)}
-          >
-            {theme === "dark" ? (
-              <Sun aria-hidden="true" size={18} strokeWidth={1.8} />
-            ) : (
-              <Moon aria-hidden="true" size={18} strokeWidth={1.8} />
-            )}
-          </button>
+          {session ? (
+            <>
+              <Link className="app-link" href="/list">
+                List
+              </Link>
+              <span className="app-identity">
+                {session.avatar_url ? (
+                  <img
+                    className="app-avatar"
+                    src={session.avatar_url}
+                    alt=""
+                    width={20}
+                    height={20}
+                  />
+                ) : null}
+                <span className="app-name">{session.name}</span>
+              </span>
+              <form className="app-logout-form" action="/logout" method="post">
+                <button className="app-link app-link-button" type="submit">
+                  Log out
+                </button>
+              </form>
+            </>
+          ) : (
+            <Link className="app-link" href="/login">
+              Log in
+            </Link>
+          )}
+          <ThemeToggle />
         </nav>
       </div>
     </header>

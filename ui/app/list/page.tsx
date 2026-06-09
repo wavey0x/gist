@@ -33,21 +33,6 @@ export default async function GistListPage() {
 
   return (
     <main className="auth-shell" aria-label="Your gists">
-      <header className="auth-top-row">
-        <div className="auth-identity">
-          {session.avatar_url ? (
-            <img
-              className="auth-avatar"
-              src={session.avatar_url}
-              alt=""
-              width={24}
-              height={24}
-            />
-          ) : null}
-          <span className="auth-name">{session.name}</span>
-        </div>
-      </header>
-
       {payload.gists.length > 0 ? (
         <ul className="gist-list">
           {payload.gists.map((gist) => (

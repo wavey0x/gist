@@ -4,7 +4,7 @@ Wavey Gist publishes Markdown gists at https://gist.wavey.info.
 
 ## Agent Routes
 
-- GET /: home page.
+- GET /: home page; redirects to /list when the visitor has a valid wg_session.
 - GET /login: HTML login form for a gist API key.
 - POST /api/auth/session: form field api_key; sets wg_session and redirects to /list.
 - POST /logout: clears wg_session and redirects to /login.
