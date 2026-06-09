@@ -62,17 +62,24 @@ export default async function MePage({ searchParams }: PageProps) {
   return (
     <main className="auth-shell" aria-label="Your gists">
       <section className="account-panel" aria-label="Account">
-        <div className="account-identity">
-          {session.avatar_url ? (
-            <img
-              className="account-avatar"
-              src={session.avatar_url}
-              alt=""
-              width={28}
-              height={28}
-            />
-          ) : null}
-          <span className="account-name">{session.name}</span>
+        <div className="account-profile">
+          <div className="account-identity">
+            {session.avatar_url ? (
+              <img
+                className="account-avatar"
+                src={session.avatar_url}
+                alt=""
+                width={28}
+                height={28}
+              />
+            ) : null}
+            <span className="account-name">{session.name}</span>
+          </div>
+          <form className="account-logout-form" action="/logout" method="post">
+            <button className="account-logout-button" type="submit">
+              Log out
+            </button>
+          </form>
         </div>
         <ApiKeyDisclosure apiKey={session.key} />
       </section>

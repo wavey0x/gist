@@ -157,10 +157,6 @@ button {
   cursor: pointer;
 }
 
-.app-logout-form {
-  display: contents;
-}
-
 .app-identity {
   min-width: 0;
   display: inline-flex;
@@ -269,6 +265,12 @@ button {
   border-bottom: 1px solid var(--border);
 }
 
+.account-profile {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
 .account-identity {
   min-width: 0;
   display: inline-flex;
@@ -295,6 +297,34 @@ button {
   white-space: nowrap;
 }
 
+.account-logout-form {
+  margin: 0;
+  padding-left: 36px;
+}
+
+.account-logout-button {
+  border: 0;
+  background: transparent;
+  color: var(--muted-fg);
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.account-logout-button:hover,
+.account-logout-button:focus-visible {
+  color: var(--page-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.account-logout-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .api-key-disclosure {
   min-width: 0;
   flex: 0 1 520px;
@@ -303,14 +333,15 @@ button {
   justify-items: end;
 }
 
-.api-key-toggle {
-  width: auto;
+.api-key-summary {
   min-width: 0;
   display: inline-flex;
-  grid-auto-flow: initial;
   align-items: center;
   gap: 7px;
-  padding: 0 10px;
+  color: var(--page-fg);
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
   list-style: none;
 }
 
@@ -318,9 +349,19 @@ button {
   display: none;
 }
 
-.api-key-disclosure summary:focus-visible {
+.api-key-summary:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.api-key-toggle-icon {
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+}
+
+.api-key-toggle-label {
+  overflow-wrap: anywhere;
 }
 
 .api-key-row {
@@ -799,7 +840,7 @@ button {
     max-width: none;
   }
 
-  .api-key-toggle {
+  .api-key-summary {
     justify-self: end;
   }
 

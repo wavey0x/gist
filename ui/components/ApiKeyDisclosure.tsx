@@ -31,13 +31,11 @@ export function ApiKeyDisclosure({ apiKey }: ApiKeyDisclosureProps) {
 
   return (
     <details className="api-key-disclosure">
-      <summary
-        className="icon-button api-key-toggle"
-        aria-label="View API key"
-        title="View API key"
-      >
-        <Eye aria-hidden="true" size={17} strokeWidth={1.8} />
-        <span>View API key</span>
+      <summary className="api-key-summary" title="View API key">
+        <span className="icon-button api-key-toggle-icon" aria-hidden="true">
+          <Eye aria-hidden="true" size={17} strokeWidth={1.8} />
+        </span>
+        <span className="api-key-toggle-label">View API key</span>
       </summary>
       <div className="api-key-row">
         <input

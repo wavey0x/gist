@@ -21,25 +21,18 @@ export async function AppHeader() {
         </Link>
         <nav className="app-nav" aria-label="Site">
           {session ? (
-            <>
-              <Link className="app-identity app-identity-link" href="/me">
-                {session.avatar_url ? (
-                  <img
-                    className="app-avatar"
-                    src={session.avatar_url}
-                    alt=""
-                    width={20}
-                    height={20}
-                  />
-                ) : null}
-                <span className="app-name">{session.name}</span>
-              </Link>
-              <form className="app-logout-form" action="/logout" method="post">
-                <button className="app-link app-link-button" type="submit">
-                  Log out
-                </button>
-              </form>
-            </>
+            <Link className="app-identity app-identity-link" href="/me">
+              {session.avatar_url ? (
+                <img
+                  className="app-avatar"
+                  src={session.avatar_url}
+                  alt=""
+                  width={20}
+                  height={20}
+                />
+              ) : null}
+              <span className="app-name">{session.name}</span>
+            </Link>
           ) : (
             <Link className="app-link" href="/login">
               Log in
