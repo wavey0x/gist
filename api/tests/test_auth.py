@@ -124,6 +124,31 @@ def test_web_session_rejects_revoked_or_scope_changed_keys(app):
         assert error == "forbidden"
 
 
+def test_web_session_stores_only_hash_and_rejects_expired_sessions(app):
+    with gist_connection(app) as conn:
+        created = create_api_key(conn, "gist", "reader", ["gist:read"])
+        token, auth, error = create_web_session(conn, created["key"])
+        assert error is None
+        assert auth.name == "reader"
+
+        session = conn.execute(
+            "select token_hash from web_sessions where api_key_id = ?",
+            (auth.key_id,),
+        ).fetchone()
+        assert session["token_hash"] != token
+        assert len(session["token_hash"]) == 64
+
+        with conn:
+            conn.execute(
+                "update web_sessions set expires_at = ? where token_hash = ?",
+                ("2000-01-01T00:00:00.000Z", session["token_hash"]),
+            )
+
+        auth, error = verify_web_session(conn, token)
+        assert auth is None
+        assert error == "unauthorized"
+
+
 def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
     with gist_connection(app) as conn:
         created = create_api_key(

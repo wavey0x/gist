@@ -16,7 +16,10 @@ async function apiKeyFromRequest(request: NextRequest) {
     return typeof apiKey === "string" ? apiKey : "";
   }
 
-  const formData = await request.formData();
+  const formData = await request.formData().catch(() => null);
+  if (!formData) {
+    return "";
+  }
   const apiKey = formData.get("api_key");
   return typeof apiKey === "string" ? apiKey : "";
 }
