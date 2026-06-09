@@ -35,7 +35,7 @@ export function ApiKeyCopyButton({ apiKey }: ApiKeyCopyButtonProps) {
       onClick={copyApiKey}
     >
       <span className={copied ? "api-key-copy-feedback" : undefined}>
-        {copied ? "Copied" : "Copy API key"}
+        {copied ? "Copied!" : "Copy API key"}
       </span>
     </button>
   );
