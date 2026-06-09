@@ -297,41 +297,18 @@ button {
 
 .api-key-disclosure {
   min-width: 0;
-  flex: 1 1 430px;
+  flex: 0 1 520px;
   max-width: 520px;
+  display: grid;
+  justify-items: end;
 }
 
-.api-key-disclosure summary {
-  display: flex;
-  min-height: 34px;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  color: var(--page-fg);
-  font-size: 13px;
-  line-height: 1.4;
-  cursor: pointer;
+.api-key-toggle {
   list-style: none;
 }
 
 .api-key-disclosure summary::-webkit-details-marker {
   display: none;
-}
-
-.api-key-disclosure summary span {
-  color: var(--muted-fg);
-}
-
-.api-key-disclosure summary code {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--page-fg);
-  font-family:
-    ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono,
-    monospace;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .api-key-disclosure summary:focus-visible {
@@ -340,6 +317,7 @@ button {
 }
 
 .api-key-row {
+  width: 100%;
   display: flex;
   gap: 8px;
   margin-top: 8px;
@@ -787,8 +765,8 @@ button {
     max-width: none;
   }
 
-  .api-key-disclosure summary {
-    justify-content: space-between;
+  .api-key-toggle {
+    justify-self: end;
   }
 
   .login-form {

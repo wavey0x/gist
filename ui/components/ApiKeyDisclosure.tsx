@@ -1,14 +1,13 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Eye } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 type ApiKeyDisclosureProps = {
   apiKey: string;
-  keyPrefix: string;
 };
 
-export function ApiKeyDisclosure({ apiKey, keyPrefix }: ApiKeyDisclosureProps) {
+export function ApiKeyDisclosure({ apiKey }: ApiKeyDisclosureProps) {
   const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -32,9 +31,13 @@ export function ApiKeyDisclosure({ apiKey, keyPrefix }: ApiKeyDisclosureProps) {
 
   return (
     <details className="api-key-disclosure">
-      <summary>
-        <span>View API key</span>
-        <code>{keyPrefix}</code>
+      <summary
+        className="icon-button api-key-toggle"
+        aria-label="View API key"
+        title="View API key"
+      >
+        <Eye aria-hidden="true" size={17} strokeWidth={1.8} />
+        <span className="sr-only">View API key</span>
       </summary>
       <div className="api-key-row">
         <input

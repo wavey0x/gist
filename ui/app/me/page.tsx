@@ -47,10 +47,7 @@ export default async function MePage() {
           ) : null}
           <span className="account-name">{session.name}</span>
         </div>
-        <ApiKeyDisclosure
-          apiKey={session.key}
-          keyPrefix={session.key_prefix}
-        />
+        <ApiKeyDisclosure apiKey={session.key} />
       </section>
 
       {payload.gists.length > 0 ? (
