@@ -1,38 +1,4 @@
-const LLMS_TXT = `# Wavey Gist
-
-Wavey Gist publishes Markdown gists at https://gist.wavey.info.
-
-## Agent Routes
-
-- GET /: home page; redirects to /me when the visitor has a valid wg_session.
-- GET /login: HTML login form for a gist API key.
-- POST /api/auth/session: form field api_key; sets wg_session and redirects to /me.
-- POST /logout: clears wg_session and redirects to /login.
-- GET /me: HTML account/history page; logged-out users see browser-local recent views, logged-in users also see the current key and gist list.
-- GET /me/raw: authenticated plain-text list of gists created by the current key.
-- GET /api/me/gists: authenticated JSON list of those gists.
-- DELETE /api/me/gists/{gist_id}: authenticated JSON delete for a gist created by the current key.
-- GET /{gist_id}: public rendered gist page.
-- GET /{gist_id}/raw: public raw Markdown for the latest revision.
-- GET /{gist_id}/revisions/{revision_number}: public rendered revision.
-- GET /{gist_id}/revisions/{revision_number}/raw: public raw Markdown for a revision.
-
-## Publishing API
-
-Use https://api.wavey.info with Authorization: Bearer <gist API key>.
-
-- POST /api/v1/gists with JSON {"title": "optional", "markdown": "..."} creates a gist.
-- PATCH /api/v1/gists/{gist_id} with JSON {"title": "optional", "markdown": "..."} creates a new revision.
-- DELETE /api/v1/gists/{gist_id} deletes a gist created by the authenticated key.
-- Gist keys should have gist:read and gist:write; deleting requires gist:delete.
-
-## Agent Guidance
-
-- Prefer /raw for Markdown and /me/raw or /api/me/gists for authenticated listing.
-- Public gist viewing does not require auth.
-- /me recent views are browser-local and do not require auth.
-- My gists, /me/raw, /api/me/gists, delete, and logout require the wg_session cookie from login.
-`;
+import { LLMS_TXT } from "./llms.txt";
 
 export const dynamic = "force-static";
 

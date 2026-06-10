@@ -61,7 +61,7 @@
   --eth-address-fg: #007a5a;
   --eth-block-fg: #8a6300;
   --eth-selector-fg: #0969da;
-  --eth-tx-fg: #b01867;
+  --eth-tx-fg: #5a5a5a;
   --eth-party-color-00: #d60000;
   --eth-party-color-01: #8c3bff;
   --eth-party-color-02: #018700;
@@ -110,22 +110,6 @@
   --eth-party-color-45: #382d00;
   --eth-party-color-46: #832f33;
   --eth-party-color-47: #590f00;
-  --eth-tx-color-00: #334155;
-  --eth-tx-color-01: #475569;
-  --eth-tx-color-02: #4b5563;
-  --eth-tx-color-03: #374151;
-  --eth-tx-color-04: #3f4b5b;
-  --eth-tx-color-05: #445060;
-  --eth-tx-color-06: #526070;
-  --eth-tx-color-07: #39556f;
-  --eth-tx-color-08: #2f3a48;
-  --eth-tx-color-09: #404b5a;
-  --eth-tx-color-10: #536071;
-  --eth-tx-color-11: #596575;
-  --eth-tx-color-12: #37465a;
-  --eth-tx-color-13: #465568;
-  --eth-tx-color-14: #2d3745;
-  --eth-tx-color-15: #607080;
 }
 
 :root[data-theme="dark"] .markdown-body {
@@ -184,7 +168,7 @@
   --eth-address-fg: #5eead4;
   --eth-block-fg: #f2cc60;
   --eth-selector-fg: #79c0ff;
-  --eth-tx-fg: #f0abfc;
+  --eth-tx-fg: #b8b8b8;
   --eth-party-color-00: #05acc6;
   --eth-party-color-01: #97ff00;
   --eth-party-color-02: #ffa52f;
@@ -233,22 +217,6 @@
   --eth-party-color-45: #d69a36;
   --eth-party-color-46: #009aa0;
   --eth-party-color-47: #599000;
-  --eth-tx-color-00: #94a3b8;
-  --eth-tx-color-01: #a7b4c5;
-  --eth-tx-color-02: #8aa0b4;
-  --eth-tx-color-03: #7f93a6;
-  --eth-tx-color-04: #aab6c2;
-  --eth-tx-color-05: #8ba7bd;
-  --eth-tx-color-06: #9db2c6;
-  --eth-tx-color-07: #7ea0b8;
-  --eth-tx-color-08: #b0bdca;
-  --eth-tx-color-09: #8296a8;
-  --eth-tx-color-10: #99aabb;
-  --eth-tx-color-11: #7c8f9f;
-  --eth-tx-color-12: #90a4b8;
-  --eth-tx-color-13: #a3b1bf;
-  --eth-tx-color-14: #7890a4;
-  --eth-tx-color-15: #b7c4d2;
 }
 
 .markdown-body .eth-entity {
@@ -334,23 +302,6 @@
 .markdown-body .eth-party-color-45 { --eth-fg: var(--eth-party-color-45); }
 .markdown-body .eth-party-color-46 { --eth-fg: var(--eth-party-color-46); }
 .markdown-body .eth-party-color-47 { --eth-fg: var(--eth-party-color-47); }
-.markdown-body .eth-tx-color-00 { --eth-fg: var(--eth-tx-color-00); }
-.markdown-body .eth-tx-color-01 { --eth-fg: var(--eth-tx-color-01); }
-.markdown-body .eth-tx-color-02 { --eth-fg: var(--eth-tx-color-02); }
-.markdown-body .eth-tx-color-03 { --eth-fg: var(--eth-tx-color-03); }
-.markdown-body .eth-tx-color-04 { --eth-fg: var(--eth-tx-color-04); }
-.markdown-body .eth-tx-color-05 { --eth-fg: var(--eth-tx-color-05); }
-.markdown-body .eth-tx-color-06 { --eth-fg: var(--eth-tx-color-06); }
-.markdown-body .eth-tx-color-07 { --eth-fg: var(--eth-tx-color-07); }
-.markdown-body .eth-tx-color-08 { --eth-fg: var(--eth-tx-color-08); }
-.markdown-body .eth-tx-color-09 { --eth-fg: var(--eth-tx-color-09); }
-.markdown-body .eth-tx-color-10 { --eth-fg: var(--eth-tx-color-10); }
-.markdown-body .eth-tx-color-11 { --eth-fg: var(--eth-tx-color-11); }
-.markdown-body .eth-tx-color-12 { --eth-fg: var(--eth-tx-color-12); }
-.markdown-body .eth-tx-color-13 { --eth-fg: var(--eth-tx-color-13); }
-.markdown-body .eth-tx-color-14 { --eth-fg: var(--eth-tx-color-14); }
-.markdown-body .eth-tx-color-15 { --eth-fg: var(--eth-tx-color-15); }
-
 .markdown-body a.eth-entity {
   text-decoration-color: currentColor;
   text-decoration-thickness: 1px;

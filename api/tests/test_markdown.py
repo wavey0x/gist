@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import gist_api.markdown as markdown_module
@@ -134,7 +135,7 @@ Inline code `{ETH_ADDRESS}` gets colored.
     assert "ethereum-entities/on@" in result.version
 
 
-def test_ethereum_entity_rendering_assigns_stable_categorical_colors():
+def test_ethereum_entity_rendering_assigns_party_colors_and_keeps_txs_neutral():
     short_address = f"{ETH_ADDRESS[:5]}..{ETH_ADDRESS[-3:]}"
     short_tx = f"{ETH_TX_HASH[:5]}..{ETH_TX_HASH[-3:]}"
     result = render_markdown_result(
@@ -199,17 +200,9 @@ At block 22481234.
         for element in ens_entities
     } == {_class_token_with_prefix(ens_entities[0], "eth-party-color-")}
 
-    tx_color = _class_token_with_prefix(tx_entities[0], "eth-tx-color-")
-    assert tx_color is not None
-    assert {tx_color} == {
-        _class_token_with_prefix(element, "eth-tx-color-")
-        for element in [*tx_entities, *short_tx_links]
-    }
-    assert _class_token_with_prefix(second_tx[0], "eth-tx-color-") not in {
-        None,
-        tx_color,
-    }
-    assert _class_token_with_prefix(tx_entities[0], "eth-party-color-") is None
+    for element in [*tx_entities, *short_tx_links, *second_tx]:
+        assert _class_token_with_prefix(element, "eth-party-color-") is None
+        assert _class_token_with_prefix(element, "eth-tx-color-") is None
 
     for element in [*selector_entities, *block_entities]:
         assert _class_token_with_prefix(element, "eth-party-color-") is None
@@ -336,18 +329,19 @@ def test_ethereum_entity_rendering_leaves_unlinked_abbreviations_plain():
 def test_ethereum_entity_sanitizer_allows_only_expected_classes():
     result = render_markdown_result(
         '<span class="eth-entity eth-id-nope eth-weird eth-party-color-48 '
-        'eth-tx-color-16">not an address</span>'
+        'eth-tx-color-15 eth-tx-color-16">not an address</span>'
     )
 
     assert "eth-id-nope" not in result.html
     assert "eth-weird" not in result.html
     assert "eth-party-color-48" not in result.html
+    assert "eth-tx-color-15" not in result.html
     assert "eth-tx-color-16" not in result.html
     assert "<span>not an address</span>" in result.html
 
     allowed = render_markdown_result(
         '<span class="eth-entity eth-ens eth-selector eth-block '
-        'eth-id-abcdef123456 eth-party-color-47 eth-tx-color-15">'
+        'eth-id-abcdef123456 eth-party-color-47">'
         "entity</span>"
     )
 
@@ -355,7 +349,24 @@ def test_ethereum_entity_sanitizer_allows_only_expected_classes():
     assert "eth-selector" in allowed.html
     assert "eth-block" in allowed.html
     assert "eth-party-color-47" in allowed.html
-    assert "eth-tx-color-15" in allowed.html
+
+
+def test_markdown_theme_uses_strict_grayscale_for_transaction_hashes():
+    theme_css = (
+        Path(__file__).resolve().parents[2] / "ui/app/markdown-theme.css"
+    ).read_text(encoding="utf-8")
+
+    assert "eth-tx-color-" not in theme_css
+
+    tx_foregrounds = re.findall(
+        r"--eth-tx-fg:\s*(#[0-9A-Fa-f]{6});",
+        theme_css,
+    )
+    assert len(tx_foregrounds) == 2
+
+    for color in tx_foregrounds:
+        channels = [color[index : index + 2].lower() for index in (1, 3, 5)]
+        assert channels[0] == channels[1] == channels[2]
 
 
 def test_markdown_rendering_marks_degraded_when_node_is_missing(monkeypatch):
