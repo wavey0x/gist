@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
+  "env": {
+    "GIST_API_BASE_URL": "https://api.wavey.info"
+  },
   "installCommand": "npm ci --prefix ui",
   "buildCommand": "npm run build --prefix ui",
   "outputDirectory": "ui/.next"
