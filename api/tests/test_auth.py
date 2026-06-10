@@ -13,24 +13,22 @@ from gist_api.db import gist_connection
 
 def test_api_keys_are_stored_and_verified_as_cleartext(app):
     with gist_connection(app) as conn:
-        created = create_api_key(conn, "gist", "reader", ["gist:read"])
+        created = create_api_key(conn, "reader")
         stored = conn.execute(
             "select key_value, key_prefix from api_keys where id = ?",
             (created["id"],),
         ).fetchone()
 
-        auth, error = verify_api_key(
-            conn,
-            f"Bearer {created['key']}",
-            "gist",
-            "gist:read",
-        )
+        auth, error = verify_api_key(conn, f"Bearer {created['key']}")
 
     assert stored["key_value"] == created["key"]
     assert stored["key_prefix"] == created["key_prefix"]
     assert auth is not None
     assert auth.key_value == created["key"]
+    assert auth.name == "reader"
     assert error is None
+    assert "domain" not in created
+    assert "scopes" not in created
 
 
 def test_hash_only_key_storage_is_not_accepted(app):
@@ -40,22 +38,19 @@ def test_hash_only_key_storage_is_not_accepted(app):
             conn.execute(
                 """
                 insert into api_keys(
-                    domain, name, github_login, key_value, key_prefix,
-                    scopes_json, created_at
+                    name, github_login, key_value, key_prefix, created_at
                 )
                 values (
-                    'gist',
                     'old',
                     null,
                     'scrypt:32768:8:1$redacted$redacted',
                     'wapi_gist_oldprefx',
-                    '["gist:read"]',
                     '2026-01-01T00:00:00.000Z'
                 )
                 """
             )
 
-        auth, error = verify_api_key(conn, f"Bearer {old_key}", "gist", "gist:read")
+        auth, error = verify_api_key(conn, f"Bearer {old_key}")
 
     assert auth is None
     assert error == "unauthorized"
@@ -63,27 +58,11 @@ def test_hash_only_key_storage_is_not_accepted(app):
 
 def test_key_rotation_revokes_old_key_and_returns_new_secret(app):
     with gist_connection(app) as conn:
-        created = create_api_key(
-            conn,
-            "gist",
-            "rotate",
-            ["gist:read"],
-            github_login="rotate",
-        )
+        created = create_api_key(conn, "rotate", github_login="rotate")
         rotated = rotate_api_key(conn, created["key_prefix"], "rotated")
 
-        old_auth, old_error = verify_api_key(
-            conn,
-            f"Bearer {created['key']}",
-            "gist",
-            "gist:read",
-        )
-        new_auth, new_error = verify_api_key(
-            conn,
-            f"Bearer {rotated['key']}",
-            "gist",
-            "gist:read",
-        )
+        old_auth, old_error = verify_api_key(conn, f"Bearer {created['key']}")
+        new_auth, new_error = verify_api_key(conn, f"Bearer {rotated['key']}")
 
     assert old_auth is None
     assert old_error == "unauthorized"
@@ -91,39 +70,26 @@ def test_key_rotation_revokes_old_key_and_returns_new_secret(app):
     assert new_error is None
     assert rotated["key"].startswith("wapi_gist_")
     assert rotated["github_login"] == "rotate"
+    assert "domain" not in rotated
+    assert "scopes" not in rotated
 
 
-def test_key_verification_enforces_domain_scope_and_revocation(app):
+def test_key_verification_rejects_non_gist_key_format_and_revocation(app):
     with gist_connection(app) as conn:
-        gist_key = create_api_key(conn, "gist", "reader", ["gist:read"])
-        price_key = create_api_key(conn, "prices", "reader", ["prices:read"])
+        gist_key = create_api_key(conn, "reader")
+        non_gist_key = gist_key["key"].replace("wapi_gist_", "wapi_prices_", 1)
 
-        auth, error = verify_api_key(
-            conn,
-            f"Bearer {gist_key['key']}",
-            "gist",
-            "gist:write",
-        )
-        assert auth is None
-        assert error == "forbidden"
-
-        auth, error = verify_api_key(
-            conn,
-            f"Bearer {price_key['key']}",
-            "gist",
-            "gist:read",
-        )
+        auth, error = verify_api_key(conn, f"Bearer {non_gist_key}")
         assert auth is None
         assert error == "unauthorized"
 
-        assert list_api_keys(conn, "gist")[0]["key_prefix"] == gist_key["key_prefix"]
+        listed = list_api_keys(conn)
+        assert listed[0]["key_prefix"] == gist_key["key_prefix"]
+        assert "domain" not in listed[0]
+        assert "scopes" not in listed[0]
+
         revoke_api_key(conn, gist_key["key_prefix"])
-        auth, error = verify_api_key(
-            conn,
-            f"Bearer {gist_key['key']}",
-            "gist",
-            "gist:read",
-        )
+        auth, error = verify_api_key(conn, f"Bearer {gist_key['key']}")
 
     assert auth is None
     assert error == "unauthorized"
@@ -133,9 +99,7 @@ def test_key_rotation_can_replace_github_login(app):
     with gist_connection(app) as conn:
         created = create_api_key(
             conn,
-            "gist",
             "rotate",
-            ["gist:read"],
             github_login="first-login",
         )
         rotated = rotate_api_key(
@@ -148,35 +112,23 @@ def test_key_rotation_can_replace_github_login(app):
     assert rotated["github_login"] == "second-login"
 
 
-def test_web_session_rejects_revoked_or_scope_changed_keys(app):
+def test_web_session_rejects_revoked_keys(app):
     with gist_connection(app) as conn:
-        created = create_api_key(conn, "gist", "reader", ["gist:read"])
+        created = create_api_key(conn, "reader")
         token, auth, error = create_web_session(conn, created["key"])
         assert error is None
         assert auth.name == "reader"
 
         revoke_api_key(conn, created["key_prefix"])
         auth, error = verify_web_session(conn, token)
-        assert auth is None
-        assert error == "unauthorized"
 
-        changed = create_api_key(conn, "gist", "changed", ["gist:read"])
-        token, auth, error = create_web_session(conn, changed["key"])
-        assert error is None
-        with conn:
-            conn.execute(
-                "update api_keys set scopes_json = ? where id = ?",
-                ('["gist:write"]', changed["id"]),
-            )
-
-        auth, error = verify_web_session(conn, token)
-        assert auth is None
-        assert error == "forbidden"
+    assert auth is None
+    assert error == "unauthorized"
 
 
 def test_web_session_stores_only_hash_and_rejects_expired_sessions(app):
     with gist_connection(app) as conn:
-        created = create_api_key(conn, "gist", "reader", ["gist:read"])
+        created = create_api_key(conn, "reader")
         token, auth, error = create_web_session(conn, created["key"])
         assert error is None
         assert auth.name == "reader"
@@ -195,19 +147,14 @@ def test_web_session_stores_only_hash_and_rejects_expired_sessions(app):
             )
 
         auth, error = verify_web_session(conn, token)
-        assert auth is None
-        assert error == "unauthorized"
+
+    assert auth is None
+    assert error == "unauthorized"
 
 
 def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
     with gist_connection(app) as conn:
-        created = create_api_key(
-            conn,
-            "gist",
-            "wavey0x",
-            ["gist:read", "gist:write", "gist:delete"],
-            github_login="wavey0x",
-        )
+        created = create_api_key(conn, "wavey0x", github_login="wavey0x")
 
     invalid = client.post("/api/v1/auth/session", json={"api_key": "nope"})
     assert invalid.status_code == 401
@@ -222,12 +169,12 @@ def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
         "name": "wavey0x",
         "key": created["key"],
         "key_prefix": created["key_prefix"],
-        "scopes": ["gist:delete", "gist:read", "gist:write"],
-        "can_delete_gists": True,
         "github_login": "wavey0x",
         "avatar_url": "https://github.com/wavey0x.png?size=64",
     }
     assert "token" not in body
+    assert "scopes" not in body
+    assert "can_delete_gists" not in body
 
     cookie = response.headers["Set-Cookie"]
     assert cookie.startswith(f"{WEB_SESSION_COOKIE_NAME}=")
@@ -247,33 +194,3 @@ def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
 
     after_logout = client.get("/api/v1/auth/session")
     assert after_logout.status_code == 401
-
-
-def test_auth_session_identity_exposes_delete_capability(client, app):
-    with gist_connection(app) as conn:
-        created = create_api_key(
-            conn,
-            "gist",
-            "admin",
-            ["gist:read", "gist:write", "gist:delete"],
-        )
-
-    response = client.post(
-        "/api/v1/auth/session",
-        json={"api_key": created["key"]},
-    )
-
-    assert response.status_code == 200
-    assert response.get_json()["can_delete_gists"] is True
-
-
-def test_auth_session_login_forbids_gist_key_without_read_scope(client, app):
-    with gist_connection(app) as conn:
-        created = create_api_key(conn, "gist", "writer", ["gist:write"])
-
-    response = client.post(
-        "/api/v1/auth/session",
-        json={"api_key": created["key"]},
-    )
-
-    assert response.status_code == 403

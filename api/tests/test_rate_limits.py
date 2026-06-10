@@ -24,7 +24,7 @@ def _limited_app(db_path, *, write_limit=2, auth_failure_limit=2):
 def test_write_rate_limits_persist_by_key_after_restart(tmp_path):
     db_path = tmp_path / "limits.sqlite3"
     app = _limited_app(db_path, write_limit=2)
-    key = make_key(app, ["gist:write"], name="writer")
+    key = make_key(app, name="writer")
     client = app.test_client()
 
     for index in range(2):
@@ -48,9 +48,9 @@ def test_write_rate_limits_persist_by_key_after_restart(tmp_path):
 def test_write_rate_limits_persist_by_source_ip_after_restart(tmp_path):
     db_path = tmp_path / "ip-limits.sqlite3"
     app = _limited_app(db_path, write_limit=2)
-    first_key = make_key(app, ["gist:write"], name="first")
-    second_key = make_key(app, ["gist:write"], name="second")
-    third_key = make_key(app, ["gist:write"], name="third")
+    first_key = make_key(app, name="first")
+    second_key = make_key(app, name="second")
+    third_key = make_key(app, name="third")
     client = app.test_client()
     headers = {"X-Forwarded-For": "203.0.113.9"}
 
@@ -77,8 +77,8 @@ def test_write_rate_limits_persist_by_source_ip_after_restart(tmp_path):
 def test_write_rate_limit_uses_rightmost_forwarded_ip_from_trusted_proxy(tmp_path):
     db_path = tmp_path / "spoofed-forwarded-limits.sqlite3"
     app = _limited_app(db_path, write_limit=1)
-    first_key = make_key(app, ["gist:write"], name="first")
-    second_key = make_key(app, ["gist:write"], name="second")
+    first_key = make_key(app, name="first")
+    second_key = make_key(app, name="second")
     client = app.test_client()
 
     first = client.post(

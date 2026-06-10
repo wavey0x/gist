@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import json
 import re
 import secrets
 import sqlite3
@@ -9,19 +8,17 @@ from datetime import datetime, timedelta, timezone
 
 
 KEY_RE = re.compile(
-    r"^wapi_([a-z][a-z0-9-]{0,31})_([A-Za-z0-9_-]{8,})_([A-Za-z0-9_-]{43,})$"
+    r"^wapi_gist_([A-Za-z0-9_-]{8,})_([A-Za-z0-9_-]{43,})$"
 )
 
 
 @dataclass(frozen=True)
 class AuthResult:
     key_id: int
-    domain: str
     name: str
     github_login: str | None
     key_value: str
     key_prefix: str
-    scopes: frozenset[str]
 
 
 GITHUB_LOGIN_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
@@ -54,22 +51,16 @@ def _parse_key(api_key):
     match = KEY_RE.match(api_key or "")
     if not match:
         return None
-    domain, public_prefix, _secret = match.groups()
-    return domain, f"wapi_{domain}_{public_prefix}"
+    public_prefix, _secret = match.groups()
+    return f"wapi_gist_{public_prefix}"
 
 
-def _normalize_key_input(domain, name, scopes):
-    domain = (domain or "").strip()
+def _normalize_key_name(name):
     name = (name or "").strip()
-    scopes = [scope.strip() for scope in scopes if scope and scope.strip()]
 
-    if not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", domain):
-        raise ValueError("domain must be a short lowercase slug")
     if not name:
         raise ValueError("name is required")
-    if not scopes:
-        raise ValueError("at least one scope is required")
-    return domain, name, scopes
+    return name
 
 
 def _normalize_github_login(github_login):
@@ -83,11 +74,11 @@ def _normalize_github_login(github_login):
     return github_login
 
 
-def _new_key_material(domain):
+def _new_key_material():
     public_prefix = _base64url_random(6)
     secret = _base64url_random(32)
-    full_key = f"wapi_{domain}_{public_prefix}_{secret}"
-    key_prefix = f"wapi_{domain}_{public_prefix}"
+    full_key = f"wapi_gist_{public_prefix}_{secret}"
+    key_prefix = f"wapi_gist_{public_prefix}"
     return full_key, key_prefix
 
 
@@ -106,8 +97,6 @@ def session_identity(auth):
         "name": auth.name,
         "key": auth.key_value,
         "key_prefix": auth.key_prefix,
-        "scopes": sorted(auth.scopes),
-        "can_delete_gists": "gist:delete" in auth.scopes,
     }
     if auth.github_login:
         body["github_login"] = auth.github_login
@@ -115,30 +104,27 @@ def session_identity(auth):
     return body
 
 
-def create_api_key(conn, domain, name, scopes, github_login=None):
-    domain, name, scopes = _normalize_key_input(domain, name, scopes)
+def create_api_key(conn, name, github_login=None):
+    name = _normalize_key_name(name)
     github_login = _normalize_github_login(github_login)
     now = utc_now()
     for _ in range(8):
-        full_key, key_prefix = _new_key_material(domain)
+        full_key, key_prefix = _new_key_material()
 
         try:
             with conn:
                 cursor = conn.execute(
                     """
                     insert into api_keys(
-                        domain, name, github_login, key_value, key_prefix,
-                        scopes_json, created_at
+                        name, github_login, key_value, key_prefix, created_at
                     )
-                    values (?, ?, ?, ?, ?, ?, ?)
+                    values (?, ?, ?, ?, ?)
                     """,
                     (
-                        domain,
                         name,
                         github_login,
                         full_key,
                         key_prefix,
-                        json.dumps(scopes),
                         now,
                     ),
                 )
@@ -146,10 +132,8 @@ def create_api_key(conn, domain, name, scopes, github_login=None):
                 "id": cursor.lastrowid,
                 "key": full_key,
                 "key_prefix": key_prefix,
-                "domain": domain,
                 "name": name,
                 "github_login": github_login,
-                "scopes": scopes,
                 "created_at": now,
             }
         except sqlite3.IntegrityError:
@@ -158,31 +142,23 @@ def create_api_key(conn, domain, name, scopes, github_login=None):
     raise RuntimeError("could not allocate unique api key prefix")
 
 
-def verify_api_key_value(conn, api_key, required_domain, required_scope):
-    parsed = _parse_key(api_key)
-    if not parsed:
-        return None, "unauthorized"
-
-    domain, key_prefix = parsed
-    if domain != required_domain:
+def verify_api_key_value(conn, api_key):
+    key_prefix = _parse_key(api_key)
+    if not key_prefix:
         return None, "unauthorized"
 
     row = conn.execute(
         """
-        select id, domain, name, github_login, key_value, key_prefix, scopes_json
+        select id, name, github_login, key_value, key_prefix
         from api_keys
         where key_prefix = ? and revoked_at is null
         """,
         (key_prefix,),
     ).fetchone()
-    if row is None or row["domain"] != required_domain:
+    if row is None:
         return None, "unauthorized"
     if not secrets.compare_digest(row["key_value"], api_key):
         return None, "unauthorized"
-
-    scopes = frozenset(json.loads(row["scopes_json"]))
-    if required_scope not in scopes:
-        return None, "forbidden"
 
     with conn:
         conn.execute(
@@ -193,27 +169,25 @@ def verify_api_key_value(conn, api_key, required_domain, required_scope):
     return (
         AuthResult(
             key_id=row["id"],
-            domain=row["domain"],
             name=row["name"],
             github_login=row["github_login"],
             key_value=row["key_value"],
             key_prefix=row["key_prefix"],
-            scopes=scopes,
         ),
         None,
     )
 
 
-def verify_api_key(conn, authorization_header, required_domain, required_scope):
+def verify_api_key(conn, authorization_header):
     if not authorization_header or not authorization_header.startswith("Bearer "):
         return None, "unauthorized"
 
     api_key = authorization_header[len("Bearer ") :].strip()
-    return verify_api_key_value(conn, api_key, required_domain, required_scope)
+    return verify_api_key_value(conn, api_key)
 
 
 def create_web_session(conn, api_key):
-    auth, error_code = verify_api_key_value(conn, api_key, "gist", "gist:read")
+    auth, error_code = verify_api_key_value(conn, api_key)
     if error_code is not None:
         return None, None, error_code
 
@@ -251,12 +225,10 @@ def verify_web_session(conn, token):
         select
             web_sessions.id as session_id,
             api_keys.id as api_key_id,
-            api_keys.domain,
             api_keys.name,
             api_keys.github_login,
             api_keys.key_value,
-            api_keys.key_prefix,
-            api_keys.scopes_json
+            api_keys.key_prefix
         from web_sessions
         join api_keys on api_keys.id = web_sessions.api_key_id
         where web_sessions.token_hash = ?
@@ -266,12 +238,8 @@ def verify_web_session(conn, token):
         """,
         (_token_hash(token), now),
     ).fetchone()
-    if row is None or row["domain"] != "gist":
+    if row is None:
         return None, "unauthorized"
-
-    scopes = frozenset(json.loads(row["scopes_json"]))
-    if "gist:read" not in scopes:
-        return None, "forbidden"
 
     with conn:
         conn.execute(
@@ -286,12 +254,10 @@ def verify_web_session(conn, token):
     return (
         AuthResult(
             key_id=row["api_key_id"],
-            domain=row["domain"],
             name=row["name"],
             github_login=row["github_login"],
             key_value=row["key_value"],
             key_prefix=row["key_prefix"],
-            scopes=scopes,
         ),
         None,
     )
@@ -311,38 +277,23 @@ def revoke_web_session(conn, token):
         )
 
 
-def list_api_keys(conn, domain=None):
-    if domain:
-        rows = conn.execute(
-            """
-            select
-                id, domain, name, github_login, key_prefix, scopes_json,
-                created_at, last_used_at, revoked_at
-            from api_keys
-            where domain = ?
-            order by id
-            """,
-            (domain,),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """
-            select
-                id, domain, name, github_login, key_prefix, scopes_json,
-                created_at, last_used_at, revoked_at
-            from api_keys
-            order by id
-            """
-        ).fetchall()
+def list_api_keys(conn):
+    rows = conn.execute(
+        """
+        select
+            id, name, github_login, key_prefix,
+            created_at, last_used_at, revoked_at
+        from api_keys
+        order by id
+        """
+    ).fetchall()
 
     return [
         {
             "id": row["id"],
-            "domain": row["domain"],
             "name": row["name"],
             "github_login": row["github_login"],
             "key_prefix": row["key_prefix"],
-            "scopes": json.loads(row["scopes_json"]),
             "created_at": row["created_at"],
             "last_used_at": row["last_used_at"],
             "revoked_at": row["revoked_at"],
@@ -370,23 +321,19 @@ def rotate_api_key(conn, key_prefix_or_id, name=None, github_login=_PRESERVE):
     selector_is_id = str(key_prefix_or_id).isdigit()
     if str(key_prefix_or_id).isdigit():
         row = conn.execute(
-            "select id, domain, name, github_login, scopes_json from api_keys where id = ?",
+            "select id, name, github_login from api_keys where id = ?",
             (int(key_prefix_or_id),),
         ).fetchone()
     else:
         row = conn.execute(
-            "select id, domain, name, github_login, scopes_json from api_keys where key_prefix = ?",
+            "select id, name, github_login from api_keys where key_prefix = ?",
             (key_prefix_or_id,),
         ).fetchone()
 
     if row is None:
         raise ValueError("key not found")
 
-    domain, new_name, scopes = _normalize_key_input(
-        row["domain"],
-        name or row["name"],
-        json.loads(row["scopes_json"]),
-    )
+    new_name = _normalize_key_name(name or row["name"])
     if github_login is _PRESERVE:
         new_github_login = row["github_login"]
     else:
@@ -394,24 +341,21 @@ def rotate_api_key(conn, key_prefix_or_id, name=None, github_login=_PRESERVE):
     now = utc_now()
 
     for _ in range(8):
-        full_key, key_prefix = _new_key_material(domain)
+        full_key, key_prefix = _new_key_material()
         try:
             with conn:
                 cursor = conn.execute(
                     """
                     insert into api_keys(
-                        domain, name, github_login, key_value, key_prefix,
-                        scopes_json, created_at
+                        name, github_login, key_value, key_prefix, created_at
                     )
-                    values (?, ?, ?, ?, ?, ?, ?)
+                    values (?, ?, ?, ?, ?)
                     """,
                     (
-                        domain,
                         new_name,
                         new_github_login,
                         full_key,
                         key_prefix,
-                        json.dumps(scopes),
                         now,
                     ),
                 )
@@ -429,10 +373,8 @@ def rotate_api_key(conn, key_prefix_or_id, name=None, github_login=_PRESERVE):
                 "id": cursor.lastrowid,
                 "key": full_key,
                 "key_prefix": key_prefix,
-                "domain": domain,
                 "name": new_name,
                 "github_login": new_github_login,
-                "scopes": scopes,
                 "created_at": now,
             }
         except sqlite3.IntegrityError:

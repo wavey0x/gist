@@ -1,5 +1,4 @@
 import importlib
-import json
 import sqlite3
 
 from gist_api.app import create_app
@@ -24,7 +23,7 @@ def test_fresh_database_records_all_known_migration_slots(tmp_path):
             )
         ]
 
-    assert versions == [1, 2, 3, 4, 5, 6]
+    assert versions == [1, 2, 3, 4, 5, 6, 7]
 
 
 def test_existing_production_schema_history_migrates_forward_without_reset(tmp_path):
@@ -130,7 +129,7 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
         ).fetchone()
         existing_key = migrated.execute(
             """
-            select name, github_login, key_value, scopes_json
+            select name, github_login, key_value
             from api_keys
             where id = 1
             """
@@ -170,8 +169,6 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
         auth, auth_error = verify_api_key(
             migrated,
             f"Bearer wapi_gist_existing_{'A' * 43}",
-            "gist",
-            "gist:read",
         )
         ownership_index = migrated.execute(
             """
@@ -182,7 +179,7 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
             """
         ).fetchone()
 
-    assert versions == [1, 2, 3, 4, 5, 6]
+    assert versions == [1, 2, 3, 4, 5, 6, 7]
     assert dict(existing) == {
         "external_id": "AAAAAAAAAAAAAAAA",
         "markdown": "# Existing",
@@ -192,11 +189,12 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
         "name": "wavey0x",
         "github_login": "wavey0x",
         "key_value": existing_key["key_value"],
-        "scopes_json": '["gist:read","gist:write","gist:delete"]',
     }
     assert existing_key["key_value"].startswith("migrated_unusable_1_")
     assert "key_value" in api_key_columns
     assert "key_hash" not in api_key_columns
+    assert "domain" not in api_key_columns
+    assert "scopes_json" not in api_key_columns
     assert auth is None
     assert auth_error == "unauthorized"
     assert existing_revision["author_name"] == "wavey0x"
@@ -206,8 +204,8 @@ def test_existing_production_schema_history_migrates_forward_without_reset(tmp_p
     assert ownership_index["name"] == "idx_gist_revisions_creator_revision"
 
 
-def test_scope_migration_standardizes_existing_gist_keys_only(tmp_path):
-    db_path = tmp_path / "scopes.sqlite3"
+def test_key_schema_cleanup_drops_scope_columns_and_non_gist_keys(tmp_path):
+    db_path = tmp_path / "key-cleanup.sqlite3"
     conn = sqlite3.connect(db_path)
     conn.executescript(
         """
@@ -220,6 +218,7 @@ def test_scope_migration_standardizes_existing_gist_keys_only(tmp_path):
         insert into gist_schema_migrations(version) values (3);
         insert into gist_schema_migrations(version) values (4);
         insert into gist_schema_migrations(version) values (5);
+        insert into gist_schema_migrations(version) values (6);
 
         create table api_keys (
             id integer primary key,
@@ -311,6 +310,25 @@ def test_scope_migration_standardizes_existing_gist_keys_only(tmp_path):
                 '["prices:read"]',
                 '2026-01-01T00:00:00.000Z'
             );
+
+        insert into web_sessions(
+            id, token_hash, api_key_id, created_at, expires_at
+        )
+        values
+            (
+                1,
+                'gist-session',
+                1,
+                '2026-01-01T00:00:00.000Z',
+                '2026-02-01T00:00:00.000Z'
+            ),
+            (
+                2,
+                'prices-session',
+                2,
+                '2026-01-01T00:00:00.000Z',
+                '2026-02-01T00:00:00.000Z'
+            );
         """
     )
     conn.commit()
@@ -324,17 +342,36 @@ def test_scope_migration_standardizes_existing_gist_keys_only(tmp_path):
     )
 
     with gist_connection(app) as migrated:
+        versions = [
+            row["version"]
+            for row in migrated.execute(
+                "select version from gist_schema_migrations order by version"
+            )
+        ]
+        api_key_columns = [
+            row["name"]
+            for row in migrated.execute("select name from pragma_table_info('api_keys')")
+        ]
         rows = migrated.execute(
-            "select domain, scopes_json from api_keys order by id"
+            "select id, name, key_value, key_prefix from api_keys order by id"
+        ).fetchall()
+        session_rows = migrated.execute(
+            "select id, api_key_id from web_sessions order by id"
         ).fetchall()
 
-    assert [row["domain"] for row in rows] == ["gist", "prices"]
-    assert json.loads(rows[0]["scopes_json"]) == [
-        "gist:read",
-        "gist:write",
-        "gist:delete",
+    assert versions == [1, 2, 3, 4, 5, 6, 7]
+    assert "domain" not in api_key_columns
+    assert "scopes_json" not in api_key_columns
+    assert [dict(row) for row in rows] == [
+        {
+            "id": 1,
+            "name": "writer",
+            "key_value": "wapi_gist_existing_"
+            + "A" * 43,
+            "key_prefix": "wapi_gist_existing",
+        }
     ]
-    assert json.loads(rows[1]["scopes_json"]) == ["prices:read"]
+    assert [dict(row) for row in session_rows] == [{"id": 1, "api_key_id": 1}]
 
 
 def test_migrations_ignore_current_working_directory(monkeypatch, tmp_path):

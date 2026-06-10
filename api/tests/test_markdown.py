@@ -472,7 +472,7 @@ def test_markdown_highlighting_degrades_after_aggregate_block_cap(monkeypatch):
 
 
 def test_rerender_gists_updates_current_rows_and_revisions(client, app):
-    write_key = make_key(app, ["gist:write"], name="renderer")
+    write_key = make_key(app, name="renderer")
     created = create_gist(
         client,
         write_key,
@@ -540,7 +540,7 @@ def test_rerender_gists_updates_current_rows_and_revisions(client, app):
 
 
 def test_rerender_gists_honors_ethereum_entity_rendering_config(client, app):
-    write_key = make_key(app, ["gist:write"], name="renderer")
+    write_key = make_key(app, name="renderer")
     created = create_gist(client, write_key, markdown=ETH_ADDRESS)
     assert created.status_code == 201
     gist_id = created.get_json()["id"]

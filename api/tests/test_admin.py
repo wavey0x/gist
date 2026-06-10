@@ -7,7 +7,7 @@ def _admin_json(output):
     return json.loads(output.split("\nSave this key securely.", 1)[0])
 
 
-def test_admin_key_create_always_uses_standard_gist_scopes(
+def test_admin_key_create_mints_gist_key_without_legacy_scope_fields(
     monkeypatch,
     tmp_path,
     capsys,
@@ -17,11 +17,11 @@ def test_admin_key_create_always_uses_standard_gist_scopes(
     admin_main(["keys", "create", "--name", "Alice", "--github-login", "alice"])
 
     body = _admin_json(capsys.readouterr().out)
-    assert body["domain"] == "gist"
     assert body["name"] == "Alice"
     assert body["github_login"] == "alice"
-    assert body["scopes"] == ["gist:read", "gist:write", "gist:delete"]
     assert body["key"].startswith("wapi_gist_")
+    assert "domain" not in body
+    assert "scopes" not in body
 
 
 def test_admin_key_list_revoke_and_rotate(monkeypatch, tmp_path, capsys):
@@ -30,11 +30,12 @@ def test_admin_key_list_revoke_and_rotate(monkeypatch, tmp_path, capsys):
 
     created = _admin_json(capsys.readouterr().out)
 
-    admin_main(["keys", "list", "--domain", "gist"])
+    admin_main(["keys", "list"])
     listed = json.loads(capsys.readouterr().out)
     assert listed[0]["key_prefix"] == created["key_prefix"]
     assert listed[0]["github_login"] is None
-    assert listed[0]["scopes"] == ["gist:read", "gist:write", "gist:delete"]
+    assert "domain" not in listed[0]
+    assert "scopes" not in listed[0]
     assert "key" not in listed[0]
 
     admin_main(
@@ -52,7 +53,8 @@ def test_admin_key_list_revoke_and_rotate(monkeypatch, tmp_path, capsys):
     assert rotated["key"] != created["key"]
     assert rotated["name"] == "Rotated"
     assert rotated["github_login"] == "rotated"
-    assert rotated["scopes"] == ["gist:read", "gist:write", "gist:delete"]
+    assert "domain" not in rotated
+    assert "scopes" not in rotated
 
     admin_main(["keys", "rotate", rotated["key_prefix"], "--name", "Preserved"])
     preserved = _admin_json(capsys.readouterr().out)

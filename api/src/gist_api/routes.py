@@ -71,13 +71,11 @@ def parse_json_body():
     return data
 
 
-def require_gist_auth(scope):
+def require_gist_auth():
     with gist_connection(current_app) as conn:
         auth, error_code = verify_api_key(
             conn,
             request.headers.get("Authorization"),
-            "gist",
-            scope,
         )
         if error_code == "unauthorized":
             limited = record_auth_failure_and_check_limit(
@@ -89,8 +87,6 @@ def require_gist_auth(scope):
                 return None, error_response("rate_limited", "Rate limited", 429)
             return None, error_response("unauthorized", "Unauthorized", 401)
 
-    if error_code == "forbidden":
-        return None, error_response("forbidden", "Forbidden", 403)
     return auth, None
 
 
@@ -129,23 +125,12 @@ def require_web_session():
             request.cookies.get(WEB_SESSION_COOKIE_NAME),
         )
 
-    if error_code == "forbidden":
-        return None, error_response("forbidden", "Forbidden", 403)
     if error_code:
         return None, _clear_session_cookie_on_error(
             "unauthorized",
             "Unauthorized",
             401,
         )
-    return auth, None
-
-
-def require_web_session_scope(scope):
-    auth, response = require_web_session()
-    if response:
-        return None, response
-    if scope not in auth.scopes:
-        return None, error_response("forbidden", "Forbidden", 403)
     return auth, None
 
 
@@ -190,9 +175,6 @@ def post_auth_session():
                 return error_response("rate_limited", "Rate limited", 429)
             return error_response("unauthorized", "Unauthorized", 401)
 
-    if error_code == "forbidden":
-        return error_response("forbidden", "Forbidden", 403)
-
     response = jsonify(session_identity(auth))
     _set_session_cookie(response, token)
     return response
@@ -225,7 +207,7 @@ def list_my_gists():
 
 @gists_api.route("/api/v1/me/gists/<gist_id>", methods=["DELETE"])
 def remove_my_gist(gist_id):
-    auth, response = require_web_session_scope("gist:delete")
+    auth, response = require_web_session()
     if response:
         return response
     response = check_write_limit(auth)
@@ -241,7 +223,7 @@ def remove_my_gist(gist_id):
 
 @gists_api.route("/api/v1/gists", methods=["POST"])
 def post_gist():
-    auth, response = require_gist_auth("gist:write")
+    auth, response = require_gist_auth()
     if response:
         return response
     response = check_write_limit(auth)
@@ -257,7 +239,7 @@ def post_gist():
 
 @gists_api.route("/api/v1/gists/<gist_id>", methods=["GET"])
 def read_gist(gist_id):
-    auth, response = require_gist_auth("gist:read")
+    auth, response = require_gist_auth()
     if response:
         return response
 
@@ -288,7 +270,7 @@ def render_gist_revision(gist_id, revision_number):
 
 @gists_api.route("/api/v1/gists/<gist_id>", methods=["PATCH"])
 def update_gist(gist_id):
-    auth, response = require_gist_auth("gist:write")
+    auth, response = require_gist_auth()
     if response:
         return response
     response = check_write_limit(auth)
@@ -310,7 +292,7 @@ def update_gist(gist_id):
 
 @gists_api.route("/api/v1/gists/<gist_id>", methods=["DELETE"])
 def remove_gist(gist_id):
-    auth, response = require_gist_auth("gist:delete")
+    auth, response = require_gist_auth()
     if response:
         return response
     response = check_write_limit(auth)

@@ -8,9 +8,6 @@ from .migrations import init_gist_database
 from .service import rerender_gists
 
 
-GIST_SCOPES = ["gist:read", "gist:write", "gist:delete"]
-
-
 class _AppConfig:
     config = {}
 
@@ -36,7 +33,6 @@ def main(argv=None):
     create.add_argument("--github-login")
 
     list_cmd = key_commands.add_parser("list")
-    list_cmd.add_argument("--domain")
 
     revoke = key_commands.add_parser("revoke")
     revoke.add_argument("key_prefix_or_id")
@@ -64,15 +60,13 @@ def main(argv=None):
             if args.command == "create":
                 result = create_api_key(
                     conn,
-                    "gist",
                     args.name,
-                    GIST_SCOPES,
                     github_login=args.github_login,
                 )
                 print(json.dumps(result, indent=2))
                 print("Save this key securely.")
             elif args.command == "list":
-                print(json.dumps(list_api_keys(conn, args.domain), indent=2))
+                print(json.dumps(list_api_keys(conn), indent=2))
             elif args.command == "revoke":
                 revoke_api_key(conn, args.key_prefix_or_id)
                 print(json.dumps({"revoked": True}, indent=2))

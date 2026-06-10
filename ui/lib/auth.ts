@@ -8,8 +8,6 @@ export type SessionIdentity = {
   name: string;
   key: string;
   key_prefix: string;
-  scopes: string[];
-  can_delete_gists: boolean;
   github_login?: string;
   avatar_url?: string;
 };
@@ -49,9 +47,6 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
     typeof identity.name === "string" &&
     typeof identity.key === "string" &&
     typeof identity.key_prefix === "string" &&
-    Array.isArray(identity.scopes) &&
-    identity.scopes.every((scope) => typeof scope === "string") &&
-    typeof identity.can_delete_gists === "boolean" &&
     (identity.github_login === undefined ||
       typeof identity.github_login === "string") &&
     (identity.avatar_url === undefined || typeof identity.avatar_url === "string")

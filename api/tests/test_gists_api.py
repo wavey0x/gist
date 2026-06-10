@@ -13,8 +13,8 @@ ETH_TX_HASH = "0x" + "a1" * 32
 
 
 def test_create_public_render_raw_read_patch_and_delete(client, app):
-    write_key = make_key(app, ["gist:write", "gist:delete"], name="creator")
-    read_key = make_key(app, ["gist:read"])
+    write_key = make_key(app, name="creator")
+    read_key = make_key(app)
 
     denied = client.post("/api/v1/gists", json={"markdown": "# Nope"})
     assert denied.status_code == 401
@@ -69,10 +69,7 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
         }
     ]
 
-    forbidden = client.get(f"/api/v1/gists/{body['id']}", headers=auth_header(write_key))
-    assert forbidden.status_code == 403
-
-    raw = client.get(f"/api/v1/gists/{body['id']}", headers=auth_header(read_key))
+    raw = client.get(f"/api/v1/gists/{body['id']}", headers=auth_header(write_key))
     assert raw.status_code == 200
     raw_body = raw.get_json()
     assert raw_body["markdown"] == "# Hello\n\n- [x] done"
@@ -85,7 +82,7 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     )
     assert stale.status_code == 409
 
-    other_key = make_key(app, ["gist:write", "gist:delete"], name="other")
+    other_key = make_key(app, name="other")
     hidden_patch = client.patch(
         f"/api/v1/gists/{body['id']}",
         headers=auth_header(other_key),
@@ -181,11 +178,7 @@ def test_configured_external_id_length_create_render_patch_and_delete(tmp_path):
         }
     )
     configured_client = configured_app.test_client()
-    write_key = make_key(
-        configured_app,
-        ["gist:read", "gist:write", "gist:delete"],
-        name="configured",
-    )
+    write_key = make_key(configured_app, name="configured")
 
     created = configured_client.post(
         "/api/v1/gists",
@@ -236,7 +229,7 @@ def test_external_id_length_config_is_validated(tmp_path, value, message):
 
 
 def test_api_ethereum_entity_rendering_defaults_on_and_can_be_disabled(client, app):
-    write_key = make_key(app, ["gist:write"], name="ethereum")
+    write_key = make_key(app, name="ethereum")
 
     created = create_gist(client, write_key, markdown=f"Address {ETH_ADDRESS}")
     assert created.status_code == 201
@@ -275,29 +268,17 @@ def test_api_ethereum_entity_rendering_defaults_on_and_can_be_disabled(client, a
     assert "eth-entity" not in disabled_latest["rendered_html"]
 
 
-def test_delete_gist_requires_delete_scope_and_original_creator(client, app):
-    owner_key = make_key(
-        app,
-        ["gist:read", "gist:write", "gist:delete"],
-        name="owner",
-    )
-    other_delete_key = make_key(app, ["gist:delete"], name="other")
-    writer_key = make_key(app, ["gist:read", "gist:write"], name="writer")
+def test_delete_gist_requires_original_creator(client, app):
+    owner_key = make_key(app, name="owner")
+    other_key = make_key(app, name="other")
 
     owner_created = create_gist(client, owner_key, "# Owner")
-    writer_created = create_gist(client, writer_key, "# Writer")
+    other_created = create_gist(client, other_key, "# Other")
     assert owner_created.status_code == 201
-    assert writer_created.status_code == 201
+    assert other_created.status_code == 201
     owner_body = owner_created.get_json()
-    writer_body = writer_created.get_json()
 
     assert client.delete(f"/api/v1/gists/{owner_body['id']}").status_code == 401
-
-    forbidden = client.delete(
-        f"/api/v1/gists/{writer_body['id']}",
-        headers=auth_header(writer_key),
-    )
-    assert forbidden.status_code == 403
 
     invalid = client.delete(
         "/api/v1/gists/not-a-valid-id",
@@ -307,7 +288,7 @@ def test_delete_gist_requires_delete_scope_and_original_creator(client, app):
 
     hidden = client.delete(
         f"/api/v1/gists/{owner_body['id']}",
-        headers=auth_header(other_delete_key),
+        headers=auth_header(other_key),
     )
     assert hidden.status_code == 404
     assert client.get(f"/api/v1/gists/{owner_body['id']}/render").status_code == 200
@@ -321,7 +302,7 @@ def test_delete_gist_requires_delete_scope_and_original_creator(client, app):
 
 
 def test_existing_32_character_gist_ids_remain_readable(client, app):
-    write_key = make_key(app, ["gist:write"], name="creator")
+    write_key = make_key(app, name="creator")
     created = client.post(
         "/api/v1/gists",
         json={"markdown": "# Legacy ID"},
@@ -346,7 +327,7 @@ def test_existing_32_character_gist_ids_remain_readable(client, app):
 
 
 def test_legacy_base64url_gist_ids_remain_readable(client, app):
-    write_key = make_key(app, ["gist:write"], name="creator")
+    write_key = make_key(app, name="creator")
     created = client.post(
         "/api/v1/gists",
         json={"markdown": "# Legacy ID"},
@@ -373,11 +354,10 @@ def test_legacy_base64url_gist_ids_remain_readable(client, app):
 def test_me_gists_lists_only_gists_created_by_session_key(client, app):
     owner_key = make_key(
         app,
-        ["gist:read", "gist:write"],
         name="owner",
         github_login="owner",
     )
-    editor_key = make_key(app, ["gist:read", "gist:write"], name="editor")
+    editor_key = make_key(app, name="editor")
 
     owner_created = create_gist(client, owner_key, "# Owner", title="Owner")
     other_created = create_gist(client, editor_key, "# Other", title="Other")
@@ -427,16 +407,8 @@ def test_me_gists_lists_only_gists_created_by_session_key(client, app):
 
 
 def test_me_gist_delete_requires_session_ownership(client, app):
-    owner_key = make_key(
-        app,
-        ["gist:read", "gist:write", "gist:delete"],
-        name="owner",
-    )
-    other_key = make_key(
-        app,
-        ["gist:read", "gist:write", "gist:delete"],
-        name="other",
-    )
+    owner_key = make_key(app, name="owner")
+    other_key = make_key(app, name="other")
 
     owner_created = create_gist(client, owner_key, "# Owner")
     other_created = create_gist(client, other_key, "# Other")
@@ -449,7 +421,6 @@ def test_me_gist_delete_requires_session_ownership(client, app):
 
     login = client.post("/api/v1/auth/session", json={"api_key": owner_key})
     assert login.status_code == 200
-    assert login.get_json()["can_delete_gists"] is True
 
     hidden = client.delete(f"/api/v1/me/gists/{other_body['id']}")
     assert hidden.status_code == 404
@@ -471,7 +442,7 @@ def test_me_gist_delete_requires_session_ownership(client, app):
 
 
 def test_sanitizer_strips_scriptable_content(client, app):
-    write_key = make_key(app, ["gist:write"])
+    write_key = make_key(app)
     markdown = """
 <script>alert(1)</script>
 <img src="javascript:alert(1)" onerror="alert(1)">
@@ -494,7 +465,7 @@ def test_sanitizer_strips_scriptable_content(client, app):
 
 
 def test_public_history_is_bounded_to_latest_50_revisions(client, app):
-    write_key = make_key(app, ["gist:write"], name="historian")
+    write_key = make_key(app, name="historian")
     created = create_gist(client, write_key, "# First")
     assert created.status_code == 201
     gist_id = created.get_json()["id"]
@@ -521,7 +492,7 @@ def test_public_history_is_bounded_to_latest_50_revisions(client, app):
 
 
 def test_validation_and_non_gist_routes_are_not_globally_authed(client, app):
-    key = make_key(app, ["gist:write"])
+    key = make_key(app)
 
     assert client.get("/api/v1/other").status_code == 200
     assert client.get("/api/v1/gists/not-a-valid-id/render").status_code == 404
@@ -538,7 +509,7 @@ def test_validation_and_non_gist_routes_are_not_globally_authed(client, app):
 
 
 def test_oversized_request_body_returns_json_413(client, app):
-    key = make_key(app, ["gist:write"])
+    key = make_key(app)
     markdown = "x" * (app.config["MAX_REQUEST_BYTES"] + 1)
 
     response = client.post(
