@@ -36,6 +36,29 @@ def _class_token_with_prefix(element, prefix):
     )
 
 
+def _relative_luminance(color):
+    channels = [
+        int(color[index : index + 2], 16) / 255
+        for index in (1, 3, 5)
+    ]
+    linear_channels = [
+        channel / 12.92
+        if channel <= 0.03928
+        else ((channel + 0.055) / 1.055) ** 2.4
+        for channel in channels
+    ]
+    red, green, blue = linear_channels
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+
+def _contrast_ratio(foreground, background):
+    lighter, darker = sorted(
+        [_relative_luminance(foreground), _relative_luminance(background)],
+        reverse=True,
+    )
+    return (lighter + 0.05) / (darker + 0.05)
+
+
 def test_markdown_rendering_uses_gfm_highlighting_links_and_sanitizer():
     markdown = (FIXTURE_DIR / "github_like_gist.md").read_text(encoding="utf-8")
     result = render_markdown_result(markdown)
@@ -364,9 +387,18 @@ def test_markdown_theme_uses_strict_grayscale_for_transaction_hashes():
     )
     assert len(tx_foregrounds) == 2
 
-    for color in tx_foregrounds:
-        channels = [color[index : index + 2].lower() for index in (1, 3, 5)]
-        assert channels[0] == channels[1] == channels[2]
+    tx_backgrounds = re.findall(
+        r"--eth-tx-bg:\s*(#[0-9A-Fa-f]{6});",
+        theme_css,
+    )
+    assert len(tx_backgrounds) == 2
+
+    for foreground, background in zip(tx_foregrounds, tx_backgrounds):
+        for color in (foreground, background):
+            channels = [color[index : index + 2].lower() for index in (1, 3, 5)]
+            assert channels[0] == channels[1] == channels[2]
+
+        assert _contrast_ratio(foreground, background) >= 7
 
 
 def test_markdown_rendering_marks_degraded_when_node_is_missing(monkeypatch):
