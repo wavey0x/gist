@@ -77,5 +77,8 @@ DELETE /api/v1/me/gists/{gist_id}
 `/api/v1/me/gists` returns gists whose first revision was created by the logged
 in key and does not include Markdown or rendered HTML.
 
+`PATCH /api/v1/gists/{gist_id}` requires `gist:write` and only updates gists
+whose first revision was created by that key.
+
 `DELETE /api/v1/me/gists/{gist_id}` requires a session key with `gist:delete`
 and only deletes gists whose first revision was created by that key.

@@ -85,16 +85,23 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     )
     assert stale.status_code == 409
 
-    editor_key = make_key(app, ["gist:write", "gist:delete"], name="editor")
+    other_key = make_key(app, ["gist:write", "gist:delete"], name="other")
+    hidden_patch = client.patch(
+        f"/api/v1/gists/{body['id']}",
+        headers=auth_header(other_key),
+        json={"title": None, "markdown": "# Updated"},
+    )
+    assert hidden_patch.status_code == 404
+
     updated = client.patch(
         f"/api/v1/gists/{body['id']}",
-        headers=auth_header(editor_key),
+        headers=auth_header(write_key),
         json={"title": None, "markdown": "# Updated"},
     )
     assert updated.status_code == 200
     updated_body = updated.get_json()
     assert updated_body["title"] is None
-    assert updated_body["author_name"] == "editor"
+    assert updated_body["author_name"] == "creator"
     assert updated_body["revision_number"] == 2
     assert updated_body["latest_revision_number"] == 2
 
@@ -115,15 +122,15 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
         ).fetchone()
     assert [dict(row) for row in revision_rows] == [
         {"revision_number": 1, "author_name": "creator"},
-        {"revision_number": 2, "author_name": "editor"},
+        {"revision_number": 2, "author_name": "creator"},
     ]
-    assert dict(gist_row) == {"author_name": "editor", "latest_revision_number": 2}
+    assert dict(gist_row) == {"author_name": "creator", "latest_revision_number": 2}
 
     latest = client.get(f"/api/v1/gists/{body['id']}/render")
     assert latest.status_code == 200
     latest_body = latest.get_json()
     assert latest_body["markdown"] == "# Updated"
-    assert latest_body["author_name"] == "editor"
+    assert latest_body["author_name"] == "creator"
     assert latest_body["revision_number"] == 2
     assert latest_body["latest_revision_number"] == 2
     assert len(latest_body["history"]) == 2
@@ -147,7 +154,7 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
 
     other_delete = client.delete(
         f"/api/v1/gists/{body['id']}",
-        headers=auth_header(editor_key),
+        headers=auth_header(other_key),
     )
     assert other_delete.status_code == 404
 
@@ -379,18 +386,24 @@ def test_me_gists_lists_only_gists_created_by_session_key(client, app):
     owner_body = owner_created.get_json()
     other_body = other_created.get_json()
 
-    updated_owner = client.patch(
+    hidden_owner_update = client.patch(
         f"/api/v1/gists/{owner_body['id']}",
         headers=auth_header(editor_key),
         json={"title": "Edited by someone else"},
     )
-    assert updated_owner.status_code == 200
-    updated_other = client.patch(
+    assert hidden_owner_update.status_code == 404
+    hidden_other_update = client.patch(
         f"/api/v1/gists/{other_body['id']}",
         headers=auth_header(owner_key),
         json={"title": "Edited by owner"},
     )
-    assert updated_other.status_code == 200
+    assert hidden_other_update.status_code == 404
+    updated_owner = client.patch(
+        f"/api/v1/gists/{owner_body['id']}",
+        headers=auth_header(owner_key),
+        json={"title": "Edited by owner"},
+    )
+    assert updated_owner.status_code == 200
 
     assert client.get("/api/v1/me/gists").status_code == 401
 
@@ -404,8 +417,8 @@ def test_me_gists_lists_only_gists_created_by_session_key(client, app):
     assert body["gists"][0] == {
         "id": owner_body["id"],
         "url": owner_body["url"],
-        "title": "Edited by someone else",
-        "author_name": "editor",
+        "title": "Edited by owner",
+        "author_name": "owner",
         "revision_number": 2,
         "updated_at": body["gists"][0]["updated_at"],
     }

@@ -377,8 +377,20 @@ def patch_gist(app, key_id, author_name, external_id, payload):
     with gist_connection(app) as conn:
         with conn:
             current = conn.execute(
-                "select * from gists where external_id = ? and deleted_at is null",
-                (external_id,),
+                """
+                select *
+                from gists
+                where external_id = ?
+                  and deleted_at is null
+                  and exists (
+                      select 1
+                      from gist_revisions
+                      where gist_revisions.gist_id = gists.id
+                        and gist_revisions.revision_number = 1
+                        and gist_revisions.created_by_key_id = ?
+                  )
+                """,
+                (external_id, key_id),
             ).fetchone()
             if current is None:
                 raise GistError("not_found", "Not found", 404)
