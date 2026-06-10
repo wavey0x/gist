@@ -47,7 +47,7 @@ rate limits.
 Run migrations during app startup with the configured `SQLITE_DB_PATH`. Back up
 the SQLite database before upgrading.
 
-## Admin Keys
+## API Keys
 
 Create gist API keys from this directory with `SQLITE_DB_PATH` set:
 
