@@ -426,7 +426,7 @@ def test_me_gists_lists_only_gists_created_by_session_key(client, app):
     assert "rendered_html" not in body["gists"][0]
 
 
-def test_me_gist_delete_requires_session_delete_scope_and_ownership(client, app):
+def test_me_gist_delete_requires_session_ownership(client, app):
     owner_key = make_key(
         app,
         ["gist:read", "gist:write", "gist:delete"],
@@ -437,31 +437,16 @@ def test_me_gist_delete_requires_session_delete_scope_and_ownership(client, app)
         ["gist:read", "gist:write", "gist:delete"],
         name="other",
     )
-    read_write_key = make_key(
-        app,
-        ["gist:read", "gist:write"],
-        name="reader-writer",
-    )
 
     owner_created = create_gist(client, owner_key, "# Owner")
     other_created = create_gist(client, other_key, "# Other")
-    read_write_created = create_gist(client, read_write_key, "# Read write")
     assert owner_created.status_code == 201
     assert other_created.status_code == 201
-    assert read_write_created.status_code == 201
     owner_body = owner_created.get_json()
     other_body = other_created.get_json()
-    read_write_body = read_write_created.get_json()
 
     assert client.delete(f"/api/v1/me/gists/{owner_body['id']}").status_code == 401
 
-    login = client.post("/api/v1/auth/session", json={"api_key": read_write_key})
-    assert login.status_code == 200
-    assert login.get_json()["can_delete_gists"] is False
-    forbidden = client.delete(f"/api/v1/me/gists/{read_write_body['id']}")
-    assert forbidden.status_code == 403
-
-    assert client.delete("/api/v1/auth/session").status_code == 204
     login = client.post("/api/v1/auth/session", json={"api_key": owner_key})
     assert login.status_code == 200
     assert login.get_json()["can_delete_gists"] is True

@@ -205,7 +205,7 @@ def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
             conn,
             "gist",
             "wavey0x",
-            ["gist:read", "gist:write"],
+            ["gist:read", "gist:write", "gist:delete"],
             github_login="wavey0x",
         )
 
@@ -222,8 +222,8 @@ def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
         "name": "wavey0x",
         "key": created["key"],
         "key_prefix": created["key_prefix"],
-        "scopes": ["gist:read", "gist:write"],
-        "can_delete_gists": False,
+        "scopes": ["gist:delete", "gist:read", "gist:write"],
+        "can_delete_gists": True,
         "github_login": "wavey0x",
         "avatar_url": "https://github.com/wavey0x.png?size=64",
     }

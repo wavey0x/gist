@@ -17,7 +17,6 @@ type TabId = "recent" | "mine";
 type MeGistTabsProps = {
   myGists: MyGistItem[];
   isAuthenticated: boolean;
-  canDeleteGists: boolean;
 };
 
 type ListItem = {
@@ -46,10 +45,7 @@ function formatTimestamp(value: string) {
   return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 }
 
-function myGistToListItem(
-  gist: MyGistItem,
-  canDeleteGists: boolean
-): ListItem {
+function myGistToListItem(gist: MyGistItem): ListItem {
   const title = displayTitle(gist.title, gist.id);
   return {
     id: gist.id,
@@ -59,9 +55,7 @@ function myGistToListItem(
     revisionNumber: gist.revision_number,
     dateTime: gist.updated_at,
     dateLabel: "updated",
-    action: canDeleteGists ? (
-      <DeleteGistButton gistId={gist.id} gistTitle={title} />
-    ) : undefined
+    action: <DeleteGistButton gistId={gist.id} gistTitle={title} />
   };
 }
 
@@ -158,8 +152,7 @@ function GistList({
 
 export function MeGistTabs({
   myGists,
-  isAuthenticated,
-  canDeleteGists
+  isAuthenticated
 }: MeGistTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("recent");
   const [recentGists, setRecentGists] = useState<RecentGistItem[] | null>(null);
@@ -195,8 +188,8 @@ export function MeGistTabs({
     [recentGists]
   );
   const myItems = useMemo(
-    () => myGists.map((gist) => myGistToListItem(gist, canDeleteGists)),
-    [canDeleteGists, myGists]
+    () => myGists.map(myGistToListItem),
+    [myGists]
   );
 
   const activeItems = activeTab === "recent" ? recentItems : myItems;

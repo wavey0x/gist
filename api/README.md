@@ -53,12 +53,12 @@ Create gist API keys from this directory with `SQLITE_DB_PATH` set:
 
 ```sh
 uv run admin keys create --name <name> --github-login <github_login>
-uv run admin keys create --name <name> --role admin --github-login <github_login>
 uv run admin keys rotate <key_prefix_or_id> --github-login <github_login>
 ```
 
-The `github_login` value is used only to derive the browser avatar URL for the
-key-backed web session.
+A gist API key can create gists and update/delete gists whose first revision
+was created by that key. The `github_login` value is used only to derive the
+browser avatar URL for the key-backed web session.
 
 ## Auth Routes
 
@@ -77,8 +77,8 @@ DELETE /api/v1/me/gists/{gist_id}
 `/api/v1/me/gists` returns gists whose first revision was created by the logged
 in key and does not include Markdown or rendered HTML.
 
-`PATCH /api/v1/gists/{gist_id}` requires `gist:write` and only updates gists
-whose first revision was created by that key.
+`PATCH /api/v1/gists/{gist_id}` only updates gists whose first revision was
+created by the authenticated key.
 
-`DELETE /api/v1/me/gists/{gist_id}` requires a session key with `gist:delete`
-and only deletes gists whose first revision was created by that key.
+`DELETE /api/v1/me/gists/{gist_id}` only deletes gists whose first revision was
+created by the authenticated session key.

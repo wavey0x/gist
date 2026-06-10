@@ -38,7 +38,6 @@ export default async function Home() {
         <MeGistTabs
           myGists={[]}
           isAuthenticated={false}
-          canDeleteGists={false}
         />
       </section>
     </main>

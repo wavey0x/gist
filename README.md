@@ -16,7 +16,7 @@ anyone with a random gist URL can read the rendered page and raw source.
 - Read-only rendered/raw browser views.
 - Browser-local recently viewed gist list.
 - Key-backed private list of gists created by the logged-in API key.
-- Scoped API keys.
+- Gist API keys with owner-scoped mutation.
 - SQLite persistence by default.
 
 ## Architecture
@@ -76,14 +76,13 @@ Open `http://localhost:3000`.
 
 ## Create An API Key
 
-In another terminal, create an admin key:
+In another terminal, create a gist API key:
 
 ```sh
 cd api
 SQLITE_DB_PATH=.local/gists.sqlite3 uv run admin keys create \
-  --name admin \
-  --github-login <github_login> \
-  --role admin
+  --name <name> \
+  --github-login <github_login>
 ```
 
 Save the printed key securely. Logged-in users can also view their current key
@@ -147,7 +146,6 @@ Run admin commands from `api/` with `SQLITE_DB_PATH` set.
 ```sh
 uv run admin keys create --name <name>
 uv run admin keys create --name <name> --github-login <github_login>
-uv run admin keys create --name <name> --role admin --github-login <github_login>
 uv run admin keys list
 uv run admin keys revoke <key_prefix_or_id>
 uv run admin keys rotate <key_prefix_or_id> --name <new_name>
@@ -155,9 +153,8 @@ uv run admin keys rotate <key_prefix_or_id> --github-login <github_login>
 uv run admin gists rerender --all
 ```
 
-User keys can create, update, and read raw gist API payloads. Updates are
-limited to gists originally created by the authenticated key. Admin keys add
-`gist:delete`, which can delete only gists originally created by that key.
+A gist API key can create gists, read authenticated API metadata, and
+update/delete only gists originally created by that key.
 
 ## API
 
@@ -190,12 +187,11 @@ Protected routes use:
 Authorization: Bearer <api_key>
 ```
 
-The web-session routes use the `wg_session` HttpOnly cookie minted from an API
-key with `gist:read`.
+The web-session routes use the `wg_session` HttpOnly cookie minted from a gist
+API key.
 
 Update and delete routes only mutate gists whose first revision was created by
-the authenticated key. Delete routes also require `gist:delete`. A non-owned
-gist returns `404`.
+the authenticated key. A non-owned gist returns `404`.
 
 Public render routes do not require auth because anyone with the random gist
 URL can view the rendered page and raw Markdown source.

@@ -47,7 +47,6 @@ export default async function MePage() {
       <MeGistTabs
         myGists={payload?.gists ?? []}
         isAuthenticated={Boolean(activeSession)}
-        canDeleteGists={activeSession?.can_delete_gists ?? false}
       />
     </main>
   );
