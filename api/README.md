@@ -33,6 +33,8 @@ uv run gunicorn 'gist_api.wsgi:app' --bind 127.0.0.1:8015
 Required settings are read from environment variables. `SQLITE_DB_PATH` must
 point at the dedicated gist SQLite database. `MAX_REQUEST_BYTES` caps the JSON
 body accepted by Flask and defaults to `MAX_MARKDOWN_BYTES + 2048`.
+`GIST_EXTERNAL_ID_LENGTH` controls the length of newly generated random gist
+IDs and defaults to `16`.
 
 Run the service with `umask 077` so the SQLite database and WAL files are not
 readable by other local users. If a reverse proxy fronts the API, configure it

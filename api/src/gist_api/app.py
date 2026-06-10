@@ -2,6 +2,7 @@ from flask import Flask
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from .errors import error_response
+from .external_ids import DEFAULT_EXTERNAL_ID_LENGTH, validate_external_id_length
 from .migrations import init_gist_database
 from .routes import gists_api
 from .settings import load_settings
@@ -23,6 +24,9 @@ def create_app(config_overrides=None):
     app.config.update(load_settings())
     if config_overrides:
         app.config.update(config_overrides)
+    app.config["GIST_EXTERNAL_ID_LENGTH"] = validate_external_id_length(
+        app.config.get("GIST_EXTERNAL_ID_LENGTH", DEFAULT_EXTERNAL_ID_LENGTH)
+    )
     if app.config.get("MAX_REQUEST_BYTES") is None:
         app.config["MAX_REQUEST_BYTES"] = (
             app.config.get("MAX_MARKDOWN_BYTES", 1048576) + 2048

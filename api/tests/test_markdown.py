@@ -234,22 +234,46 @@ At block 22481234.
 
 def test_ethereum_entity_rendering_inferrs_compact_abbreviated_links():
     short_address = f"{ETH_ADDRESS[:5]}..{ETH_ADDRESS[-3:]}"
+    medium_address = f"{ETH_ADDRESS[:6]}...{ETH_ADDRESS[-4:]}"
+    ellipsis_address = f"0x{ETH_ADDRESS_2[2:7].upper()}…{ETH_ADDRESS_2[-3:].upper()}"
+    mismatched_address = f"{ETH_ADDRESS[:5]}..999"
     short_tx = f"{ETH_TX_HASH[:5]}..{ETH_TX_HASH[-3:]}"
+    medium_tx = f"{ETH_TX_HASH[:6]}...{ETH_TX_HASH[-4:]}"
+    mismatched_tx = f"{ETH_TX_HASH[:5]}..b2b"
     result = render_markdown_result(
         f"""
 Short address [{short_address}](https://etherscan.io/address/{ETH_ADDRESS})
+Medium address [{medium_address}](https://etherscan.io/address/{ETH_ADDRESS})
+Ellipsis address [{ellipsis_address}](https://etherscan.io/address/{ETH_ADDRESS_2})
+Mismatched address [{mismatched_address}](https://etherscan.io/address/{ETH_ADDRESS})
 Short tx [{short_tx}](https://etherscan.io/tx/{ETH_TX_HASH})
+Medium tx [{medium_tx}](https://etherscan.io/tx/{ETH_TX_HASH})
+Mismatched tx [{mismatched_tx}](https://etherscan.io/tx/{ETH_TX_HASH})
 """
     )
 
     root = html_parser.fragment_fromstring(result.html, create_parent="div")
-    short_address_links = root.xpath(f'.//a[normalize-space()="{short_address}"]')
-    short_tx_links = root.xpath(f'.//a[normalize-space()="{short_tx}"]')
+    address_labels = [short_address, medium_address, ellipsis_address]
+    tx_labels = [short_tx, medium_tx]
 
-    assert len(short_address_links) == 1
-    assert len(short_tx_links) == 1
-    assert "eth-address" in _class_tokens(short_address_links[0])
-    assert "eth-tx" in _class_tokens(short_tx_links[0])
+    for label in address_labels:
+        links = root.xpath(f'.//a[normalize-space()="{label}"]')
+        assert len(links) == 1
+        assert "eth-address" in _class_tokens(links[0])
+
+    for label in tx_labels:
+        links = root.xpath(f'.//a[normalize-space()="{label}"]')
+        assert len(links) == 1
+        assert "eth-tx" in _class_tokens(links[0])
+
+    mismatched_address_links = root.xpath(
+        f'.//a[normalize-space()="{mismatched_address}"]'
+    )
+    mismatched_tx_links = root.xpath(f'.//a[normalize-space()="{mismatched_tx}"]')
+    assert len(mismatched_address_links) == 1
+    assert len(mismatched_tx_links) == 1
+    assert "eth-address" not in _class_tokens(mismatched_address_links[0])
+    assert "eth-tx" not in _class_tokens(mismatched_tx_links[0])
 
 
 def test_ethereum_entity_rendering_marks_ens_selectors_and_blocks():
@@ -399,6 +423,33 @@ def test_markdown_theme_uses_strict_grayscale_for_transaction_hashes():
             assert channels[0] == channels[1] == channels[2]
 
         assert _contrast_ratio(foreground, background) >= 7
+
+
+def test_markdown_theme_uses_generated_party_color_palette():
+    theme_css = (
+        Path(__file__).resolve().parents[2] / "ui/app/markdown-theme.css"
+    ).read_text(encoding="utf-8")
+
+    assert "--eth-party-color-" not in theme_css
+    assert theme_css.count("--eth-party-lightness:") == 2
+    assert theme_css.count("--eth-party-chroma:") == 2
+    assert (
+        "var(--eth-party-lightness) var(--eth-party-chroma) "
+        "var(--eth-party-hue)"
+    ) in theme_css
+    assert '.eth-address[class*="eth-party-color-"]' in theme_css
+    assert '.eth-ens[class*="eth-party-color-"]' in theme_css
+
+    hue_classes = re.findall(
+        r"\.markdown-body \.eth-party-color-([0-9]{2}) "
+        r"\{ --eth-party-hue: ([0-9]+)deg; \}",
+        theme_css,
+    )
+    assert len(hue_classes) == 48
+    assert {index for index, _hue in hue_classes} == {
+        f"{index:02d}" for index in range(48)
+    }
+    assert len({hue for _index, hue in hue_classes}) == 48
 
 
 def test_markdown_rendering_marks_degraded_when_node_is_missing(monkeypatch):

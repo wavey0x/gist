@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { apiUrl } from "./api-base";
 
-const GIST_ID_RE = /^(?:[A-Za-z0-9]{16}|[A-Za-z0-9_-]{32})$/;
+const GIST_ID_RE = /^(?:[A-Za-z0-9]{16,64}|[A-Za-z0-9_-]{32})$/;
 const REVISION_NUMBER_RE = /^[1-9][0-9]*$/;
 
 export class PublicGistNotFoundError extends Error {

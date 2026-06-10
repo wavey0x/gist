@@ -1,16 +1,14 @@
 import hashlib
 import re
-import secrets
 import sqlite3
 
 from .auth import utc_now
 from .db import gist_connection
 from .errors import GistError
+from .external_ids import generate_external_id, validate_external_id
 from .markdown import render_markdown_result, render_version
 
 
-ID_RE = re.compile(r"^(?:[A-Za-z0-9]{16}|[A-Za-z0-9_-]{32})$")
-EXTERNAL_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 REVISION_RE = re.compile(r"^[1-9][0-9]*$")
 SHA_RE = re.compile(r"^[a-f0-9]{64}$")
 
@@ -77,14 +75,6 @@ def render_version_for_app(app):
     return render_version(
         ethereum_entities=ethereum_entity_rendering_enabled(app),
     )
-
-
-def generate_external_id():
-    return "".join(secrets.choice(EXTERNAL_ID_ALPHABET) for _ in range(16))
-
-
-def validate_external_id(external_id):
-    return isinstance(external_id, str) and bool(ID_RE.fullmatch(external_id))
 
 
 def parse_revision_number(revision_number):
@@ -165,7 +155,7 @@ def create_gist(app, key_id, author_name, payload):
 
     with gist_connection(app) as conn:
         for _ in range(8):
-            external_id = generate_external_id()
+            external_id = generate_external_id(app.config["GIST_EXTERNAL_ID_LENGTH"])
             try:
                 with conn:
                     cursor = conn.execute(

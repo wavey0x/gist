@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 SANITIZER_CONFIG_VERSION = "2026-06-02.4"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
-ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-10.1"
+ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-10.2"
 HIGHLIGHT_GRAMMAR_SET = "all"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -104,7 +104,7 @@ ETHEREUM_FULL_ENTITY_RE = re.compile(
 )
 ETHEREUM_FULL_VALUE_RE = re.compile(rf"^{ETHEREUM_FULL_VALUE_PATTERN}$")
 ETHEREUM_ABBREVIATED_VALUE_RE = re.compile(
-    r"^0x[0-9A-Fa-f]{3,}(?:\.{2,3}|…)[0-9A-Fa-f]{3,}$"
+    r"^(?P<head>0x[0-9A-Fa-f]{3,})(?:\.{2,3}|…)(?P<tail>[0-9A-Fa-f]{3,})$"
 )
 ETHEREUM_SELECTOR_RE = re.compile(
     r"(?<![0-9A-Za-z])(0x[0-9A-Fa-f]{8})(?![0-9A-Za-z])"
@@ -353,7 +353,12 @@ def _ethereum_entity_from_href(href):
 
 def _ethereum_link_text_matches_href_entity(text, entity):
     if entity.kind in {"address", "tx"}:
-        return ETHEREUM_ABBREVIATED_VALUE_RE.fullmatch(text) is not None
+        match = ETHEREUM_ABBREVIATED_VALUE_RE.fullmatch(text)
+        if match is None:
+            return False
+        head = match.group("head").lower()
+        tail = match.group("tail").lower()
+        return entity.value.startswith(head) and entity.value.endswith(tail)
 
     if entity.kind == "block":
         block_match = ETHEREUM_BLOCK_VALUE_RE.fullmatch(text)

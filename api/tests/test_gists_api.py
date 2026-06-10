@@ -1,6 +1,10 @@
 import json
 
+import pytest
+
+from gist_api.app import create_app
 from gist_api.db import gist_connection
+from gist_api.external_ids import DEFAULT_EXTERNAL_ID_LENGTH
 
 from .conftest import auth_header, create_gist, make_key
 
@@ -37,7 +41,7 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
         "created_at",
         "updated_at",
     }
-    assert len(body["id"]) == 16
+    assert len(body["id"]) == DEFAULT_EXTERNAL_ID_LENGTH
     assert body["id"].isascii()
     assert body["id"].isalnum()
     assert body["url"] == f"https://gist.example.com/{body['id']}"
@@ -154,6 +158,74 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     assert client.get(f"/api/v1/gists/{body['id']}/revisions/1/render").status_code == 404
     assert client.get(f"/api/v1/gists/{body['id']}", headers=auth_header(read_key)).status_code == 404
     assert client.delete(f"/api/v1/gists/{body['id']}", headers=auth_header(write_key)).status_code == 404
+
+
+def test_configured_external_id_length_create_render_patch_and_delete(tmp_path):
+    configured_app = create_app(
+        {
+            "SQLITE_DB_PATH": str(tmp_path / "configured-id-length.sqlite3"),
+            "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
+            "MAX_MARKDOWN_BYTES": 1024 * 1024,
+            "ALLOW_EMPTY_MARKDOWN": False,
+            "SQLITE_BUSY_TIMEOUT_MS": 5000,
+            "API_WRITE_LIMIT_PER_24H": 1000,
+            "API_AUTH_FAILURE_LIMIT_PER_MINUTE": 1000,
+            "GIST_EXTERNAL_ID_LENGTH": 24,
+        }
+    )
+    configured_client = configured_app.test_client()
+    write_key = make_key(
+        configured_app,
+        ["gist:read", "gist:write", "gist:delete"],
+        name="configured",
+    )
+
+    created = configured_client.post(
+        "/api/v1/gists",
+        headers=auth_header(write_key),
+        json={"title": "Configured", "markdown": "# Configured"},
+    )
+    assert created.status_code == 201
+    body = created.get_json()
+    assert len(body["id"]) == 24
+    assert body["id"].isascii()
+    assert body["id"].isalnum()
+
+    public = configured_client.get(f"/api/v1/gists/{body['id']}/render")
+    assert public.status_code == 200
+    assert public.get_json()["markdown"] == "# Configured"
+
+    updated = configured_client.patch(
+        f"/api/v1/gists/{body['id']}",
+        headers=auth_header(write_key),
+        json={"markdown": "# Updated configured"},
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()["revision_number"] == 2
+
+    deleted = configured_client.delete(
+        f"/api/v1/gists/{body['id']}",
+        headers=auth_header(write_key),
+    )
+    assert deleted.status_code == 204
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (15, "between 16 and 64"),
+        (65, "between 16 and 64"),
+        ("24", "must be an integer"),
+    ],
+)
+def test_external_id_length_config_is_validated(tmp_path, value, message):
+    with pytest.raises(RuntimeError, match=message):
+        create_app(
+            {
+                "SQLITE_DB_PATH": str(tmp_path / "bad-id-length.sqlite3"),
+                "GIST_EXTERNAL_ID_LENGTH": value,
+            }
+        )
 
 
 def test_api_ethereum_entity_rendering_defaults_on_and_can_be_disabled(client, app):

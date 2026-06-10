@@ -120,6 +120,7 @@ Backend environment variables:
 | `PORT` | `3001` | Backend port when using the module entrypoint. |
 | `MAX_MARKDOWN_BYTES` | `1048576` | Maximum Markdown payload size. |
 | `MAX_REQUEST_BYTES` | `MAX_MARKDOWN_BYTES + 2048` | Maximum JSON request body size accepted by Flask. |
+| `GIST_EXTERNAL_ID_LENGTH` | `16` | Length for newly generated random gist IDs. Must be between 16 and 64. |
 | `ALLOW_EMPTY_MARKDOWN` | `false` | Allow empty Markdown documents. |
 | `SQLITE_BUSY_TIMEOUT_MS` | `5000` | SQLite busy timeout. |
 | `API_WRITE_LIMIT_PER_24H` | `150` | Write limit per key and source IP. |

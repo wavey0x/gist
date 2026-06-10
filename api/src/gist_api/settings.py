@@ -1,5 +1,7 @@
 import os
 
+from .external_ids import DEFAULT_EXTERNAL_ID_LENGTH
+
 
 def _int_env(name, default):
     value = os.getenv(name)
@@ -36,5 +38,9 @@ def load_settings():
         "API_AUTH_FAILURE_LIMIT_PER_MINUTE": _int_env(
             "API_AUTH_FAILURE_LIMIT_PER_MINUTE",
             20,
+        ),
+        "GIST_EXTERNAL_ID_LENGTH": _int_env(
+            "GIST_EXTERNAL_ID_LENGTH",
+            DEFAULT_EXTERNAL_ID_LENGTH,
         ),
     }

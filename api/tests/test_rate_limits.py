@@ -1,6 +1,10 @@
 from gist_api.app import create_app
+from gist_api.external_ids import DEFAULT_EXTERNAL_ID_LENGTH
 
 from .conftest import auth_header, make_key
+
+
+VALID_LOOKING_GIST_ID = "A" * DEFAULT_EXTERNAL_ID_LENGTH
 
 
 def _limited_app(db_path, *, write_limit=2, auth_failure_limit=2):
@@ -105,12 +109,12 @@ def test_auth_failure_rate_limits_persist_by_source_ip_after_restart(tmp_path):
     headers = {"X-Forwarded-For": "198.51.100.7"}
 
     for _ in range(2):
-        response = client.get("/api/v1/gists/" + ("A" * 16), headers=headers)
+        response = client.get(f"/api/v1/gists/{VALID_LOOKING_GIST_ID}", headers=headers)
         assert response.status_code == 401
 
     restarted = _limited_app(db_path, auth_failure_limit=2)
     response = restarted.test_client().get(
-        "/api/v1/gists/" + ("A" * 16),
+        f"/api/v1/gists/{VALID_LOOKING_GIST_ID}",
         headers=headers,
     )
     assert response.status_code == 429
@@ -124,13 +128,13 @@ def test_auth_failure_limit_uses_rightmost_forwarded_ip_from_trusted_proxy(tmp_p
 
     for spoofed_ip in ("192.0.2.1", "192.0.2.2"):
         response = client.get(
-            "/api/v1/gists/" + ("A" * 16),
+            f"/api/v1/gists/{VALID_LOOKING_GIST_ID}",
             headers={"X-Forwarded-For": f"{spoofed_ip}, 198.51.100.77"},
         )
         assert response.status_code == 401
 
     response = client.get(
-        "/api/v1/gists/" + ("A" * 16),
+        f"/api/v1/gists/{VALID_LOOKING_GIST_ID}",
         headers={"X-Forwarded-For": "192.0.2.3, 198.51.100.77"},
     )
     assert response.status_code == 429
