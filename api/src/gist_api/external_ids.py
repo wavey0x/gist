@@ -13,13 +13,7 @@ GENERATED_EXTERNAL_ID_PATTERN = (
     rf"[A-Za-z0-9]{{{MIN_GENERATED_EXTERNAL_ID_LENGTH},"
     rf"{MAX_GENERATED_EXTERNAL_ID_LENGTH}}}"
 )
-
-# Generation remains base62 only. The 32-character base64url branch is read
-# compatibility for existing stored IDs, not a generation policy.
-ACCEPTED_EXTERNAL_ID_PATTERN = (
-    rf"(?:{GENERATED_EXTERNAL_ID_PATTERN}|[A-Za-z0-9_-]{{32}})"
-)
-ACCEPTED_EXTERNAL_ID_RE = re.compile(rf"^{ACCEPTED_EXTERNAL_ID_PATTERN}$")
+ACCEPTED_EXTERNAL_ID_RE = re.compile(rf"^{GENERATED_EXTERNAL_ID_PATTERN}$")
 
 
 def validate_external_id_length(value):

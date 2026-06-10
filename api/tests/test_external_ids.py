@@ -32,7 +32,6 @@ def test_generate_external_id_uses_configured_length():
         "A" * MIN_GENERATED_EXTERNAL_ID_LENGTH,
         "B" * 24,
         "C" * MAX_GENERATED_EXTERNAL_ID_LENGTH,
-        ("D" * 30) + "_-",
     ],
 )
 def test_validate_external_id_accepts_supported_formats(external_id):
@@ -46,6 +45,7 @@ def test_validate_external_id_accepts_supported_formats(external_id):
         "A" * (MIN_GENERATED_EXTERNAL_ID_LENGTH - 1),
         "B" * (MAX_GENERATED_EXTERNAL_ID_LENGTH + 1),
         "abc/def",
+        ("D" * 30) + "_-",
         "!" * MIN_GENERATED_EXTERNAL_ID_LENGTH,
         None,
     ],

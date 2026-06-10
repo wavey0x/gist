@@ -42,9 +42,7 @@ export function DeleteGistButton({ gistId, gistTitle }: DeleteGistButtonProps) {
         return;
       }
 
-      if (response.status === 403) {
-        setError("This API key cannot delete gists.");
-      } else if (response.status === 404) {
+      if (response.status === 404) {
         setError("This gist could not be deleted.");
         router.refresh();
       } else {

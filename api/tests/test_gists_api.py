@@ -301,56 +301,6 @@ def test_delete_gist_requires_original_creator(client, app):
     assert client.get(f"/api/v1/gists/{owner_body['id']}/render").status_code == 404
 
 
-def test_existing_32_character_gist_ids_remain_readable(client, app):
-    write_key = make_key(app, name="creator")
-    created = client.post(
-        "/api/v1/gists",
-        json={"markdown": "# Legacy ID"},
-        headers=auth_header(write_key),
-    )
-    assert created.status_code == 201
-    original_id = created.get_json()["id"]
-    existing_id = "B" * 32
-
-    with gist_connection(app) as conn:
-        with conn:
-            conn.execute(
-                "update gists set external_id = ? where external_id = ?",
-                (existing_id, original_id),
-            )
-
-    public = client.get(f"/api/v1/gists/{existing_id}/render")
-    assert public.status_code == 200
-    body = public.get_json()
-    assert body["id"] == existing_id
-    assert body["markdown"] == "# Legacy ID"
-
-
-def test_legacy_base64url_gist_ids_remain_readable(client, app):
-    write_key = make_key(app, name="creator")
-    created = client.post(
-        "/api/v1/gists",
-        json={"markdown": "# Legacy ID"},
-        headers=auth_header(write_key),
-    )
-    assert created.status_code == 201
-    original_id = created.get_json()["id"]
-    legacy_id = ("A" * 30) + "_-"
-
-    with gist_connection(app) as conn:
-        with conn:
-            conn.execute(
-                "update gists set external_id = ? where external_id = ?",
-                (legacy_id, original_id),
-            )
-
-    public = client.get(f"/api/v1/gists/{legacy_id}/render")
-    assert public.status_code == 200
-    body = public.get_json()
-    assert body["id"] == legacy_id
-    assert body["markdown"] == "# Legacy ID"
-
-
 def test_me_gists_lists_only_gists_created_by_session_key(client, app):
     owner_key = make_key(
         app,

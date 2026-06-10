@@ -7,7 +7,7 @@ def _admin_json(output):
     return json.loads(output.split("\nSave this key securely.", 1)[0])
 
 
-def test_admin_key_create_mints_gist_key_without_legacy_scope_fields(
+def test_admin_key_create_mints_gist_key_with_current_fields(
     monkeypatch,
     tmp_path,
     capsys,

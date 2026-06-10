@@ -1,10 +1,9 @@
 create table if not exists api_keys (
     id integer primary key,
-    domain text not null,
     name text not null,
-    key_hash text not null,
+    github_login text null,
+    key_value text not null,
     key_prefix text not null unique,
-    scopes_json text not null,
     created_at text not null,
     last_used_at text null,
     revoked_at text null
@@ -47,3 +46,41 @@ create unique index if not exists idx_gist_revisions_gist_id_revision_number
 
 create unique index if not exists idx_api_keys_key_prefix
     on api_keys(key_prefix);
+
+create table if not exists web_sessions (
+    id integer primary key,
+    token_hash text not null unique,
+    api_key_id integer not null references api_keys(id),
+    created_at text not null,
+    last_used_at text null,
+    expires_at text not null,
+    revoked_at text null
+);
+
+create index if not exists idx_web_sessions_api_key_id
+    on web_sessions(api_key_id);
+
+create index if not exists idx_gist_revisions_creator_revision
+    on gist_revisions(created_by_key_id, revision_number, gist_id);
+
+create table if not exists api_write_events (
+    id integer primary key,
+    key_prefix text not null,
+    source_ip text not null,
+    created_at text not null
+);
+
+create index if not exists idx_api_write_events_key_created
+    on api_write_events(key_prefix, created_at);
+
+create index if not exists idx_api_write_events_ip_created
+    on api_write_events(source_ip, created_at);
+
+create table if not exists api_auth_failure_events (
+    id integer primary key,
+    source_ip text not null,
+    created_at text not null
+);
+
+create index if not exists idx_api_auth_failure_events_ip_created
+    on api_auth_failure_events(source_ip, created_at);

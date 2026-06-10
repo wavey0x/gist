@@ -173,8 +173,13 @@ def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
         "avatar_url": "https://github.com/wavey0x.png?size=64",
     }
     assert "token" not in body
-    assert "scopes" not in body
-    assert "can_delete_gists" not in body
+    assert set(body) == {
+        "name",
+        "key",
+        "key_prefix",
+        "github_login",
+        "avatar_url",
+    }
 
     cookie = response.headers["Set-Cookie"]
     assert cookie.startswith(f"{WEB_SESSION_COOKIE_NAME}=")

@@ -133,8 +133,7 @@ Frontend environment variables:
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `GIST_API_BASE_URL` | `http://localhost:3001` | Backend base URL used by server-rendered pages. The hosted Wavey frontend falls back to `https://api.wavey.info` when served from `gist.wavey.info`. |
-| `WAVEY_API_BASE_URL` | unset | Backward-compatible alias for existing Wavey deployments. |
+| `GIST_API_BASE_URL` | `http://localhost:3001` | Backend base URL used by server-rendered pages. Set this explicitly in production. |
 | `SITE_BASE_URL` | deployment-specific | Canonical public frontend base URL. |
 | `GIST_BRAND_NAME` | `wavey` | Brand name shown before `gist` in the compact gist-page brand mark. |
 | `GIST_SHOW_BRANDING` | `false` | Show the compact gist-page brand mark. Use `true`, `1`, `yes`, or `on` to enable it. |
