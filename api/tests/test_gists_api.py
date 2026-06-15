@@ -56,6 +56,7 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     assert public_body["author_name"] == "creator"
     assert public_body["revision_number"] == 1
     assert public_body["latest_revision_number"] == 1
+    assert public_body["created_at"] == body["created_at"]
     assert "<h1>Hello</h1>" in public_body["rendered_html"]
     assert "disabled" in public_body["rendered_html"]
     assert "url" not in public_body
@@ -130,6 +131,7 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     assert latest_body["author_name"] == "creator"
     assert latest_body["revision_number"] == 2
     assert latest_body["latest_revision_number"] == 2
+    assert latest_body["created_at"] == body["created_at"]
     assert len(latest_body["history"]) == 2
     assert latest_body["history"][0]["revision_number"] == 2
     assert latest_body["history"][0]["is_latest"] is True
@@ -145,6 +147,7 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     assert first_revision_body["author_name"] == "creator"
     assert first_revision_body["revision_number"] == 1
     assert first_revision_body["latest_revision_number"] == 2
+    assert first_revision_body["created_at"] == body["created_at"]
 
     assert client.get(f"/api/v1/gists/{body['id']}/revisions/0/render").status_code == 404
     assert client.get(f"/api/v1/gists/{body['id']}/revisions/nope/render").status_code == 404

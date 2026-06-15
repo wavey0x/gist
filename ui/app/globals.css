@@ -2,6 +2,7 @@
   --page-bg: #ffffff;
   --page-fg: #1f2328;
   --muted-fg: #6e7781;
+  --subtle-fg: #8c959f;
   --border: #d0d7de;
   --button-bg: #ffffff;
   --button-bg-active: #f6f8fa;
@@ -15,6 +16,7 @@
   --page-bg: #0d1117;
   --page-fg: #e6edf3;
   --muted-fg: #8b949e;
+  --subtle-fg: #6e7681;
   --border: #30363d;
   --button-bg: #0d1117;
   --button-bg-active: #21262d;
@@ -797,15 +799,63 @@ button {
 }
 
 .gist-meta {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  color: var(--muted-fg);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.gist-date-line {
+  min-width: 0;
+}
+
+.gist-date-label {
+  color: var(--subtle-fg);
+}
+
+.gist-date-line-with-tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.gist-date-tooltip {
+  position: absolute;
+  z-index: 20;
+  top: 50%;
+  left: calc(100% + 8px);
+  width: max-content;
+  max-width: min(220px, calc(100vw - 32px));
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--button-bg);
+  box-shadow: var(--shadow);
+  color: var(--page-fg);
+  font-size: 12px;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  white-space: nowrap;
+}
+
+.gist-date-line-with-tooltip:hover .gist-date-tooltip {
+  opacity: 1;
+}
+
+.gist-author-row {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
   column-gap: 10px;
   row-gap: 3px;
-  color: var(--muted-fg);
-  font-size: 13px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
+  align-items: center;
 }
 
 .gist-author-name {

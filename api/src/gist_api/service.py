@@ -293,7 +293,7 @@ def get_public_render(app, external_id, revision_number=None):
             row = conn.execute(
                 """
                 select id, external_id, title, author_name, markdown, rendered_html,
-                       latest_revision_number, updated_at
+                       latest_revision_number, created_at, updated_at
                 from gists
                 where external_id = ? and deleted_at is null
                 """,
@@ -306,6 +306,7 @@ def get_public_render(app, external_id, revision_number=None):
             row = conn.execute(
                 """
                 select gists.id, gists.external_id, gists.latest_revision_number,
+                       gists.created_at,
                        gist_revisions.title, gist_revisions.author_name,
                        gist_revisions.markdown, gist_revisions.rendered_html,
                        gist_revisions.created_at as updated_at,
@@ -330,6 +331,7 @@ def get_public_render(app, external_id, revision_number=None):
             "rendered_html": row["rendered_html"],
             "revision_number": revision_number,
             "latest_revision_number": row["latest_revision_number"],
+            "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "history": _history_payload(
                 app,

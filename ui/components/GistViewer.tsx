@@ -25,6 +25,12 @@ const GITHUB_LOGIN_RE =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 const ETH_ENTITY_ID_CLASS_RE = /^eth-id-[a-f0-9]{12}$/;
 const ETH_ENTITY_GROUP_HOVER_CLASS = "eth-entity-group-hover";
+const GIST_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC"
+});
 
 function authorAvatarUrl(authorName: string) {
   return GITHUB_LOGIN_RE.test(authorName)
@@ -34,6 +40,18 @@ function authorAvatarUrl(authorName: string) {
 
 function authorAvatarInitial(authorName: string) {
   return authorName.trim().charAt(0).toUpperCase() || "?";
+}
+
+function formatGistDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) {
+    return value;
+  }
+  return GIST_DATE_FORMATTER.format(date);
+}
+
+function latestRevisionCreatedAt(gist: PublicGistPayload) {
+  return gist.history.find((item) => item.is_latest)?.created_at ?? gist.updated_at;
 }
 
 export function GistViewer({ chrome, gist }: GistViewerProps) {
@@ -174,6 +192,8 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
   const avatarUrl = authorAvatarUrl(gist.author_name);
   const visibleAvatarUrl =
     avatarUrl && avatarUrl !== failedAvatarUrl ? avatarUrl : null;
+  const lastEditedAt =
+    gist.latest_revision_number > 1 ? latestRevisionCreatedAt(gist) : null;
 
   return (
     <>
@@ -192,29 +212,49 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
         <div className="gist-heading">
           {headerTitle ? <h1 className="gist-title">{headerTitle}</h1> : null}
           <div className="gist-meta">
-            <span className="gist-author-line">
-              {visibleAvatarUrl ? (
-                <img
-                  className="gist-author-avatar"
-                  src={visibleAvatarUrl}
-                  alt=""
-                  width={18}
-                  height={18}
-                  onError={() => setFailedAvatarUrl(visibleAvatarUrl)}
-                />
+            <div className="gist-date-row">
+              {lastEditedAt ? (
+                <span className="gist-date-line gist-date-line-with-tooltip">
+                  <span className="gist-date-label">edited:</span>{" "}
+                  <time dateTime={lastEditedAt}>{formatGistDate(lastEditedAt)}</time>
+                  <span className="gist-date-tooltip" aria-hidden="true">
+                    created: {formatGistDate(gist.created_at)}
+                  </span>
+                </span>
               ) : (
-                <span
-                  className="gist-author-avatar gist-author-avatar-placeholder"
-                  aria-hidden="true"
-                >
-                  {authorAvatarInitial(gist.author_name)}
+                <span className="gist-date-line">
+                  <span className="gist-date-label">created:</span>{" "}
+                  <time dateTime={gist.created_at}>
+                    {formatGistDate(gist.created_at)}
+                  </time>
                 </span>
               )}
-              by <span className="gist-author-name">{gist.author_name}</span>
-            </span>
-            {gist.revision_number < gist.latest_revision_number ? (
-              <span>Revision {gist.revision_number}</span>
-            ) : null}
+            </div>
+            <div className="gist-author-row">
+              <span className="gist-author-line">
+                {visibleAvatarUrl ? (
+                  <img
+                    className="gist-author-avatar"
+                    src={visibleAvatarUrl}
+                    alt=""
+                    width={18}
+                    height={18}
+                    onError={() => setFailedAvatarUrl(visibleAvatarUrl)}
+                  />
+                ) : (
+                  <span
+                    className="gist-author-avatar gist-author-avatar-placeholder"
+                    aria-hidden="true"
+                  >
+                    {authorAvatarInitial(gist.author_name)}
+                  </span>
+                )}
+                by <span className="gist-author-name">{gist.author_name}</span>
+              </span>
+              {gist.revision_number < gist.latest_revision_number ? (
+                <span>Revision {gist.revision_number}</span>
+              ) : null}
+            </div>
           </div>
         </div>
         <div className="toolbar" aria-label="Display controls">

@@ -26,6 +26,7 @@ export type PublicGistPayload = {
   rendered_html: string;
   revision_number: number;
   latest_revision_number: number;
+  created_at: string;
   updated_at: string;
   history: RevisionHistoryItem[];
 };
@@ -71,6 +72,7 @@ function normalizePayload(gistId: string, payload: unknown): PublicGistPayload {
     typeof gist.latest_revision_number !== "number" ||
     !Number.isInteger(gist.latest_revision_number) ||
     gist.latest_revision_number < gist.revision_number ||
+    typeof gist.created_at !== "string" ||
     typeof gist.updated_at !== "string" ||
     !("title" in gist) ||
     !(gist.title === null || typeof gist.title === "string") ||
@@ -89,6 +91,7 @@ function normalizePayload(gistId: string, payload: unknown): PublicGistPayload {
     rendered_html: gist.rendered_html,
     revision_number: gist.revision_number,
     latest_revision_number: gist.latest_revision_number,
+    created_at: gist.created_at,
     updated_at: gist.updated_at,
     history: gist.history
   };
