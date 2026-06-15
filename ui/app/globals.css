@@ -985,6 +985,11 @@ button {
   overflow-wrap: anywhere;
 }
 
+.history-item-date,
+.history-item-latest {
+  color: var(--subtle-fg);
+}
+
 .markdown-body {
   color-scheme: light;
   width: 100%;

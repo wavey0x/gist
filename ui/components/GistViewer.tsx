@@ -21,6 +21,11 @@ type GistViewerProps = {
   gist: PublicGistPayload;
 };
 
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+const MONTH_MS = 30 * DAY_MS;
+const YEAR_MS = 365 * DAY_MS;
 const GITHUB_LOGIN_RE =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 const ETH_ENTITY_ID_CLASS_RE = /^eth-id-[a-f0-9]{12}$/;
@@ -54,10 +59,40 @@ function latestRevisionCreatedAt(gist: PublicGistPayload) {
   return gist.history.find((item) => item.is_latest)?.created_at ?? gist.updated_at;
 }
 
+function pluralize(value: number, singular: string) {
+  return `${value} ${singular}${value === 1 ? "" : "s"} ago`;
+}
+
+function formatRelativeDate(value: string, now: number) {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) {
+    return value;
+  }
+
+  const elapsed = Math.max(0, now - date.valueOf());
+  if (elapsed < MINUTE_MS) {
+    return "just now";
+  }
+  if (elapsed < HOUR_MS) {
+    return pluralize(Math.floor(elapsed / MINUTE_MS), "min");
+  }
+  if (elapsed < DAY_MS) {
+    return pluralize(Math.floor(elapsed / HOUR_MS), "hour");
+  }
+  if (elapsed < MONTH_MS) {
+    return pluralize(Math.floor(elapsed / DAY_MS), "day");
+  }
+  if (elapsed < YEAR_MS) {
+    return pluralize(Math.floor(elapsed / MONTH_MS), "month");
+  }
+  return pluralize(Math.floor(elapsed / YEAR_MS), "year");
+}
+
 export function GistViewer({ chrome, gist }: GistViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("rendered");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [rawCopied, setRawCopied] = useState(false);
+  const [relativeDateNow, setRelativeDateNow] = useState(() => Date.now());
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const markdownRef = useRef<HTMLElement | null>(null);
 
@@ -68,6 +103,17 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
     const timeout = window.setTimeout(() => setRawCopied(false), 1500);
     return () => window.clearTimeout(timeout);
   }, [rawCopied]);
+
+  useEffect(() => {
+    if (!historyOpen) {
+      return undefined;
+    }
+    setRelativeDateNow(Date.now());
+    const interval = window.setInterval(() => {
+      setRelativeDateNow(Date.now());
+    }, MINUTE_MS);
+    return () => window.clearInterval(interval);
+  }, [historyOpen]);
 
   useEffect(() => {
     if (viewMode !== "rendered") {
@@ -311,7 +357,16 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
                     </span>
                     <span className="history-item-meta">
                       {item.author_name}
-                      {item.is_latest ? " - latest" : ""}
+                      <span className="history-item-date">
+                        {" "}
+                        ·{" "}
+                        <time dateTime={item.created_at}>
+                          {formatRelativeDate(item.created_at, relativeDateNow)}
+                        </time>
+                      </span>
+                      {item.is_latest ? (
+                        <span className="history-item-latest"> · latest</span>
+                      ) : null}
                     </span>
                   </a>
                 ))}
