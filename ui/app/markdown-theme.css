@@ -230,6 +230,19 @@
   text-underline-offset: 2px;
 }
 
+.markdown-body a.eth-labeled-entity {
+  border-radius: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  padding: 0;
+}
+
+.markdown-body a.eth-labeled-entity.eth-tx {
+  border-radius: 4px;
+  padding: 0.05em 0.18em;
+}
+
 .markdown-body .eth-entity:hover,
 .markdown-body .eth-entity:focus-visible,
 .markdown-body .eth-entity.eth-entity-group-hover {

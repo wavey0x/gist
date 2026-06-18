@@ -13,6 +13,7 @@ from .conftest import create_gist, make_key
 FIXTURE_DIR = Path(__file__).with_name("fixtures")
 ETH_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678"
 ETH_ADDRESS_2 = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+ETH_TOKEN_ADDRESS = "0xd533a949740bb3306d119cc777fa900ba034cd52"
 ETH_TX_HASH = "0x" + "a1" * 32
 ETH_TX_HASH_2 = "0x" + "b2" * 32
 ETH_SELECTOR = "0xa9059cbb"
@@ -276,6 +277,118 @@ Mismatched tx [{mismatched_tx}](https://etherscan.io/tx/{ETH_TX_HASH})
     assert "eth-tx" not in _class_tokens(mismatched_tx_links[0])
 
 
+def test_ethereum_entity_rendering_colors_labeled_address_links():
+    short_address = f"{ETH_ADDRESS[:5]}..{ETH_ADDRESS[-3:]}"
+    short_token = f"{ETH_TOKEN_ADDRESS[:7]}..{ETH_TOKEN_ADDRESS[-4:]}"
+    short_second_address = f"{ETH_ADDRESS_2[:6]}..{ETH_ADDRESS_2[-4:]}"
+    result = render_markdown_result(
+        f"""
+Address label [attacker EOA ({short_address})](https://etherscan.io/address/{ETH_ADDRESS})
+Token label [CRV token ({short_token})](https://etherscan.io/token/{ETH_TOKEN_ADDRESS})
+Token href only [CRV token](https://etherscan.io/token/{ETH_TOKEN_ADDRESS})
+Text-only address [standalone {ETH_ADDRESS_2}](https://example.com/report)
+Mismatched label [bad ({short_second_address})](https://etherscan.io/address/{ETH_ADDRESS})
+Ambiguous href [ambiguous](https://etherscan.io/token/{ETH_TOKEN_ADDRESS}?a={ETH_ADDRESS_2})
+Disambiguated href [recipient ({short_second_address})](https://etherscan.io/token/{ETH_TOKEN_ADDRESS}?a={ETH_ADDRESS_2})
+"""
+    )
+
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+    labeled_links = [
+        root.xpath(f'.//a[normalize-space()="{label}"]')[0]
+        for label in [
+            f"attacker EOA ({short_address})",
+            f"CRV token ({short_token})",
+            "CRV token",
+            f"standalone {ETH_ADDRESS_2}",
+            f"recipient ({short_second_address})",
+        ]
+    ]
+
+    for link in labeled_links:
+        assert "eth-address" in _class_tokens(link)
+        assert "eth-labeled-entity" in _class_tokens(link)
+        assert _class_token_with_prefix(link, "eth-party-color-") is not None
+
+    token_links = [
+        root.xpath(f'.//a[normalize-space()="{label}"]')[0]
+        for label in [f"CRV token ({short_token})", "CRV token"]
+    ]
+    assert len({_entity_id(link) for link in token_links}) == 1
+    assert len(
+        {_class_token_with_prefix(link, "eth-party-color-") for link in token_links}
+    ) == 1
+
+    second_address_links = [
+        root.xpath(f'.//a[normalize-space()="{label}"]')[0]
+        for label in [
+            f"standalone {ETH_ADDRESS_2}",
+            f"recipient ({short_second_address})",
+        ]
+    ]
+    assert len({_entity_id(link) for link in second_address_links}) == 1
+
+    mismatched_link = root.xpath(
+        f'.//a[normalize-space()="bad ({short_second_address})"]'
+    )[0]
+    ambiguous_link = root.xpath('.//a[normalize-space()="ambiguous"]')[0]
+    assert "eth-entity" not in _class_tokens(mismatched_link)
+    assert "eth-entity" not in _class_tokens(ambiguous_link)
+
+
+def test_ethereum_entity_rendering_colors_labeled_transaction_links():
+    short_tx = f"{ETH_TX_HASH[:5]}..{ETH_TX_HASH[-3:]}"
+    short_second_tx = f"{ETH_TX_HASH_2[:6]}..{ETH_TX_HASH_2[-4:]}"
+    result = render_markdown_result(
+        f"""
+Tx label [ETH drain ({short_tx})](https://etherscan.io/tx/{ETH_TX_HASH})
+Tx href only [ETH drain](https://etherscan.io/tx/{ETH_TX_HASH})
+Text-only tx [standalone {ETH_TX_HASH_2}](https://example.com/report)
+Mismatched tx label [bad ({short_second_tx})](https://etherscan.io/tx/{ETH_TX_HASH})
+Ambiguous tx href [ambiguous](https://etherscan.io/tx/{ETH_TX_HASH}?related={ETH_TX_HASH_2})
+Disambiguated tx href [related ({short_second_tx})](https://etherscan.io/tx/{ETH_TX_HASH}?related={ETH_TX_HASH_2})
+"""
+    )
+
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+    labeled_links = [
+        root.xpath(f'.//a[normalize-space()="{label}"]')[0]
+        for label in [
+            f"ETH drain ({short_tx})",
+            "ETH drain",
+            f"standalone {ETH_TX_HASH_2}",
+            f"related ({short_second_tx})",
+        ]
+    ]
+
+    for link in labeled_links:
+        assert "eth-tx" in _class_tokens(link)
+        assert "eth-labeled-entity" in _class_tokens(link)
+        assert _class_token_with_prefix(link, "eth-party-color-") is None
+
+    repeated_tx_links = [
+        root.xpath(f'.//a[normalize-space()="{label}"]')[0]
+        for label in [f"ETH drain ({short_tx})", "ETH drain"]
+    ]
+    assert len({_entity_id(link) for link in repeated_tx_links}) == 1
+
+    second_tx_links = [
+        root.xpath(f'.//a[normalize-space()="{label}"]')[0]
+        for label in [
+            f"standalone {ETH_TX_HASH_2}",
+            f"related ({short_second_tx})",
+        ]
+    ]
+    assert len({_entity_id(link) for link in second_tx_links}) == 1
+
+    mismatched_link = root.xpath(
+        f'.//a[normalize-space()="bad ({short_second_tx})"]'
+    )[0]
+    ambiguous_link = root.xpath('.//a[normalize-space()="ambiguous"]')[0]
+    assert "eth-entity" not in _class_tokens(mismatched_link)
+    assert "eth-entity" not in _class_tokens(ambiguous_link)
+
+
 def test_ethereum_entity_rendering_marks_ens_selectors_and_blocks():
     result = render_markdown_result(
         f"""
@@ -388,13 +501,14 @@ def test_ethereum_entity_sanitizer_allows_only_expected_classes():
 
     allowed = render_markdown_result(
         '<span class="eth-entity eth-ens eth-selector eth-block '
-        'eth-id-abcdef123456 eth-party-color-47">'
+        'eth-labeled-entity eth-id-abcdef123456 eth-party-color-47">'
         "entity</span>"
     )
 
     assert "eth-ens" in allowed.html
     assert "eth-selector" in allowed.html
     assert "eth-block" in allowed.html
+    assert "eth-labeled-entity" in allowed.html
     assert "eth-party-color-47" in allowed.html
 
 
@@ -437,6 +551,7 @@ def test_markdown_theme_uses_generated_party_color_palette():
         "var(--eth-party-lightness) var(--eth-party-chroma) "
         "var(--eth-party-hue)"
     ) in theme_css
+    assert ".markdown-body a.eth-labeled-entity" in theme_css
     assert '.eth-address[class*="eth-party-color-"]' in theme_css
     assert '.eth-ens[class*="eth-party-color-"]' in theme_css
 
