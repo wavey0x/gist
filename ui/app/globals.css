@@ -535,23 +535,29 @@ button {
   gap: 10px;
 }
 
-.gist-list-link {
+.gist-list-content {
   min-width: 0;
   flex: 1;
   display: grid;
   gap: 3px;
   padding: 12px 0;
+}
+
+.gist-list-title-link {
   color: var(--page-fg);
   text-decoration: none;
 }
 
-.gist-list-link:hover .gist-list-title,
-.gist-list-link:focus-visible .gist-list-title {
+.gist-list-title-link:hover .gist-list-title,
+.gist-list-title-link:focus-visible .gist-list-title,
+.gist-list-meta-link:hover,
+.gist-list-meta-link:focus-visible {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.gist-list-link:focus-visible {
+.gist-list-title-link:focus-visible,
+.gist-list-meta-link:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
@@ -570,6 +576,11 @@ button {
   color: var(--muted-fg);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.gist-list-meta-link {
+  color: var(--page-fg);
+  text-decoration: none;
 }
 
 .gist-list-action {

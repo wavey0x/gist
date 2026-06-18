@@ -9,18 +9,20 @@ type RecentlyViewedRecorderProps = {
   gist: PublicGistPayload;
 };
 
-function fallbackUrl(gist: PublicGistPayload) {
-  if (gist.revision_number < gist.latest_revision_number) {
-    return `/${gist.id}/revisions/${gist.revision_number}`;
-  }
+function latestUrl(gist: PublicGistPayload) {
   return `/${gist.id}`;
+}
+
+function revisionUrl(gist: PublicGistPayload) {
+  return `/${gist.id}/revisions/${gist.revision_number}`;
 }
 
 export function RecentlyViewedRecorder({ gist }: RecentlyViewedRecorderProps) {
   useEffect(() => {
     recordRecentlyViewedGist({
       id: gist.id,
-      url: window.location.pathname || fallbackUrl(gist),
+      url: latestUrl(gist),
+      revision_url: revisionUrl(gist),
       title: getTopLevelHeading(gist) ?? gist.title,
       author_name: gist.author_name,
       revision_number: gist.revision_number,
@@ -29,7 +31,6 @@ export function RecentlyViewedRecorder({ gist }: RecentlyViewedRecorderProps) {
   }, [
     gist.author_name,
     gist.id,
-    gist.latest_revision_number,
     gist.rendered_html,
     gist.revision_number,
     gist.title

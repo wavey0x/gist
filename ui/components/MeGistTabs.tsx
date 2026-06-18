@@ -22,6 +22,7 @@ type MeGistTabsProps = {
 type ListItem = {
   id: string;
   url: string;
+  revisionUrl?: string | null;
   title: string | null;
   displayTitle?: string | null;
   authorName: string;
@@ -57,11 +58,16 @@ function formatTimestamp(value: string) {
   return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 }
 
+function revisionUrl(baseUrl: string, revisionNumber: number) {
+  return `${baseUrl.replace(/\/$/, "")}/revisions/${revisionNumber}`;
+}
+
 function myGistToListItem(gist: MyGistItem): ListItem {
   const title = displayTitle(gist.display_title, gist.title, gist.id);
   return {
     id: gist.id,
     url: gist.url,
+    revisionUrl: revisionUrl(gist.url, gist.revision_number),
     title: gist.title,
     displayTitle: gist.display_title,
     authorName: gist.author_name,
@@ -75,7 +81,8 @@ function myGistToListItem(gist: MyGistItem): ListItem {
 function recentGistToListItem(gist: RecentGistItem): ListItem {
   return {
     id: gist.id,
-    url: gist.url,
+    url: `/${gist.id}`,
+    revisionUrl: `/${gist.id}/revisions/${gist.revision_number}`,
     title: gist.title,
     authorName: gist.author_name,
     revisionNumber: gist.revision_number,
@@ -120,16 +127,29 @@ function GistList({
           return (
             <li className="gist-list-item" key={item.id}>
               <div className="gist-list-row">
-                <a className="gist-list-link" href={item.url}>
-                  <span className="gist-list-title">{title}</span>
+                <div className="gist-list-content">
+                  <a className="gist-list-title-link" href={item.url}>
+                    <span className="gist-list-title">{title}</span>
+                  </a>
                   <span className="gist-list-meta">
-                    {item.authorName} - revision {item.revisionNumber} -{" "}
+                    {item.authorName} -{" "}
+                    {item.revisionUrl ? (
+                      <a
+                        className="gist-list-meta-link"
+                        href={item.revisionUrl}
+                      >
+                        revision {item.revisionNumber}
+                      </a>
+                    ) : (
+                      <>revision {item.revisionNumber}</>
+                    )}{" "}
+                    -{" "}
                     {item.dateLabel}{" "}
                     <time dateTime={item.dateTime}>
                       {formatTimestamp(item.dateTime)}
                     </time>
                   </span>
-                </a>
+                </div>
                 {item.action ? (
                   <div className="gist-list-action">{item.action}</div>
                 ) : null}

@@ -6,6 +6,7 @@ const MAX_RECENT_GISTS = 100;
 export type RecentGistItem = {
   id: string;
   url: string;
+  revision_url?: string | null;
   title: string | null;
   author_name: string;
   revision_number: number;
@@ -21,6 +22,9 @@ function isRecentGistItem(value: unknown): value is RecentGistItem {
   return (
     typeof item.id === "string" &&
     typeof item.url === "string" &&
+    (item.revision_url === undefined ||
+      item.revision_url === null ||
+      typeof item.revision_url === "string") &&
     (item.title === null || typeof item.title === "string") &&
     typeof item.author_name === "string" &&
     typeof item.revision_number === "number" &&
