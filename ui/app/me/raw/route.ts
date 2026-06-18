@@ -16,7 +16,7 @@ function formatGistList(payload: NonNullable<Awaited<ReturnType<typeof fetchMyGi
   }
 
   for (const gist of payload.gists) {
-    const title = cleanLine(gist.title ?? gist.id);
+    const title = cleanLine(gist.display_title ?? gist.title ?? gist.id);
     lines.push(`- ${title}`);
     lines.push(`  id: ${gist.id}`);
     lines.push(`  url: ${gist.url}`);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { getTopLevelHeading } from "../lib/gist-title";
 import type { PublicGistPayload } from "../lib/gists";
 import { recordRecentlyViewedGist } from "../lib/recent-viewed";
 
@@ -20,7 +21,7 @@ export function RecentlyViewedRecorder({ gist }: RecentlyViewedRecorderProps) {
     recordRecentlyViewedGist({
       id: gist.id,
       url: window.location.pathname || fallbackUrl(gist),
-      title: gist.title,
+      title: getTopLevelHeading(gist) ?? gist.title,
       author_name: gist.author_name,
       revision_number: gist.revision_number,
       viewed_at: new Date().toISOString()
@@ -29,6 +30,7 @@ export function RecentlyViewedRecorder({ gist }: RecentlyViewedRecorderProps) {
     gist.author_name,
     gist.id,
     gist.latest_revision_number,
+    gist.rendered_html,
     gist.revision_number,
     gist.title
   ]);

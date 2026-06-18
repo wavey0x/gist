@@ -23,6 +23,7 @@ type ListItem = {
   id: string;
   url: string;
   title: string | null;
+  displayTitle?: string | null;
   authorName: string;
   revisionNumber: number;
   dateTime: string;
@@ -30,9 +31,20 @@ type ListItem = {
   action?: ReactNode;
 };
 
-function displayTitle(title: string | null, id: string) {
+function displayTitle(
+  preferredTitle: string | null | undefined,
+  title: string | null,
+  id: string
+) {
+  const trimmedPreferred = preferredTitle?.trim();
+  if (trimmedPreferred) {
+    return trimmedPreferred;
+  }
   const trimmed = title?.trim();
-  return trimmed ? trimmed : id;
+  if (trimmed) {
+    return trimmed;
+  }
+  return id;
 }
 
 function formatTimestamp(value: string) {
@@ -46,11 +58,12 @@ function formatTimestamp(value: string) {
 }
 
 function myGistToListItem(gist: MyGistItem): ListItem {
-  const title = displayTitle(gist.title, gist.id);
+  const title = displayTitle(gist.display_title, gist.title, gist.id);
   return {
     id: gist.id,
     url: gist.url,
     title: gist.title,
+    displayTitle: gist.display_title,
     authorName: gist.author_name,
     revisionNumber: gist.revision_number,
     dateTime: gist.updated_at,
@@ -103,7 +116,7 @@ function GistList({
     <>
       <ul className="gist-list">
         {pageItems.map((item) => {
-          const title = displayTitle(item.title, item.id);
+          const title = displayTitle(item.displayTitle, item.title, item.id);
           return (
             <li className="gist-list-item" key={item.id}>
               <div className="gist-list-row">

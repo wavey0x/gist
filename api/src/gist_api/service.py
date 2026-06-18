@@ -1,4 +1,5 @@
 import hashlib
+import html
 import re
 import sqlite3
 
@@ -11,6 +12,8 @@ from .markdown import render_markdown_result, render_version
 
 REVISION_RE = re.compile(r"^[1-9][0-9]*$")
 SHA_RE = re.compile(r"^[a-f0-9]{64}$")
+FIRST_H1_RE = re.compile(r"<h1(?:\s[^>]*)?>([\s\S]*?)</h1>", re.IGNORECASE)
+TAG_RE = re.compile(r"<[^>]*>")
 
 
 def public_url(app, external_id):
@@ -39,6 +42,19 @@ def normalize_title(value, *, present=True):
     if len(title) > 200:
         raise GistError("invalid_request", "title is too long", 400)
     return title
+
+
+def _top_level_heading(rendered_html):
+    match = FIRST_H1_RE.search(rendered_html or "")
+    if not match:
+        return None
+    text = html.unescape(TAG_RE.sub("", match.group(1)))
+    title = " ".join(text.split())
+    return title or None
+
+
+def display_title(title, rendered_html, external_id):
+    return title or _top_level_heading(rendered_html) or external_id
 
 
 def normalize_author_name(value):
@@ -225,11 +241,15 @@ def list_gists_created_by_key(app, key_id, *, limit=100):
         rows = conn.execute(
             """
             select gists.external_id, gists.title, gists.author_name,
-                   gists.latest_revision_number, gists.created_at, gists.updated_at
+                   gists.latest_revision_number, gists.created_at, gists.updated_at,
+                   latest_revision.rendered_html
             from gists
             join gist_revisions as first_revision
               on first_revision.gist_id = gists.id
              and first_revision.revision_number = 1
+            join gist_revisions as latest_revision
+              on latest_revision.gist_id = gists.id
+             and latest_revision.revision_number = gists.latest_revision_number
             where first_revision.created_by_key_id = ?
               and gists.deleted_at is null
             order by gists.updated_at desc
@@ -244,6 +264,11 @@ def list_gists_created_by_key(app, key_id, *, limit=100):
                 "id": row["external_id"],
                 "url": public_url(app, row["external_id"]),
                 "title": row["title"],
+                "display_title": display_title(
+                    row["title"],
+                    row["rendered_html"],
+                    row["external_id"],
+                ),
                 "author_name": row["author_name"],
                 "revision_number": row["latest_revision_number"],
                 "updated_at": row["updated_at"],

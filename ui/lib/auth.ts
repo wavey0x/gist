@@ -16,6 +16,7 @@ export type MyGistItem = {
   id: string;
   url: string;
   title: string | null;
+  display_title?: string | null;
   author_name: string;
   revision_number: number;
   updated_at: string;
@@ -62,6 +63,9 @@ function isMyGistItem(value: unknown): value is MyGistItem {
     typeof item.id === "string" &&
     typeof item.url === "string" &&
     (item.title === null || typeof item.title === "string") &&
+    (item.display_title === undefined ||
+      item.display_title === null ||
+      typeof item.display_title === "string") &&
     typeof item.author_name === "string" &&
     typeof item.revision_number === "number" &&
     Number.isInteger(item.revision_number) &&
