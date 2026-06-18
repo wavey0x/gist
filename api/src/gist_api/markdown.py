@@ -17,9 +17,9 @@ from lxml import etree, html
 
 logger = logging.getLogger(__name__)
 
-SANITIZER_CONFIG_VERSION = "2026-06-18.1"
+SANITIZER_CONFIG_VERSION = "2026-06-18.2"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
-ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.1"
+ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.2"
 HIGHLIGHT_GRAMMAR_SET = "all"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -90,12 +90,16 @@ SAFE_ETHEREUM_CLASSES = {
     "eth-tx",
 }
 SAFE_EXACT_CLASSES = {"highlight", *SAFE_ETHEREUM_CLASSES}
+ETHEREUM_ID_CLASS_RE = re.compile(r"^eth-id-[a-f0-9]{12}$")
+ETHEREUM_PARTY_COLOR_CLASS_RE = re.compile(
+    r"^eth-party-color-(?:[0-3][0-9]|4[0-7])$"
+)
 SAFE_CLASS_PATTERNS = (
     re.compile(r"^highlight-(source|text)-[A-Za-z0-9_.+-]+$"),
     re.compile(r"^language-[A-Za-z0-9_.+-]+$"),
     re.compile(r"^pl-[A-Za-z0-9_-]+$"),
-    re.compile(r"^eth-id-[a-f0-9]{12}$"),
-    re.compile(r"^eth-party-color-(?:[0-3][0-9]|4[0-7])$"),
+    ETHEREUM_ID_CLASS_RE,
+    ETHEREUM_PARTY_COLOR_CLASS_RE,
 )
 ETHEREUM_PARTY_COLOR_KINDS = {"address", "ens"}
 ETHEREUM_PARTY_COLOR_COUNT = 48
@@ -484,9 +488,6 @@ def _ethereum_entity_digest(entity):
 def _ethereum_entity_classes(entity, *, labeled=False):
     digest = _ethereum_entity_digest(entity)
     classes = ["eth-entity", f"eth-{entity.kind}", f"eth-id-{digest[:12]}"]
-    if entity.kind in ETHEREUM_PARTY_COLOR_KINDS:
-        color_index = int(digest[:8], 16) % ETHEREUM_PARTY_COLOR_COUNT
-        classes.append(f"eth-party-color-{color_index:02d}")
     if labeled:
         classes.append("eth-labeled-entity")
     return " ".join(classes)
@@ -494,6 +495,54 @@ def _ethereum_entity_classes(entity, *, labeled=False):
 
 def _set_ethereum_entity_classes(element, entity, *, labeled=False):
     element.attrib["class"] = _ethereum_entity_classes(entity, labeled=labeled)
+
+
+def _element_class_tokens(element):
+    return element.attrib.get("class", "").split()
+
+
+def _ethereum_entity_id_class(classes):
+    return next(
+        (
+            class_name
+            for class_name in classes
+            if ETHEREUM_ID_CLASS_RE.fullmatch(class_name)
+        ),
+        None,
+    )
+
+
+def _has_ethereum_party_color_kind(classes):
+    return any(f"eth-{kind}" in classes for kind in ETHEREUM_PARTY_COLOR_KINDS)
+
+
+def _assign_ethereum_party_colors(root):
+    color_by_entity_id = {}
+    for element in root.iter():
+        if not isinstance(element.tag, str):
+            continue
+        classes = _element_class_tokens(element)
+        next_classes = [
+            class_name
+            for class_name in classes
+            if not ETHEREUM_PARTY_COLOR_CLASS_RE.fullmatch(class_name)
+        ]
+        entity_id = _ethereum_entity_id_class(classes)
+        if entity_id is None or not _has_ethereum_party_color_kind(classes):
+            if len(next_classes) != len(classes):
+                element.attrib["class"] = " ".join(next_classes)
+            continue
+
+        color_class = color_by_entity_id.get(entity_id)
+        if color_class is None:
+            color_class = (
+                f"eth-party-color-"
+                f"{len(color_by_entity_id) % ETHEREUM_PARTY_COLOR_COUNT:02d}"
+            )
+            color_by_entity_id[entity_id] = color_class
+
+        next_classes.append(color_class)
+        element.attrib["class"] = " ".join(next_classes)
 
 
 def _ethereum_text_matches(value):
@@ -643,6 +692,7 @@ def _post_process_ethereum_entities(root):
     _post_process_ethereum_links(root)
     _post_process_ethereum_inline_code(root)
     _wrap_plain_ethereum_entities(root)
+    _assign_ethereum_party_colors(root)
 
 
 def _code_text(pre):

@@ -14,6 +14,8 @@ FIXTURE_DIR = Path(__file__).with_name("fixtures")
 ETH_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678"
 ETH_ADDRESS_2 = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
 ETH_TOKEN_ADDRESS = "0xd533a949740bb3306d119cc777fa900ba034cd52"
+ETH_ATTACKER_ADDRESS = "0x6952d9246e9aFE8B887B2877225163436F78E97F"
+ETH_PROCESSOR_ADDRESS = "0x737901bea3eeb88459df9ef1BE8fF3Ae1B42A2ba"
 ETH_TX_HASH = "0x" + "a1" * 32
 ETH_TX_HASH_2 = "0x" + "b2" * 32
 ETH_SELECTOR = "0xa9059cbb"
@@ -231,6 +233,35 @@ At block 22481234.
     for element in [*selector_entities, *block_entities]:
         assert _class_token_with_prefix(element, "eth-party-color-") is None
         assert _class_token_with_prefix(element, "eth-tx-color-") is None
+
+
+def test_ethereum_entity_rendering_uses_document_local_party_colors():
+    result = render_markdown_result(
+        f"""
+[attacker EOA (0x695..97F)](https://etherscan.io/address/{ETH_ATTACKER_ADDRESS})
+[RollupProcessor (0x737..2ba)](https://etherscan.io/address/{ETH_PROCESSOR_ADDRESS})
+[same attacker (0x695..97F)](https://etherscan.io/address/{ETH_ATTACKER_ADDRESS})
+"""
+    )
+
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+    attacker_links = root.xpath('.//a[contains(normalize-space(), "0x695..97F")]')
+    processor_links = root.xpath('.//a[contains(normalize-space(), "0x737..2ba")]')
+    assert len(attacker_links) == 2
+    assert len(processor_links) == 1
+
+    attacker_colors = {
+        _class_token_with_prefix(element, "eth-party-color-")
+        for element in attacker_links
+    }
+    processor_color = _class_token_with_prefix(
+        processor_links[0], "eth-party-color-"
+    )
+
+    assert len(attacker_colors) == 1
+    assert next(iter(attacker_colors)) is not None
+    assert processor_color is not None
+    assert processor_color not in attacker_colors
 
 
 def test_ethereum_entity_rendering_inferrs_compact_abbreviated_links():
@@ -509,7 +540,15 @@ def test_ethereum_entity_sanitizer_allows_only_expected_classes():
     assert "eth-selector" in allowed.html
     assert "eth-block" in allowed.html
     assert "eth-labeled-entity" in allowed.html
-    assert "eth-party-color-47" in allowed.html
+    assert "eth-party-color-00" in allowed.html
+
+    non_party = render_markdown_result(
+        '<span class="eth-entity eth-selector eth-id-abcdef123456 '
+        'eth-party-color-47">selector</span>'
+    )
+
+    assert "eth-selector" in non_party.html
+    assert "eth-party-color-47" not in non_party.html
 
 
 def test_markdown_theme_uses_strict_grayscale_for_transaction_hashes():
