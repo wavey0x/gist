@@ -940,7 +940,7 @@ button {
   z-index: 10;
   top: calc(100% + 8px);
   right: 0;
-  width: min(280px, calc(100vw - 32px));
+  width: min(320px, calc(100vw - 32px));
   max-height: 320px;
   overflow-y: auto;
   border: 1px solid var(--border);
@@ -949,7 +949,17 @@ button {
   box-shadow: var(--shadow);
 }
 
+.history-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.history-item-row + .history-item-row {
+  border-top: 1px solid var(--border);
+}
+
 .history-item {
+  min-width: 0;
   display: grid;
   gap: 2px;
   padding: 9px 10px;
@@ -957,19 +967,40 @@ button {
   text-decoration: none;
 }
 
-.history-item + .history-item {
-  border-top: 1px solid var(--border);
-}
-
 .history-item:hover,
 .history-item:focus-visible,
-.history-item[aria-current="page"] {
+.history-item[aria-current="page"],
+.history-diff-link:hover,
+.history-diff-link:focus-visible,
+.history-diff-link[aria-current="page"] {
   background: var(--button-bg-active);
 }
 
-.history-item:focus-visible {
+.history-item:focus-visible,
+.history-diff-link:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
+}
+
+.history-diff-link {
+  width: 44px;
+  min-height: 100%;
+  display: inline-grid;
+  place-items: center;
+  border-left: 1px solid var(--border);
+  background: var(--button-bg-active);
+  color: var(--button-fg);
+  text-decoration: none;
+}
+
+.history-diff-link svg {
+  opacity: 0.82;
+}
+
+.history-diff-link:hover svg,
+.history-diff-link:focus-visible svg,
+.history-diff-link[aria-current="page"] svg {
+  opacity: 1;
 }
 
 .history-item-title {
@@ -1088,6 +1119,22 @@ button {
 .raw-viewer:hover .raw-copy-button,
 .raw-viewer:focus-within .raw-copy-button {
   opacity: 1;
+}
+
+.diff-viewer {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.diff-viewer-loading {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--button-bg-active);
+  color: var(--muted-fg);
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .not-found,

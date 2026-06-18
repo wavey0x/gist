@@ -4,21 +4,25 @@ import {
   Check,
   Copy,
   FileCode,
+  FileDiff,
   History,
   TextSearch
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { getGistHeaderTitle } from "../lib/gist-title";
-import type { PublicGistPayload } from "../lib/gists";
+import type { PublicGistPayload, RevisionHistoryItem } from "../lib/gists";
 import type { SiteChromeConfig } from "../lib/site-config";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
 import { ThemeToggle } from "./ThemeToggle";
 
-type ViewMode = "rendered" | "raw";
+type ViewMode = "rendered" | "raw" | "custom";
 
 type GistViewerProps = {
   chrome: SiteChromeConfig;
   gist: PublicGistPayload;
+  customContent?: ReactNode;
+  customView?: "diff";
 };
 
 const MINUTE_MS = 60 * 1000;
@@ -88,12 +92,20 @@ function formatRelativeDate(value: string, now: number) {
   return pluralize(Math.floor(elapsed / YEAR_MS), "year");
 }
 
-export function GistViewer({ chrome, gist }: GistViewerProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("rendered");
+export function GistViewer({
+  chrome,
+  gist,
+  customContent = null,
+  customView
+}: GistViewerProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    customContent ? "custom" : "rendered"
+  );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [rawCopied, setRawCopied] = useState(false);
   const [relativeDateNow, setRelativeDateNow] = useState(() => Date.now());
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const historyControlRef = useRef<HTMLDivElement | null>(null);
   const markdownRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -114,6 +126,42 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
     }, MINUTE_MS);
     return () => window.clearInterval(interval);
   }, [historyOpen]);
+
+  useEffect(() => {
+    if (!historyOpen) {
+      return undefined;
+    }
+
+    function handleDocumentPointerDown(event: PointerEvent) {
+      const historyControl = historyControlRef.current;
+      if (
+        historyControl &&
+        event.target instanceof Node &&
+        !historyControl.contains(event.target)
+      ) {
+        setHistoryOpen(false);
+      }
+    }
+
+    function handleDocumentKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setHistoryOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    document.addEventListener("keydown", handleDocumentKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+      document.removeEventListener("keydown", handleDocumentKeyDown);
+    };
+  }, [historyOpen]);
+
+  useEffect(() => {
+    if (viewMode === "custom" && !customContent) {
+      setViewMode("rendered");
+    }
+  }, [customContent, viewMode]);
 
   useEffect(() => {
     if (viewMode !== "rendered") {
@@ -216,12 +264,15 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
   }, [gist.rendered_html, viewMode]);
 
   function applyViewMode(nextViewMode: ViewMode) {
+    if (nextViewMode === "custom" && !customContent) {
+      return;
+    }
     setViewMode(nextViewMode);
     setRawCopied(false);
   }
 
-  function toggleViewMode() {
-    applyViewMode(viewMode === "rendered" ? "raw" : "rendered");
+  function toggleRawMode() {
+    applyViewMode(viewMode === "raw" ? "rendered" : "raw");
   }
 
   async function copyRawMarkdown() {
@@ -233,13 +284,18 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
     }
   }
 
-  const nextViewMode = viewMode === "rendered" ? "raw" : "rendered";
+  const nextRawViewMode = viewMode === "raw" ? "rendered" : "raw";
   const headerTitle = getGistHeaderTitle(gist);
   const avatarUrl = authorAvatarUrl(gist.author_name);
   const visibleAvatarUrl =
     avatarUrl && avatarUrl !== failedAvatarUrl ? avatarUrl : null;
   const lastEditedAt =
     gist.latest_revision_number > 1 ? latestRevisionCreatedAt(gist) : null;
+  const customDiffIsCurrent = viewMode === "custom" && customView === "diff";
+
+  function historyDiffUrl(item: RevisionHistoryItem) {
+    return `${item.url.replace(/\/$/, "")}/diff`;
+  }
 
   return (
     <>
@@ -308,20 +364,20 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
             type="button"
             className="icon-button"
             aria-label={
-              nextViewMode === "raw"
+              nextRawViewMode === "raw"
                 ? "View raw Markdown"
                 : "View rendered Markdown"
             }
-            title={nextViewMode === "raw" ? "Raw" : "Rendered"}
-            onClick={toggleViewMode}
+            title={nextRawViewMode === "raw" ? "Raw" : "Rendered"}
+            onClick={toggleRawMode}
           >
-            {nextViewMode === "raw" ? (
+            {nextRawViewMode === "raw" ? (
               <FileCode aria-hidden="true" size={18} strokeWidth={1.8} />
             ) : (
               <TextSearch aria-hidden="true" size={18} strokeWidth={1.8} />
             )}
           </button>
-          <div className="history-control">
+          <div className="history-control" ref={historyControlRef}>
             <button
               type="button"
               className="icon-button"
@@ -340,36 +396,65 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
                 role="menu"
                 aria-label="Revision history"
               >
-                {gist.history.map((item) => (
-                  <a
-                    key={item.revision_number}
-                    className="history-item"
-                    href={item.url}
-                    aria-current={
-                      item.revision_number === gist.revision_number
-                        ? "page"
-                        : undefined
-                    }
-                    role="menuitem"
-                  >
-                    <span className="history-item-title">
-                      Revision {item.revision_number}
-                    </span>
-                    <span className="history-item-meta">
-                      {item.author_name}
-                      <span className="history-item-date">
-                        {" "}
-                        ·{" "}
-                        <time dateTime={item.created_at}>
-                          {formatRelativeDate(item.created_at, relativeDateNow)}
-                        </time>
-                      </span>
-                      {item.is_latest ? (
-                        <span className="history-item-latest"> · latest</span>
+                {gist.history.map((item) => {
+                  const revisionIsCurrent =
+                    !customDiffIsCurrent &&
+                    item.revision_number === gist.revision_number;
+                  const diffIsCurrent =
+                    customDiffIsCurrent &&
+                    item.revision_number === gist.revision_number;
+
+                  return (
+                    <div
+                      key={item.revision_number}
+                      className="history-item-row"
+                      role="none"
+                    >
+                      <a
+                        className="history-item"
+                        href={item.url}
+                        aria-current={revisionIsCurrent ? "page" : undefined}
+                        role="menuitem"
+                      >
+                        <span className="history-item-title">
+                          Revision {item.revision_number}
+                        </span>
+                        <span className="history-item-meta">
+                          {item.author_name}
+                          <span className="history-item-date">
+                            {" "}
+                            ·{" "}
+                            <time dateTime={item.created_at}>
+                              {formatRelativeDate(
+                                item.created_at,
+                                relativeDateNow
+                              )}
+                            </time>
+                          </span>
+                          {item.is_latest ? (
+                            <span className="history-item-latest"> · latest</span>
+                          ) : null}
+                        </span>
+                      </a>
+                      {item.revision_number > 1 ? (
+                        <a
+                          className="history-diff-link"
+                          href={historyDiffUrl(item)}
+                          aria-label={`Compare revision ${item.revision_number} with previous revision`}
+                          aria-current={diffIsCurrent ? "page" : undefined}
+                          title="Diff"
+                          role="menuitem"
+                        >
+                          <FileDiff
+                            aria-hidden="true"
+                            size={16}
+                            strokeWidth={1.8}
+                          />
+                        </a>
                       ) : null}
-                    </span>
-                  </a>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             ) : null}
           </div>
@@ -383,6 +468,8 @@ export function GistViewer({ chrome, gist }: GistViewerProps) {
           className="markdown-body"
           dangerouslySetInnerHTML={{ __html: gist.rendered_html }}
         />
+      ) : viewMode === "custom" && customContent ? (
+        customContent
       ) : (
         <div className="raw-viewer">
           <button
