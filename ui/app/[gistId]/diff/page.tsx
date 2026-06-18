@@ -62,6 +62,7 @@ export default async function GistDiffPage({ params }: PageProps) {
         customView="diff"
         customContent={
           <RevisionDiffViewer
+            key={`${previousRevision.revision_number}-${gist.revision_number}`}
             gist={gist}
             previousRevision={previousRevision}
           />
