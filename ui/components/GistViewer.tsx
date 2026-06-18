@@ -40,6 +40,12 @@ const GIST_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
   timeZone: "UTC"
 });
+const GIST_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: true,
+  timeZone: "UTC"
+});
 
 function authorAvatarUrl(authorName: string) {
   return GITHUB_LOGIN_RE.test(authorName)
@@ -57,6 +63,14 @@ function formatGistDate(value: string) {
     return value;
   }
   return GIST_DATE_FORMATTER.format(date);
+}
+
+function formatGistTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) {
+    return value;
+  }
+  return `${GIST_DATE_FORMATTER.format(date)} ${GIST_TIME_FORMATTER.format(date)} UTC`;
 }
 
 function latestRevisionCreatedAt(gist: PublicGistPayload) {
@@ -291,6 +305,21 @@ export function GistViewer({
     avatarUrl && avatarUrl !== failedAvatarUrl ? avatarUrl : null;
   const lastEditedAt =
     gist.latest_revision_number > 1 ? latestRevisionCreatedAt(gist) : null;
+  const dateTooltipRows = lastEditedAt
+    ? [
+        { label: "created", value: gist.created_at },
+        { label: "edited", value: lastEditedAt }
+      ]
+    : [{ label: "created", value: gist.created_at }];
+  const dateTooltip = (
+    <span className="gist-date-tooltip" aria-hidden="true">
+      {dateTooltipRows.map((row) => (
+        <span className="gist-date-tooltip-row" key={row.label}>
+          {row.label}: {formatGistTimestamp(row.value)}
+        </span>
+      ))}
+    </span>
+  );
   const customDiffIsCurrent = viewMode === "custom" && customView === "diff";
 
   function historyDiffUrl(item: RevisionHistoryItem) {
@@ -319,16 +348,15 @@ export function GistViewer({
                 <span className="gist-date-line gist-date-line-with-tooltip">
                   <span className="gist-date-label">edited:</span>{" "}
                   <time dateTime={lastEditedAt}>{formatGistDate(lastEditedAt)}</time>
-                  <span className="gist-date-tooltip" aria-hidden="true">
-                    created: {formatGistDate(gist.created_at)}
-                  </span>
+                  {dateTooltip}
                 </span>
               ) : (
-                <span className="gist-date-line">
+                <span className="gist-date-line gist-date-line-with-tooltip">
                   <span className="gist-date-label">created:</span>{" "}
                   <time dateTime={gist.created_at}>
                     {formatGistDate(gist.created_at)}
                   </time>
+                  {dateTooltip}
                 </span>
               )}
             </div>

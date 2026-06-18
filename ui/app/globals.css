@@ -871,16 +871,18 @@ button {
   z-index: 20;
   top: 50%;
   left: calc(100% + 8px);
+  display: grid;
+  gap: 2px;
   width: max-content;
-  max-width: min(220px, calc(100vw - 32px));
-  padding: 4px 7px;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 5px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--button-bg);
   box-shadow: var(--shadow);
   color: var(--page-fg);
   font-size: 12px;
-  line-height: 1.2;
+  line-height: 1.35;
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%);
@@ -888,6 +890,10 @@ button {
     opacity 120ms ease,
     transform 120ms ease;
   white-space: nowrap;
+}
+
+.gist-date-tooltip-row {
+  display: block;
 }
 
 .gist-date-line-with-tooltip:hover .gist-date-tooltip {
