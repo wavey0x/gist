@@ -103,6 +103,7 @@ SAFE_CLASS_PATTERNS = (
 )
 ETHEREUM_PARTY_COLOR_KINDS = {"address", "ens"}
 ETHEREUM_PARTY_COLOR_COUNT = 48
+ETHEREUM_HREF_ENTITY_PRIORITY = ("tx", "address", "block", "ens")
 ETHEREUM_FULL_VALUE_PATTERN = r"0x(?:[0-9A-Fa-f]{64}|[0-9A-Fa-f]{40})"
 ETHEREUM_FULL_ENTITY_RE = re.compile(
     rf"(?<![0-9A-Za-z])({ETHEREUM_FULL_VALUE_PATTERN})(?![0-9A-Za-z])"
@@ -374,9 +375,8 @@ def _ethereum_entities_from_href(href):
     return _unique_entities(entities)
 
 
-def _ethereum_entity_from_href(href):
-    entities = _ethereum_entities_from_href(href)
-    for kind in ("tx", "address", "block", "ens"):
+def _preferred_ethereum_entity(entities):
+    for kind in ETHEREUM_HREF_ENTITY_PRIORITY:
         for entity in entities:
             if entity.kind == kind:
                 return entity
@@ -423,11 +423,14 @@ def _ethereum_abbreviated_text_values(text):
     return [match.group(1) for match in ETHEREUM_ABBREVIATED_ENTITY_RE.finditer(text)]
 
 
-def _matching_entity_from_label(text, href_entities, kind):
+def _matching_entity_from_label(
+    text_entities,
+    abbreviated_values,
+    href_entities,
+    kind,
+):
     href_matches = [entity for entity in href_entities if entity.kind == kind]
-    text_matches = [
-        entity for entity in _ethereum_full_text_entities(text) if entity.kind == kind
-    ]
+    text_matches = [entity for entity in text_entities if entity.kind == kind]
     if len(text_matches) == 1:
         text_match = text_matches[0]
         if not href_matches or text_match in href_matches:
@@ -436,7 +439,6 @@ def _matching_entity_from_label(text, href_entities, kind):
     if len(text_matches) > 1:
         return None
 
-    abbreviated_values = _ethereum_abbreviated_text_values(text)
     if abbreviated_values:
         matches = _unique_entities(
             entity
@@ -450,7 +452,7 @@ def _matching_entity_from_label(text, href_entities, kind):
             return matches[0]
         return None
 
-    if _ethereum_full_text_entities(text):
+    if text_entities:
         return None
 
     href_matches = _unique_entities(href_matches)
@@ -460,21 +462,27 @@ def _matching_entity_from_label(text, href_entities, kind):
 
 
 def _ethereum_link_entity(text, href):
-    href_entities = _ethereum_entities_from_href(href)
-
     entity = _ethereum_entity_from_value(text)
     if entity is not None:
         return entity, False
 
-    href_entity = _ethereum_entity_from_href(href)
+    href_entities = _ethereum_entities_from_href(href)
+    href_entity = _preferred_ethereum_entity(href_entities)
     if (
         href_entity is not None
         and _ethereum_link_text_matches_href_entity(text, href_entity)
     ):
         return href_entity, False
 
+    text_entities = _ethereum_full_text_entities(text)
+    abbreviated_values = _ethereum_abbreviated_text_values(text)
     for kind in ("address", "tx"):
-        labeled_entity = _matching_entity_from_label(text, href_entities, kind)
+        labeled_entity = _matching_entity_from_label(
+            text_entities,
+            abbreviated_values,
+            href_entities,
+            kind,
+        )
         if labeled_entity is not None:
             return labeled_entity, True
 
