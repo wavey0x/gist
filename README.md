@@ -12,7 +12,7 @@ anyone with a random gist URL can read the rendered page and raw source.
 - Server-rendered public gist pages.
 - GitHub-flavored Markdown rendering.
 - Sanitized stored HTML.
-- Immutable revision URLs.
+- Immutable revision and revision-diff URLs.
 - Read-only rendered/raw browser views.
 - Browser-local recently viewed gist list.
 - Key-backed private list of gists created by the logged-in API key.
