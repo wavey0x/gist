@@ -17,9 +17,9 @@ from lxml import etree, html
 
 logger = logging.getLogger(__name__)
 
-SANITIZER_CONFIG_VERSION = "2026-06-18.2"
+SANITIZER_CONFIG_VERSION = "2026-06-18.3"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
-ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.2"
+ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.3"
 HIGHLIGHT_GRAMMAR_SET = "all"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -83,10 +83,8 @@ SAFE_TASK_CLASSES = {"contains-task-list", "task-list-item"}
 SAFE_ETHEREUM_CLASSES = {
     "eth-entity",
     "eth-address",
-    "eth-block",
     "eth-ens",
     "eth-labeled-entity",
-    "eth-selector",
     "eth-tx",
 }
 SAFE_EXACT_CLASSES = {"highlight", *SAFE_ETHEREUM_CLASSES}
@@ -103,7 +101,7 @@ SAFE_CLASS_PATTERNS = (
 )
 ETHEREUM_PARTY_COLOR_KINDS = {"address", "ens"}
 ETHEREUM_PARTY_COLOR_COUNT = 48
-ETHEREUM_HREF_ENTITY_PRIORITY = ("tx", "address", "block", "ens")
+ETHEREUM_HREF_ENTITY_PRIORITY = ("tx", "address", "ens")
 ETHEREUM_FULL_VALUE_PATTERN = r"0x(?:[0-9A-Fa-f]{64}|[0-9A-Fa-f]{40})"
 ETHEREUM_FULL_ENTITY_RE = re.compile(
     rf"(?<![0-9A-Za-z])({ETHEREUM_FULL_VALUE_PATTERN})(?![0-9A-Za-z])"
@@ -116,10 +114,6 @@ ETHEREUM_ABBREVIATED_ENTITY_RE = re.compile(
     r"(?<![0-9A-Za-z])(0x[0-9A-Fa-f]{3,}(?:\.{2,3}|…)[0-9A-Fa-f]{3,})"
     r"(?![0-9A-Za-z])"
 )
-ETHEREUM_SELECTOR_RE = re.compile(
-    r"(?<![0-9A-Za-z])(0x[0-9A-Fa-f]{8})(?![0-9A-Za-z])"
-)
-ETHEREUM_SELECTOR_VALUE_RE = re.compile(r"^0x[0-9A-Fa-f]{8}$")
 ETHEREUM_ENS_LABEL_PATTERN = (
     r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
 )
@@ -134,12 +128,6 @@ ETHEREUM_ENS_VALUE_RE = re.compile(
     rf"^{ETHEREUM_ENS_NAME_PATTERN}$",
     re.IGNORECASE,
 )
-ETHEREUM_BLOCK_LABEL_RE = re.compile(
-    r"\b(?:block(?:\s*(?:number|no\.?))?|blocks?)\s*(?:#|:)?\s*"
-    r"([0-9][0-9,]{4,})\b",
-    re.IGNORECASE,
-)
-ETHEREUM_BLOCK_VALUE_RE = re.compile(r"^#?([0-9][0-9,]{4,})$")
 ETHEREUM_TX_HREF_RE = re.compile(
     r"/tx/(0x[0-9A-Fa-f]{64})(?=$|[/?#])",
     re.IGNORECASE,
@@ -150,10 +138,6 @@ ETHEREUM_ADDRESS_HREF_RE = re.compile(
 )
 ETHEREUM_TOKEN_HREF_RE = re.compile(
     r"/token/(0x[0-9A-Fa-f]{40})(?=$|[/?#])",
-    re.IGNORECASE,
-)
-ETHEREUM_BLOCK_HREF_RE = re.compile(
-    r"/blocks?/([0-9][0-9,]*)(?=$|[/?#])",
     re.IGNORECASE,
 )
 
@@ -315,8 +299,6 @@ def _ethereum_kind(value):
 
 def _ethereum_entity_from_value(value):
     if not ETHEREUM_FULL_VALUE_RE.fullmatch(value):
-        if ETHEREUM_SELECTOR_VALUE_RE.fullmatch(value):
-            return EthereumEntity(kind="selector", value=value.lower())
         if ETHEREUM_ENS_VALUE_RE.fullmatch(value):
             return EthereumEntity(kind="ens", value=value.lower())
         return None
@@ -324,13 +306,6 @@ def _ethereum_entity_from_value(value):
     if kind is None:
         return None
     return EthereumEntity(kind=kind, value=value.lower())
-
-
-def _ethereum_block_entity(value):
-    digits = value.replace(",", "")
-    if len(digits) < 5 or not digits.isdecimal():
-        return None
-    return EthereumEntity(kind="block", value=str(int(digits)))
 
 
 def _unique_entities(entities):
@@ -357,12 +332,6 @@ def _ethereum_entities_from_href(href):
         match = pattern.search(href)
         if match:
             entities.append(EthereumEntity(kind=kind, value=match.group(1).lower()))
-
-    match = ETHEREUM_BLOCK_HREF_RE.search(href)
-    if match:
-        entity = _ethereum_block_entity(match.group(1))
-        if entity is not None:
-            entities.append(entity)
 
     entities.extend(
         _ethereum_entity_from_value(match.group(1))
@@ -395,21 +364,7 @@ def _ethereum_abbreviated_value_matches_entity(value, entity):
 
 
 def _ethereum_link_text_matches_href_entity(text, entity):
-    if entity.kind in {"address", "tx"}:
-        return _ethereum_abbreviated_value_matches_entity(text, entity)
-
-    if entity.kind == "block":
-        block_match = ETHEREUM_BLOCK_VALUE_RE.fullmatch(text)
-        if block_match:
-            text_entity = _ethereum_block_entity(block_match.group(1))
-            return text_entity == entity
-
-        for block_match in ETHEREUM_BLOCK_LABEL_RE.finditer(text):
-            text_entity = _ethereum_block_entity(block_match.group(1))
-            if text_entity == entity:
-                return True
-
-    return False
+    return _ethereum_abbreviated_value_matches_entity(text, entity)
 
 
 def _ethereum_full_text_entities(text):
@@ -563,22 +518,8 @@ def _ethereum_text_matches(value):
                 EthereumEntityTextMatch(match.start(1), match.end(1), entity)
             )
 
-    for match in ETHEREUM_SELECTOR_RE.finditer(value):
-        entity = _ethereum_entity_from_value(match.group(1))
-        if entity is not None:
-            candidates.append(
-                EthereumEntityTextMatch(match.start(1), match.end(1), entity)
-            )
-
     for match in ETHEREUM_ENS_NAME_RE.finditer(value):
         entity = _ethereum_entity_from_value(match.group(1))
-        if entity is not None:
-            candidates.append(
-                EthereumEntityTextMatch(match.start(1), match.end(1), entity)
-            )
-
-    for match in ETHEREUM_BLOCK_LABEL_RE.finditer(value):
-        entity = _ethereum_block_entity(match.group(1))
         if entity is not None:
             candidates.append(
                 EthereumEntityTextMatch(match.start(1), match.end(1), entity)

@@ -59,8 +59,6 @@
   --color-prettylights-syntax-sublimelinter-gutter-mark: #818b98;
   --color-prettylights-syntax-variable: #953800;
   --eth-address-fg: #007a5a;
-  --eth-block-fg: #8a6300;
-  --eth-selector-fg: #0969da;
   --eth-tx-bg: #f1f1f1;
   --eth-tx-fg: #2f2f2f;
   --eth-party-lightness: 42%;
@@ -121,8 +119,6 @@
   --color-prettylights-syntax-sublimelinter-gutter-mark: #3d444d;
   --color-prettylights-syntax-variable: #ffa657;
   --eth-address-fg: #5eead4;
-  --eth-block-fg: #f2cc60;
-  --eth-selector-fg: #79c0ff;
   --eth-tx-bg: #262626;
   --eth-tx-fg: #eeeeee;
   --eth-party-lightness: 78%;
@@ -150,14 +146,6 @@
 .markdown-body .eth-address,
 .markdown-body .eth-ens {
   --eth-fg: var(--eth-address-fg);
-}
-
-.markdown-body .eth-block {
-  --eth-fg: var(--eth-block-fg);
-}
-
-.markdown-body .eth-selector {
-  --eth-fg: var(--eth-selector-fg);
 }
 
 .markdown-body .eth-tx {

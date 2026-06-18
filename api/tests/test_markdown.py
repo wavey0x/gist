@@ -204,13 +204,6 @@ At block 22481234.
         f'.//*[normalize-space()="{ETH_TX_HASH_2}" and '
         'contains(concat(" ", @class, " "), " eth-tx ")]'
     )
-    selector_entities = root.xpath(
-        './/*[contains(concat(" ", @class, " "), " eth-selector ")]'
-    )
-    block_entities = root.xpath(
-        './/*[contains(concat(" ", @class, " "), " eth-block ")]'
-    )
-
     address_color = _class_token_with_prefix(address_entities[0], "eth-party-color-")
     assert address_color is not None
     assert {address_color} == {
@@ -230,9 +223,8 @@ At block 22481234.
         assert _class_token_with_prefix(element, "eth-party-color-") is None
         assert _class_token_with_prefix(element, "eth-tx-color-") is None
 
-    for element in [*selector_entities, *block_entities]:
-        assert _class_token_with_prefix(element, "eth-party-color-") is None
-        assert _class_token_with_prefix(element, "eth-tx-color-") is None
+    assert "eth-selector" not in result.html
+    assert "eth-block" not in result.html
 
 
 def test_ethereum_entity_rendering_uses_document_local_party_colors():
@@ -420,7 +412,7 @@ Disambiguated tx href [related ({short_second_tx})](https://etherscan.io/tx/{ETH
     assert "eth-entity" not in _class_tokens(ambiguous_link)
 
 
-def test_ethereum_entity_rendering_marks_ens_selectors_and_blocks():
+def test_ethereum_entity_rendering_marks_ens_but_leaves_selectors_and_blocks_plain():
     result = render_markdown_result(
         f"""
 ENS {ENS_NAME} and linked [Yearn.ETH](https://app.ens.domains/Yearn.ETH).
@@ -433,7 +425,7 @@ Linked block [22481235](https://etherscan.io/block/22481235)
 Bare number should stay plain 22481236.
 Bare short hex should stay plain 0x123456789.
 
-Inline selector `{ETH_SELECTOR}` gets colored.
+Inline selector `{ETH_SELECTOR}` stays plain.
 Inline ENS `{ENS_NAME}` gets colored.
 
 ```
@@ -448,41 +440,21 @@ block 22481234
     ens_entities = root.xpath(
         './/*[contains(concat(" ", @class, " "), " eth-ens ")]'
     )
-    selector_entities = root.xpath(
-        './/*[contains(concat(" ", @class, " "), " eth-selector ")]'
-    )
-    block_entities = root.xpath(
-        './/*[contains(concat(" ", @class, " "), " eth-block ")]'
-    )
 
     assert len(ens_entities) == 3
-    assert len(selector_entities) == 3
-    assert len(block_entities) == 3
-
-    repeated_selectors = root.xpath(
-        f'.//*[normalize-space()="{ETH_SELECTOR}" and '
-        'contains(concat(" ", @class, " "), " eth-selector ")]'
-    )
-    assert len({_entity_id(element) for element in repeated_selectors}) == 1
-
-    repeated_blocks = root.xpath(
-        './/*[normalize-space()="22481234" or normalize-space()="22,481,234"]'
-    )
-    repeated_blocks = [
-        element
-        for element in repeated_blocks
-        if "eth-block" in _class_tokens(element)
-    ]
-    assert len(repeated_blocks) == 2
-    assert len({_entity_id(element) for element in repeated_blocks}) == 1
 
     linked_block = root.xpath('.//a[normalize-space()="22481235"]')
     assert len(linked_block) == 1
-    assert "eth-block" in _class_tokens(linked_block[0])
+    assert "eth-entity" not in _class_tokens(linked_block[0])
 
+    assert ETH_SELECTOR in result.html
+    assert "22481234" in result.html
+    assert "22,481,234" in result.html
     assert "22481236" in result.html
     assert "0x123456789" in result.html
     assert "eth-id-nope" not in result.html
+    assert "eth-selector" not in result.html
+    assert "eth-block" not in result.html
 
     code_block = root.xpath(".//pre/code")
     assert len(code_block) == 1
@@ -519,10 +491,13 @@ def test_ethereum_entity_rendering_leaves_unlinked_abbreviations_plain():
 
 def test_ethereum_entity_sanitizer_allows_only_expected_classes():
     result = render_markdown_result(
-        '<span class="eth-entity eth-id-nope eth-weird eth-party-color-48 '
-        'eth-tx-color-15 eth-tx-color-16">not an address</span>'
+        '<span class="eth-entity eth-selector eth-block eth-id-nope eth-weird '
+        'eth-party-color-48 eth-tx-color-15 eth-tx-color-16">'
+        "not an address</span>"
     )
 
+    assert "eth-selector" not in result.html
+    assert "eth-block" not in result.html
     assert "eth-id-nope" not in result.html
     assert "eth-weird" not in result.html
     assert "eth-party-color-48" not in result.html
@@ -531,23 +506,21 @@ def test_ethereum_entity_sanitizer_allows_only_expected_classes():
     assert "<span>not an address</span>" in result.html
 
     allowed = render_markdown_result(
-        '<span class="eth-entity eth-ens eth-selector eth-block '
-        'eth-labeled-entity eth-id-abcdef123456 eth-party-color-47">'
+        '<span class="eth-entity eth-ens eth-labeled-entity '
+        'eth-id-abcdef123456 eth-party-color-47">'
         "entity</span>"
     )
 
     assert "eth-ens" in allowed.html
-    assert "eth-selector" in allowed.html
-    assert "eth-block" in allowed.html
     assert "eth-labeled-entity" in allowed.html
     assert "eth-party-color-00" in allowed.html
 
     non_party = render_markdown_result(
-        '<span class="eth-entity eth-selector eth-id-abcdef123456 '
+        '<span class="eth-entity eth-tx eth-id-abcdef123456 '
         'eth-party-color-47">selector</span>'
     )
 
-    assert "eth-selector" in non_party.html
+    assert "eth-tx" in non_party.html
     assert "eth-party-color-47" not in non_party.html
 
 
@@ -584,6 +557,10 @@ def test_markdown_theme_uses_generated_party_color_palette():
     ).read_text(encoding="utf-8")
 
     assert "--eth-party-color-" not in theme_css
+    assert "--eth-block-fg" not in theme_css
+    assert "--eth-selector-fg" not in theme_css
+    assert ".eth-block" not in theme_css
+    assert ".eth-selector" not in theme_css
     assert theme_css.count("--eth-party-lightness:") == 2
     assert theme_css.count("--eth-party-chroma:") == 2
     assert (
