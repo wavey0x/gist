@@ -10,11 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "diff": "^9.0.0",
     "github-markdown-css": "^5.8.1",
     "lucide-react": "^0.555.0",
     "next": "^16.0.7",
     "react": "^19.2.1",
-    "react-diff-viewer-continued": "^4.2.2",
     "react-dom": "^19.2.1"
   },
   "overrides": {

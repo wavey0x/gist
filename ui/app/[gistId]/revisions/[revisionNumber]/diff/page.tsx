@@ -59,7 +59,7 @@ export default async function GistRevisionDiffPage({ params }: PageProps) {
   const chrome = getSiteChromeConfig();
 
   return (
-    <main className="page-shell">
+    <main className="page-shell page-shell-wide">
       <GistViewer
         chrome={chrome}
         gist={gist}
