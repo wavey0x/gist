@@ -578,6 +578,36 @@ button {
   line-height: 1.4;
 }
 
+.gist-list-author {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: -3px;
+}
+
+.gist-list-avatar {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.gist-list-avatar-placeholder {
+  display: inline-grid;
+  place-items: center;
+  background: var(--button-bg-active);
+  color: var(--muted-fg);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.gist-list-author-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .gist-list-meta-link {
   color: var(--page-fg);
   text-decoration: none;

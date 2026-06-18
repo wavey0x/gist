@@ -11,6 +11,8 @@ import {
 import { DeleteGistButton } from "./DeleteGistButton";
 
 const ITEMS_PER_PAGE = 20;
+const GITHUB_LOGIN_RE =
+  /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 
 type TabId = "recent" | "mine";
 
@@ -60,6 +62,47 @@ function formatTimestamp(value: string) {
 
 function revisionUrl(baseUrl: string, revisionNumber: number) {
   return `${baseUrl.replace(/\/$/, "")}/revisions/${revisionNumber}`;
+}
+
+function authorAvatarUrl(authorName: string) {
+  return GITHUB_LOGIN_RE.test(authorName)
+    ? `https://github.com/${authorName}.png?size=40`
+    : null;
+}
+
+function authorAvatarInitial(authorName: string) {
+  return authorName.trim().charAt(0).toUpperCase() || "?";
+}
+
+function GistListAuthor({ authorName }: { authorName: string }) {
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const avatarUrl = authorAvatarUrl(authorName);
+  const visibleAvatarUrl =
+    avatarUrl && avatarUrl !== failedAvatarUrl ? avatarUrl : null;
+
+  return (
+    <span className="gist-list-author">
+      {visibleAvatarUrl ? (
+        <img
+          className="gist-list-avatar"
+          src={visibleAvatarUrl}
+          alt=""
+          width={16}
+          height={16}
+          loading="lazy"
+          onError={() => setFailedAvatarUrl(visibleAvatarUrl)}
+        />
+      ) : (
+        <span
+          className="gist-list-avatar gist-list-avatar-placeholder"
+          aria-hidden="true"
+        >
+          {authorAvatarInitial(authorName)}
+        </span>
+      )}
+      <span className="gist-list-author-name">{authorName}</span>
+    </span>
+  );
 }
 
 function myGistToListItem(gist: MyGistItem): ListItem {
@@ -132,7 +175,7 @@ function GistList({
                     <span className="gist-list-title">{title}</span>
                   </a>
                   <span className="gist-list-meta">
-                    {item.authorName} -{" "}
+                    <GistListAuthor authorName={item.authorName} /> -{" "}
                     {item.revisionUrl ? (
                       <a
                         className="gist-list-meta-link"
