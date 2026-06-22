@@ -32,12 +32,13 @@ def client(app):
     return app.test_client()
 
 
-def make_key(app, name="test", github_login=None):
+def make_key(app, name="test", github_login=None, avatar_url=None):
     with gist_connection(app) as conn:
         return create_api_key(
             conn,
             name,
             github_login=github_login,
+            avatar_url=avatar_url,
         )["key"]
 
 

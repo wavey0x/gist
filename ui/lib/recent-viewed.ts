@@ -9,6 +9,7 @@ export type RecentGistItem = {
   revision_url?: string | null;
   title: string | null;
   author_name: string;
+  author_avatar_url?: string;
   revision_number: number;
   viewed_at: string;
 };
@@ -27,6 +28,8 @@ function isRecentGistItem(value: unknown): value is RecentGistItem {
       typeof item.revision_url === "string") &&
     (item.title === null || typeof item.title === "string") &&
     typeof item.author_name === "string" &&
+    (item.author_avatar_url === undefined ||
+      typeof item.author_avatar_url === "string") &&
     typeof item.revision_number === "number" &&
     Number.isInteger(item.revision_number) &&
     item.revision_number > 0 &&

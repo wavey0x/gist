@@ -18,6 +18,7 @@ export type MyGistItem = {
   title: string | null;
   display_title?: string | null;
   author_name: string;
+  author_avatar_url?: string;
   revision_number: number;
   updated_at: string;
 };
@@ -67,6 +68,8 @@ function isMyGistItem(value: unknown): value is MyGistItem {
       item.display_title === null ||
       typeof item.display_title === "string") &&
     typeof item.author_name === "string" &&
+    (item.author_avatar_url === undefined ||
+      typeof item.author_avatar_url === "string") &&
     typeof item.revision_number === "number" &&
     Number.isInteger(item.revision_number) &&
     item.revision_number > 0 &&

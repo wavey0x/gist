@@ -53,12 +53,15 @@ Create gist API keys from this directory with `SQLITE_DB_PATH` set:
 
 ```sh
 uv run admin keys create --name <name> --github-login <github_login>
+uv run admin keys create --name <name> --avatar-file <path_to_image>
 uv run admin keys rotate <key_prefix_or_id> --github-login <github_login>
+uv run admin keys rotate <key_prefix_or_id> --avatar-url <https_url>
 ```
 
 A gist API key can create gists and update/delete gists whose first revision
-was created by that key. The `github_login` value is used only to derive the
-browser avatar URL for the key-backed web session.
+was created by that key. The `github_login` value can derive a browser avatar
+URL for key-backed web sessions. `--avatar-url` or `--avatar-file` stores an
+explicit avatar for the account and public gist bylines.
 
 ## Auth Routes
 

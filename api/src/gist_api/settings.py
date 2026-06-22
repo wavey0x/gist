@@ -25,6 +25,11 @@ def load_settings():
             "PUBLIC_GIST_BASE_URL",
             "http://localhost:3000",
         ),
+        "PUBLIC_API_BASE_URL": os.getenv(
+            "PUBLIC_API_BASE_URL",
+            "http://localhost:3001",
+        ),
+        "AVATAR_STORAGE_DIR": os.getenv("AVATAR_STORAGE_DIR"),
         "PORT": _int_env("PORT", 3001),
         "MAX_MARKDOWN_BYTES": max_markdown_bytes,
         "MAX_REQUEST_BYTES": _int_env("MAX_REQUEST_BYTES", None),

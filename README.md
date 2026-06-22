@@ -116,6 +116,8 @@ Backend environment variables:
 | --- | --- | --- |
 | `SQLITE_DB_PATH` | required | Path to the dedicated SQLite database. |
 | `PUBLIC_GIST_BASE_URL` | deployment-specific | Public frontend base URL used in API responses. |
+| `PUBLIC_API_BASE_URL` | `http://localhost:3001` | Public backend base URL used when generating stored avatar URLs. |
+| `AVATAR_STORAGE_DIR` | sibling `avatars/` directory next to the SQLite database | Directory for avatar images saved by the admin CLI. |
 | `PORT` | `3001` | Backend port when using the module entrypoint. |
 | `MAX_MARKDOWN_BYTES` | `1048576` | Maximum Markdown payload size. |
 | `MAX_REQUEST_BYTES` | `MAX_MARKDOWN_BYTES + 2048` | Maximum JSON request body size accepted by Flask. |
@@ -145,10 +147,12 @@ Run admin commands from `api/` with `SQLITE_DB_PATH` set.
 ```sh
 uv run admin keys create --name <name>
 uv run admin keys create --name <name> --github-login <github_login>
+uv run admin keys create --name <name> --avatar-file <path_to_image>
 uv run admin keys list
 uv run admin keys revoke <key_prefix_or_id>
 uv run admin keys rotate <key_prefix_or_id> --name <new_name>
 uv run admin keys rotate <key_prefix_or_id> --github-login <github_login>
+uv run admin keys rotate <key_prefix_or_id> --avatar-url <https_url>
 uv run admin gists rerender --all
 ```
 

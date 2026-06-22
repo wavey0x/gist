@@ -14,14 +14,55 @@ def test_admin_key_create_mints_gist_key_with_current_fields(
 ):
     monkeypatch.setenv("SQLITE_DB_PATH", str(tmp_path / "admin.sqlite3"))
 
-    admin_main(["keys", "create", "--name", "Alice", "--github-login", "alice"])
+    admin_main(
+        [
+            "keys",
+            "create",
+            "--name",
+            "Alice",
+            "--github-login",
+            "alice",
+            "--avatar-url",
+            "https://api.example.com/alice.png",
+        ]
+    )
 
     body = _admin_json(capsys.readouterr().out)
     assert body["name"] == "Alice"
     assert body["github_login"] == "alice"
+    assert body["avatar_url"] == "https://api.example.com/alice.png"
     assert body["key"].startswith("wapi_gist_")
     assert "domain" not in body
     assert "scopes" not in body
+
+
+def test_admin_key_create_can_store_avatar_file(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    monkeypatch.setenv("SQLITE_DB_PATH", str(tmp_path / "admin.sqlite3"))
+    monkeypatch.setenv("PUBLIC_API_BASE_URL", "https://api.example.com")
+    avatar = tmp_path / "avatar.png"
+    avatar.write_bytes(b"\x89PNG\r\n\x1a\navatar")
+
+    admin_main(
+        [
+            "keys",
+            "create",
+            "--name",
+            "Ted",
+            "--avatar-file",
+            str(avatar),
+        ]
+    )
+
+    body = _admin_json(capsys.readouterr().out)
+    assert body["avatar_url"].startswith(
+        "https://api.example.com/api/v1/avatars/"
+    )
+    assert body["avatar_url"].endswith(".png")
+    assert len(list((tmp_path / "avatars").glob("*.png"))) == 1
 
 
 def test_admin_key_list_revoke_and_rotate(monkeypatch, tmp_path, capsys):

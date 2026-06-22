@@ -47,7 +47,7 @@ const GIST_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC"
 });
 
-function authorAvatarUrl(authorName: string) {
+function fallbackAuthorAvatarUrl(authorName: string) {
   return GITHUB_LOGIN_RE.test(authorName)
     ? `https://github.com/${authorName}.png?size=64`
     : null;
@@ -300,7 +300,8 @@ export function GistViewer({
 
   const nextRawViewMode = viewMode === "raw" ? "rendered" : "raw";
   const headerTitle = getGistHeaderTitle(gist);
-  const avatarUrl = authorAvatarUrl(gist.author_name);
+  const avatarUrl =
+    gist.author_avatar_url ?? fallbackAuthorAvatarUrl(gist.author_name);
   const visibleAvatarUrl =
     avatarUrl && avatarUrl !== failedAvatarUrl ? avatarUrl : null;
   const lastEditedAt =

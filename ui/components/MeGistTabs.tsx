@@ -28,6 +28,7 @@ type ListItem = {
   title: string | null;
   displayTitle?: string | null;
   authorName: string;
+  authorAvatarUrl?: string;
   revisionNumber: number;
   dateTime: string;
   dateLabel: "viewed" | "updated";
@@ -64,7 +65,7 @@ function revisionUrl(baseUrl: string, revisionNumber: number) {
   return `${baseUrl.replace(/\/$/, "")}/revisions/${revisionNumber}`;
 }
 
-function authorAvatarUrl(authorName: string) {
+function fallbackAuthorAvatarUrl(authorName: string) {
   return GITHUB_LOGIN_RE.test(authorName)
     ? `https://github.com/${authorName}.png?size=40`
     : null;
@@ -74,9 +75,15 @@ function authorAvatarInitial(authorName: string) {
   return authorName.trim().charAt(0).toUpperCase() || "?";
 }
 
-function GistListAuthor({ authorName }: { authorName: string }) {
+function GistListAuthor({
+  authorName,
+  authorAvatarUrl
+}: {
+  authorName: string;
+  authorAvatarUrl?: string;
+}) {
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
-  const avatarUrl = authorAvatarUrl(authorName);
+  const avatarUrl = authorAvatarUrl ?? fallbackAuthorAvatarUrl(authorName);
   const visibleAvatarUrl =
     avatarUrl && avatarUrl !== failedAvatarUrl ? avatarUrl : null;
 
@@ -114,6 +121,7 @@ function myGistToListItem(gist: MyGistItem): ListItem {
     title: gist.title,
     displayTitle: gist.display_title,
     authorName: gist.author_name,
+    authorAvatarUrl: gist.author_avatar_url,
     revisionNumber: gist.revision_number,
     dateTime: gist.updated_at,
     dateLabel: "updated",
@@ -128,6 +136,7 @@ function recentGistToListItem(gist: RecentGistItem): ListItem {
     revisionUrl: `/${gist.id}/revisions/${gist.revision_number}`,
     title: gist.title,
     authorName: gist.author_name,
+    authorAvatarUrl: gist.author_avatar_url,
     revisionNumber: gist.revision_number,
     dateTime: gist.viewed_at,
     dateLabel: "viewed"
@@ -175,7 +184,10 @@ function GistList({
                     <span className="gist-list-title">{title}</span>
                   </a>
                   <span className="gist-list-meta">
-                    <GistListAuthor authorName={item.authorName} /> -{" "}
+                    <GistListAuthor
+                      authorName={item.authorName}
+                      authorAvatarUrl={item.authorAvatarUrl}
+                    /> -{" "}
                     {item.revisionUrl ? (
                       <a
                         className="gist-list-meta-link"

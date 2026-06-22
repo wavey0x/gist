@@ -37,7 +37,7 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
             )
         }
 
-    assert versions == [1]
+    assert versions == [1, 2]
     assert api_key_columns == [
         "id",
         "name",
@@ -47,6 +47,7 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
         "created_at",
         "last_used_at",
         "revoked_at",
+        "avatar_url",
     ]
     assert "web_sessions" in tables
     assert "api_write_events" in tables

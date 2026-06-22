@@ -116,6 +116,8 @@ def _row_to_api(app, row, *, include_markdown=False):
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+    if "author_avatar_url" in row.keys() and row["author_avatar_url"]:
+        body["author_avatar_url"] = row["author_avatar_url"]
     if include_markdown:
         body["markdown"] = row["markdown"]
     return body
@@ -242,7 +244,8 @@ def list_gists_created_by_key(app, key_id, *, limit=100):
             """
             select gists.external_id, gists.title, gists.author_name,
                    gists.latest_revision_number, gists.created_at, gists.updated_at,
-                   latest_revision.rendered_html
+                   latest_revision.rendered_html,
+                   author_key.avatar_url as author_avatar_url
             from gists
             join gist_revisions as first_revision
               on first_revision.gist_id = gists.id
@@ -250,6 +253,8 @@ def list_gists_created_by_key(app, key_id, *, limit=100):
             join gist_revisions as latest_revision
               on latest_revision.gist_id = gists.id
              and latest_revision.revision_number = gists.latest_revision_number
+            left join api_keys as author_key
+              on author_key.id = latest_revision.created_by_key_id
             where first_revision.created_by_key_id = ?
               and gists.deleted_at is null
             order by gists.updated_at desc
@@ -258,31 +263,39 @@ def list_gists_created_by_key(app, key_id, *, limit=100):
             (key_id, limit),
         ).fetchall()
 
-    return {
-        "gists": [
-            {
-                "id": row["external_id"],
-                "url": public_url(app, row["external_id"]),
-                "title": row["title"],
-                "display_title": display_title(
-                    row["title"],
-                    row["rendered_html"],
-                    row["external_id"],
-                ),
-                "author_name": row["author_name"],
-                "revision_number": row["latest_revision_number"],
-                "updated_at": row["updated_at"],
-            }
-            for row in rows
-        ]
-    }
+    gists = []
+    for row in rows:
+        item = {
+            "id": row["external_id"],
+            "url": public_url(app, row["external_id"]),
+            "title": row["title"],
+            "display_title": display_title(
+                row["title"],
+                row["rendered_html"],
+                row["external_id"],
+            ),
+            "author_name": row["author_name"],
+            "revision_number": row["latest_revision_number"],
+            "updated_at": row["updated_at"],
+        }
+        if row["author_avatar_url"]:
+            item["author_avatar_url"] = row["author_avatar_url"]
+        gists.append(item)
+
+    return {"gists": gists}
 
 
 def _history_payload(app, conn, external_id, gist_id, latest_revision_number):
     rows = conn.execute(
         """
-        select revision_number, created_at, author_name
+        select
+            gist_revisions.revision_number,
+            gist_revisions.created_at,
+            gist_revisions.author_name,
+            author_key.avatar_url as author_avatar_url
         from gist_revisions
+        left join api_keys as author_key
+          on author_key.id = gist_revisions.created_by_key_id
         where gist_id = ?
         order by revision_number desc
         limit 50
@@ -290,8 +303,9 @@ def _history_payload(app, conn, external_id, gist_id, latest_revision_number):
         (gist_id,),
     ).fetchall()
 
-    return [
-        {
+    history = []
+    for row in rows:
+        item = {
             "revision_number": row["revision_number"],
             "created_at": row["created_at"],
             "author_name": row["author_name"],
@@ -302,8 +316,11 @@ def _history_payload(app, conn, external_id, gist_id, latest_revision_number):
                 else revision_url(app, external_id, row["revision_number"])
             ),
         }
-        for row in rows
-    ]
+        if row["author_avatar_url"]:
+            item["author_avatar_url"] = row["author_avatar_url"]
+        history.append(item)
+
+    return history
 
 
 def get_public_render(app, external_id, revision_number=None):
@@ -317,9 +334,23 @@ def get_public_render(app, external_id, revision_number=None):
         if parsed_revision_number is None:
             row = conn.execute(
                 """
-                select id, external_id, title, author_name, markdown, rendered_html,
-                       latest_revision_number, created_at, updated_at
+                select
+                    gists.id,
+                    gists.external_id,
+                    gists.title,
+                    gists.author_name,
+                    gists.markdown,
+                    gists.rendered_html,
+                    gists.latest_revision_number,
+                    gists.created_at,
+                    gists.updated_at,
+                    author_key.avatar_url as author_avatar_url
                 from gists
+                join gist_revisions as latest_revision
+                  on latest_revision.gist_id = gists.id
+                 and latest_revision.revision_number = gists.latest_revision_number
+                left join api_keys as author_key
+                  on author_key.id = latest_revision.created_by_key_id
                 where external_id = ? and deleted_at is null
                 """,
                 (external_id,),
@@ -335,9 +366,12 @@ def get_public_render(app, external_id, revision_number=None):
                        gist_revisions.title, gist_revisions.author_name,
                        gist_revisions.markdown, gist_revisions.rendered_html,
                        gist_revisions.created_at as updated_at,
-                       gist_revisions.revision_number
+                       gist_revisions.revision_number,
+                       author_key.avatar_url as author_avatar_url
                 from gists
                 join gist_revisions on gist_revisions.gist_id = gists.id
+                left join api_keys as author_key
+                  on author_key.id = gist_revisions.created_by_key_id
                 where gists.external_id = ?
                   and gists.deleted_at is null
                   and gist_revisions.revision_number = ?
@@ -348,7 +382,7 @@ def get_public_render(app, external_id, revision_number=None):
                 raise GistError("not_found", "Not found", 404)
             revision_number = row["revision_number"]
 
-        return {
+        body = {
             "id": row["external_id"],
             "title": row["title"],
             "author_name": row["author_name"],
@@ -366,6 +400,9 @@ def get_public_render(app, external_id, revision_number=None):
                 row["latest_revision_number"],
             ),
         }
+        if row["author_avatar_url"]:
+            body["author_avatar_url"] = row["author_avatar_url"]
+        return body
 
 
 def patch_gist(app, key_id, author_name, external_id, payload):

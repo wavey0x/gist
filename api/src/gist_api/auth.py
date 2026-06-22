@@ -6,6 +6,8 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from .avatars import normalize_avatar_url
+
 
 KEY_RE = re.compile(
     r"^wapi_gist_([A-Za-z0-9_-]{8,})_([A-Za-z0-9_-]{43,})$"
@@ -17,6 +19,7 @@ class AuthResult:
     key_id: int
     name: str
     github_login: str | None
+    avatar_url: str | None
     key_value: str
     key_prefix: str
 
@@ -86,13 +89,18 @@ def _token_hash(token):
     return hashlib.sha256(token.encode("ascii")).hexdigest()
 
 
-def _avatar_url(github_login):
+def _github_avatar_url(github_login):
     if not github_login:
         return None
     return f"https://github.com/{github_login}.png?size=64"
 
 
+def account_avatar_url(github_login, avatar_url):
+    return avatar_url or _github_avatar_url(github_login)
+
+
 def session_identity(auth):
+    avatar_url = account_avatar_url(auth.github_login, auth.avatar_url)
     body = {
         "name": auth.name,
         "key": auth.key_value,
@@ -100,13 +108,15 @@ def session_identity(auth):
     }
     if auth.github_login:
         body["github_login"] = auth.github_login
-        body["avatar_url"] = _avatar_url(auth.github_login)
+    if avatar_url:
+        body["avatar_url"] = avatar_url
     return body
 
 
-def create_api_key(conn, name, github_login=None):
+def create_api_key(conn, name, github_login=None, avatar_url=None):
     name = _normalize_key_name(name)
     github_login = _normalize_github_login(github_login)
+    avatar_url = normalize_avatar_url(avatar_url)
     now = utc_now()
     for _ in range(8):
         full_key, key_prefix = _new_key_material()
@@ -116,13 +126,15 @@ def create_api_key(conn, name, github_login=None):
                 cursor = conn.execute(
                     """
                     insert into api_keys(
-                        name, github_login, key_value, key_prefix, created_at
+                        name, github_login, avatar_url, key_value, key_prefix,
+                        created_at
                     )
-                    values (?, ?, ?, ?, ?)
+                    values (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         name,
                         github_login,
+                        avatar_url,
                         full_key,
                         key_prefix,
                         now,
@@ -134,6 +146,7 @@ def create_api_key(conn, name, github_login=None):
                 "key_prefix": key_prefix,
                 "name": name,
                 "github_login": github_login,
+                "avatar_url": avatar_url,
                 "created_at": now,
             }
         except sqlite3.IntegrityError:
@@ -149,7 +162,7 @@ def verify_api_key_value(conn, api_key):
 
     row = conn.execute(
         """
-        select id, name, github_login, key_value, key_prefix
+        select id, name, github_login, avatar_url, key_value, key_prefix
         from api_keys
         where key_prefix = ? and revoked_at is null
         """,
@@ -171,6 +184,7 @@ def verify_api_key_value(conn, api_key):
             key_id=row["id"],
             name=row["name"],
             github_login=row["github_login"],
+            avatar_url=row["avatar_url"],
             key_value=row["key_value"],
             key_prefix=row["key_prefix"],
         ),
@@ -227,6 +241,7 @@ def verify_web_session(conn, token):
             api_keys.id as api_key_id,
             api_keys.name,
             api_keys.github_login,
+            api_keys.avatar_url,
             api_keys.key_value,
             api_keys.key_prefix
         from web_sessions
@@ -256,6 +271,7 @@ def verify_web_session(conn, token):
             key_id=row["api_key_id"],
             name=row["name"],
             github_login=row["github_login"],
+            avatar_url=row["avatar_url"],
             key_value=row["key_value"],
             key_prefix=row["key_prefix"],
         ),
@@ -281,7 +297,7 @@ def list_api_keys(conn):
     rows = conn.execute(
         """
         select
-            id, name, github_login, key_prefix,
+            id, name, github_login, avatar_url, key_prefix,
             created_at, last_used_at, revoked_at
         from api_keys
         order by id
@@ -293,6 +309,7 @@ def list_api_keys(conn):
             "id": row["id"],
             "name": row["name"],
             "github_login": row["github_login"],
+            "avatar_url": row["avatar_url"],
             "key_prefix": row["key_prefix"],
             "created_at": row["created_at"],
             "last_used_at": row["last_used_at"],
@@ -317,16 +334,22 @@ def revoke_api_key(conn, key_prefix_or_id):
             )
 
 
-def rotate_api_key(conn, key_prefix_or_id, name=None, github_login=_PRESERVE):
+def rotate_api_key(
+    conn,
+    key_prefix_or_id,
+    name=None,
+    github_login=_PRESERVE,
+    avatar_url=_PRESERVE,
+):
     selector_is_id = str(key_prefix_or_id).isdigit()
     if str(key_prefix_or_id).isdigit():
         row = conn.execute(
-            "select id, name, github_login from api_keys where id = ?",
+            "select id, name, github_login, avatar_url from api_keys where id = ?",
             (int(key_prefix_or_id),),
         ).fetchone()
     else:
         row = conn.execute(
-            "select id, name, github_login from api_keys where key_prefix = ?",
+            "select id, name, github_login, avatar_url from api_keys where key_prefix = ?",
             (key_prefix_or_id,),
         ).fetchone()
 
@@ -338,6 +361,10 @@ def rotate_api_key(conn, key_prefix_or_id, name=None, github_login=_PRESERVE):
         new_github_login = row["github_login"]
     else:
         new_github_login = _normalize_github_login(github_login)
+    if avatar_url is _PRESERVE:
+        new_avatar_url = row["avatar_url"]
+    else:
+        new_avatar_url = normalize_avatar_url(avatar_url)
     now = utc_now()
 
     for _ in range(8):
@@ -347,13 +374,15 @@ def rotate_api_key(conn, key_prefix_or_id, name=None, github_login=_PRESERVE):
                 cursor = conn.execute(
                     """
                     insert into api_keys(
-                        name, github_login, key_value, key_prefix, created_at
+                        name, github_login, avatar_url, key_value, key_prefix,
+                        created_at
                     )
-                    values (?, ?, ?, ?, ?)
+                    values (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         new_name,
                         new_github_login,
+                        new_avatar_url,
                         full_key,
                         key_prefix,
                         now,
@@ -375,6 +404,7 @@ def rotate_api_key(conn, key_prefix_or_id, name=None, github_login=_PRESERVE):
                 "key_prefix": key_prefix,
                 "name": new_name,
                 "github_login": new_github_login,
+                "avatar_url": new_avatar_url,
                 "created_at": now,
             }
         except sqlite3.IntegrityError:

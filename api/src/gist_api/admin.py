@@ -1,11 +1,12 @@
 import argparse
 import json
-import os
 
+from .avatars import save_avatar_file
 from .auth import create_api_key, list_api_keys, revoke_api_key, rotate_api_key
 from .db import gist_connection
 from .migrations import init_gist_database
 from .service import rerender_gists
+from .settings import load_settings
 
 
 class _AppConfig:
@@ -13,13 +14,25 @@ class _AppConfig:
 
 
 def _app():
-    _AppConfig.config = {
-        "SQLITE_DB_PATH": os.getenv("SQLITE_DB_PATH"),
-        "SQLITE_BUSY_TIMEOUT_MS": int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "5000")),
-    }
+    _AppConfig.config = load_settings()
     if not _AppConfig.config["SQLITE_DB_PATH"]:
         raise RuntimeError("SQLITE_DB_PATH must be set")
     return _AppConfig
+
+
+def _add_avatar_arguments(parser):
+    avatar = parser.add_mutually_exclusive_group()
+    avatar.add_argument("--avatar-url")
+    avatar.add_argument("--avatar-file")
+    avatar.add_argument("--clear-avatar", action="store_true")
+
+
+def _avatar_arg(app, args):
+    if args.avatar_file:
+        return save_avatar_file(app, args.avatar_file)
+    if args.clear_avatar:
+        return None
+    return args.avatar_url
 
 
 def main(argv=None):
@@ -31,6 +44,7 @@ def main(argv=None):
     create = key_commands.add_parser("create")
     create.add_argument("--name", required=True)
     create.add_argument("--github-login")
+    _add_avatar_arguments(create)
 
     list_cmd = key_commands.add_parser("list")
 
@@ -41,6 +55,7 @@ def main(argv=None):
     rotate.add_argument("key_prefix_or_id")
     rotate.add_argument("--name")
     rotate.add_argument("--github-login")
+    _add_avatar_arguments(rotate)
 
     gists = subparsers.add_parser("gists")
     gist_commands = gists.add_subparsers(dest="command", required=True)
@@ -62,6 +77,7 @@ def main(argv=None):
                     conn,
                     args.name,
                     github_login=args.github_login,
+                    avatar_url=_avatar_arg(app, args),
                 )
                 print(json.dumps(result, indent=2))
                 print("Save this key securely.")
@@ -71,14 +87,19 @@ def main(argv=None):
                 revoke_api_key(conn, args.key_prefix_or_id)
                 print(json.dumps({"revoked": True}, indent=2))
             elif args.command == "rotate":
-                if args.github_login is None:
-                    result = rotate_api_key(conn, args.key_prefix_or_id, args.name)
-                else:
-                    result = rotate_api_key(
-                        conn,
-                        args.key_prefix_or_id,
-                        args.name,
-                        github_login=args.github_login,
+                avatar_args_present = (
+                    args.avatar_url is not None or args.avatar_file or args.clear_avatar
+                )
+                rotate_kwargs = {}
+                if args.github_login is not None:
+                    rotate_kwargs["github_login"] = args.github_login
+                if avatar_args_present:
+                    rotate_kwargs["avatar_url"] = _avatar_arg(app, args)
+                result = rotate_api_key(
+                    conn,
+                    args.key_prefix_or_id,
+                    args.name,
+                    **rotate_kwargs,
                 )
                 print(json.dumps(result, indent=2))
                 print("Save this key securely.")

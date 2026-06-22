@@ -1,7 +1,9 @@
+import re
 from ipaddress import ip_address
 
 from flask import Blueprint, current_app, jsonify, request
 
+from .avatars import AVATAR_FILE_RE, send_avatar_file
 from .auth import (
     WEB_SESSION_COOKIE_NAME,
     WEB_SESSION_TTL_DAYS,
@@ -25,6 +27,7 @@ from .service import (
 
 
 gists_api = Blueprint("gists_api", __name__)
+AVATAR_ROUTE_RE = re.compile(f"^{AVATAR_FILE_RE}$")
 TRUSTED_PROXY_REMOTES = {
     str(ip_address(value))
     for value in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
@@ -150,6 +153,13 @@ def check_write_limit(auth):
 @gists_api.route("/api/v1/healthz", methods=["GET"])
 def healthz():
     return jsonify({"ok": True})
+
+
+@gists_api.route("/api/v1/avatars/<filename>", methods=["GET"])
+def avatar(filename):
+    if not AVATAR_ROUTE_RE.fullmatch(filename):
+        return error_response("not_found", "Not found", 404)
+    return send_avatar_file(filename)
 
 
 @gists_api.route("/api/v1/auth/session", methods=["POST"])

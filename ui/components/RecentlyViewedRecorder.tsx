@@ -25,11 +25,13 @@ export function RecentlyViewedRecorder({ gist }: RecentlyViewedRecorderProps) {
       revision_url: revisionUrl(gist),
       title: getTopLevelHeading(gist) ?? gist.title,
       author_name: gist.author_name,
+      author_avatar_url: gist.author_avatar_url,
       revision_number: gist.revision_number,
       viewed_at: new Date().toISOString()
     });
   }, [
     gist.author_name,
+    gist.author_avatar_url,
     gist.id,
     gist.rendered_html,
     gist.revision_number,

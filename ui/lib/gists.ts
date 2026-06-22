@@ -14,6 +14,7 @@ export type RevisionHistoryItem = {
   revision_number: number;
   created_at: string;
   author_name: string;
+  author_avatar_url?: string;
   is_latest: boolean;
   url: string;
 };
@@ -22,6 +23,7 @@ export type PublicGistPayload = {
   id: string;
   title: string | null;
   author_name: string;
+  author_avatar_url?: string;
   markdown: string;
   rendered_html: string;
   revision_number: number;
@@ -60,6 +62,8 @@ function isHistoryItem(value: unknown): value is RevisionHistoryItem {
     item.revision_number > 0 &&
     typeof item.created_at === "string" &&
     typeof item.author_name === "string" &&
+    (item.author_avatar_url === undefined ||
+      typeof item.author_avatar_url === "string") &&
     typeof item.is_latest === "boolean" &&
     typeof item.url === "string"
   );
@@ -74,6 +78,8 @@ function normalizePayload(gistId: string, payload: unknown): PublicGistPayload {
   if (
     gist.id !== gistId ||
     typeof gist.author_name !== "string" ||
+    (gist.author_avatar_url !== undefined &&
+      typeof gist.author_avatar_url !== "string") ||
     typeof gist.markdown !== "string" ||
     typeof gist.rendered_html !== "string" ||
     typeof gist.revision_number !== "number" ||
@@ -97,6 +103,7 @@ function normalizePayload(gistId: string, payload: unknown): PublicGistPayload {
     id: gist.id,
     title: gist.title,
     author_name: gist.author_name,
+    ...(gist.author_avatar_url ? { author_avatar_url: gist.author_avatar_url } : {}),
     markdown: gist.markdown,
     rendered_html: gist.rendered_html,
     revision_number: gist.revision_number,

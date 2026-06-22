@@ -360,6 +360,34 @@ def test_me_gists_lists_only_gists_created_by_session_key(client, app):
     assert "rendered_html" not in body["gists"][0]
 
 
+def test_custom_key_avatar_is_returned_with_public_and_account_gists(client, app):
+    avatar_url = "https://api.example.com/api/v1/avatars/ted.png"
+    owner_key = make_key(
+        app,
+        name="ted-mckinsey",
+        avatar_url=avatar_url,
+    )
+
+    created = create_gist(client, owner_key, "# Ted", title="Ted")
+    assert created.status_code == 201
+    created_body = created.get_json()
+
+    public = client.get(f"/api/v1/gists/{created_body['id']}/render")
+    assert public.status_code == 200
+    public_body = public.get_json()
+    assert public_body["author_name"] == "ted-mckinsey"
+    assert public_body["author_avatar_url"] == avatar_url
+    assert public_body["history"][0]["author_avatar_url"] == avatar_url
+
+    login = client.post("/api/v1/auth/session", json={"api_key": owner_key})
+    assert login.status_code == 200
+
+    response = client.get("/api/v1/me/gists")
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["gists"][0]["author_avatar_url"] == avatar_url
+
+
 def test_me_gists_display_title_falls_back_to_latest_heading(client, app):
     owner_key = make_key(app, name="owner")
 

@@ -5,6 +5,7 @@ from gist_api.auth import (
     list_api_keys,
     revoke_api_key,
     rotate_api_key,
+    session_identity,
     verify_api_key,
     verify_web_session,
 )
@@ -110,6 +111,51 @@ def test_key_rotation_can_replace_github_login(app):
 
     assert rotated["name"] == "rotate"
     assert rotated["github_login"] == "second-login"
+
+
+def test_key_creation_and_rotation_can_set_custom_avatar_url(app):
+    avatar_url = "https://api.example.com/api/v1/avatars/ted.png"
+    replacement_avatar_url = "https://api.example.com/api/v1/avatars/new.png"
+    with gist_connection(app) as conn:
+        created = create_api_key(
+            conn,
+            "ted-mckinsey",
+            avatar_url=avatar_url,
+        )
+        preserved = rotate_api_key(conn, created["key_prefix"])
+        token, auth, error = create_web_session(conn, preserved["key"])
+
+        replaced = rotate_api_key(
+            conn,
+            preserved["key_prefix"],
+            avatar_url=replacement_avatar_url,
+        )
+        cleared = rotate_api_key(
+            conn,
+            replaced["key_prefix"],
+            avatar_url="",
+        )
+
+        revoked_token, revoked_auth, revoked_error = create_web_session(
+            conn,
+            created["key"],
+        )
+        assert revoked_token is None
+        assert revoked_auth is None
+        assert revoked_error == "unauthorized"
+
+    assert created["avatar_url"] == avatar_url
+    assert preserved["avatar_url"] == avatar_url
+    assert replaced["avatar_url"] == replacement_avatar_url
+    assert cleared["avatar_url"] is None
+    assert error is None
+    assert auth.avatar_url == avatar_url
+    assert session_identity(auth) == {
+        "name": "ted-mckinsey",
+        "key": preserved["key"],
+        "key_prefix": preserved["key_prefix"],
+        "avatar_url": avatar_url,
+    }
 
 
 def test_web_session_rejects_revoked_keys(app):
