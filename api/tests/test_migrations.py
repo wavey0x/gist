@@ -37,7 +37,7 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
             )
         }
 
-    assert versions == [1, 2]
+    assert versions == [1, 8]
     assert api_key_columns == [
         "id",
         "name",
