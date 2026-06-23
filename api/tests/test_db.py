@@ -10,6 +10,7 @@ def test_sqlite_database_file_is_owner_only(tmp_path):
         {
             "SQLITE_DB_PATH": str(db_path),
             "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
+            "PUBLIC_API_BASE_URL": "https://api.example.com",
         }
     )
 

@@ -10,6 +10,7 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
         {
             "SQLITE_DB_PATH": str(tmp_path / "fresh.sqlite3"),
             "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
+            "PUBLIC_API_BASE_URL": "https://api.example.com",
         }
     )
 

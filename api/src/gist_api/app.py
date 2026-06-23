@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from flask import Flask
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -19,11 +21,27 @@ SECURITY_HEADERS = {
 }
 
 
+def _is_local_base_url(value):
+    parsed = urlparse((value or "").strip())
+    return parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+
+
+def _validate_public_api_base_url(app):
+    gist_base_url = app.config.get("PUBLIC_GIST_BASE_URL")
+    api_base_url = app.config.get("PUBLIC_API_BASE_URL")
+    if not _is_local_base_url(gist_base_url) and _is_local_base_url(api_base_url):
+        raise RuntimeError(
+            "PUBLIC_API_BASE_URL must be set for public deployments; "
+            "image URLs and sanitizer allowlists cannot use localhost"
+        )
+
+
 def create_app(config_overrides=None):
     app = Flask(__name__)
     app.config.update(load_settings())
     if config_overrides:
         app.config.update(config_overrides)
+    _validate_public_api_base_url(app)
     app.config["GIST_EXTERNAL_ID_LENGTH"] = validate_external_id_length(
         app.config.get("GIST_EXTERNAL_ID_LENGTH", DEFAULT_EXTERNAL_ID_LENGTH)
     )

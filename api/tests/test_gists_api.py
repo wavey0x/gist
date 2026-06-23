@@ -172,6 +172,7 @@ def test_configured_external_id_length_create_render_patch_and_delete(tmp_path):
         {
             "SQLITE_DB_PATH": str(tmp_path / "configured-id-length.sqlite3"),
             "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
+            "PUBLIC_API_BASE_URL": "https://api.example.com",
             "MAX_MARKDOWN_BYTES": 1024 * 1024,
             "ALLOW_EMPTY_MARKDOWN": False,
             "SQLITE_BUSY_TIMEOUT_MS": 5000,
@@ -227,6 +228,17 @@ def test_external_id_length_config_is_validated(tmp_path, value, message):
             {
                 "SQLITE_DB_PATH": str(tmp_path / "bad-id-length.sqlite3"),
                 "GIST_EXTERNAL_ID_LENGTH": value,
+            }
+        )
+
+
+def test_public_deployment_requires_public_api_base_url(tmp_path):
+    with pytest.raises(RuntimeError, match="PUBLIC_API_BASE_URL must be set"):
+        create_app(
+            {
+                "SQLITE_DB_PATH": str(tmp_path / "public-with-local-api.sqlite3"),
+                "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
+                "PUBLIC_API_BASE_URL": "http://localhost:3001",
             }
         )
 

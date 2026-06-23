@@ -137,6 +137,11 @@ Backend environment variables:
 | `GIST_MAX_HIGHLIGHT_BLOCKS` | `64` | Maximum highlighted code blocks per render. |
 | `GIST_MAX_HIGHLIGHT_TOTAL_BYTES` | `524288` | Maximum total highlighted code bytes per render. |
 
+For public deployments, set `PUBLIC_API_BASE_URL` to the externally reachable
+backend origin, for example `https://api.wavey.info`. Image URL generation and
+the Markdown image sanitizer use this value; a localhost API base is rejected
+when `PUBLIC_GIST_BASE_URL` is public.
+
 Frontend environment variables:
 
 | Name | Default | Description |
