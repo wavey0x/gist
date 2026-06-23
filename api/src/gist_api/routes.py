@@ -15,6 +15,7 @@ from .auth import (
 )
 from .db import gist_connection
 from .errors import GistError, error_response
+from .images import create_image_asset, send_image_asset
 from .rate_limits import check_write_rate_limit, record_auth_failure_and_check_limit
 from .service import (
     create_gist,
@@ -72,6 +73,34 @@ def parse_json_body():
     if not isinstance(data, dict):
         raise GistError("invalid_request", "JSON object required", 400)
     return data
+
+
+def _check_multipart_size():
+    max_bytes = current_app.config.get("MAX_MULTIPART_REQUEST_BYTES")
+    if request.content_length is not None and request.content_length > max_bytes:
+        raise GistError("payload_too_large", "Payload too large", 413)
+
+
+def parse_multipart_gist_body():
+    _check_multipart_size()
+    if not request.mimetype == "multipart/form-data":
+        raise GistError("invalid_request", "multipart form required", 400)
+
+    payload = {}
+    for field in ("title", "markdown", "expected_content_sha256"):
+        if field in request.form:
+            payload[field] = request.form.get(field)
+    image_uploads = [
+        *request.files.getlist("images[]"),
+        *request.files.getlist("images"),
+    ]
+    return payload, image_uploads
+
+
+def parse_gist_body():
+    if request.mimetype == "multipart/form-data":
+        return parse_multipart_gist_body()
+    return parse_json_body(), []
 
 
 def require_gist_auth():
@@ -162,6 +191,14 @@ def avatar(filename):
     return send_avatar_file(filename)
 
 
+@gists_api.route("/api/v1/images/<image_id>", methods=["GET"])
+def image(image_id):
+    try:
+        return send_image_asset(image_id)
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
+
+
 @gists_api.route("/api/v1/auth/session", methods=["POST"])
 def post_auth_session():
     try:
@@ -207,6 +244,27 @@ def delete_auth_session():
     return response
 
 
+@gists_api.route("/api/v1/images", methods=["POST"])
+def post_image():
+    auth, response = require_gist_auth()
+    if response:
+        return response
+    response = check_write_limit(auth)
+    if response:
+        return response
+
+    try:
+        _check_multipart_size()
+        if request.mimetype != "multipart/form-data":
+            raise GistError("invalid_request", "multipart form required", 400)
+        file_storage = request.files.get("image")
+        if file_storage is None:
+            raise GistError("invalid_request", "image file is required", 400)
+        return jsonify(create_image_asset(current_app, auth.key_id, file_storage)), 201
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
+
+
 @gists_api.route("/api/v1/me/gists", methods=["GET"])
 def list_my_gists():
     auth, response = require_web_session()
@@ -241,7 +299,14 @@ def post_gist():
         return response
 
     try:
-        body = create_gist(current_app, auth.key_id, auth.name, parse_json_body())
+        payload, image_uploads = parse_gist_body()
+        body = create_gist(
+            current_app,
+            auth.key_id,
+            auth.name,
+            payload,
+            image_uploads=image_uploads,
+        )
         return jsonify(body), 201
     except GistError as error:
         return error_response(error.code, error.message, error.status)
@@ -293,7 +358,7 @@ def update_gist(gist_id):
             auth.key_id,
             auth.name,
             gist_id,
-            parse_json_body(),
+            *parse_gist_body(),
         )
         return jsonify(body)
     except GistError as error:

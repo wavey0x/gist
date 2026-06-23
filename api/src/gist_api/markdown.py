@@ -17,7 +17,7 @@ from lxml import etree, html
 
 logger = logging.getLogger(__name__)
 
-SANITIZER_CONFIG_VERSION = "2026-06-18.3"
+SANITIZER_CONFIG_VERSION = "2026-06-23.1"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
 ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.3"
 HIGHLIGHT_GRAMMAR_SET = "all"
@@ -859,7 +859,24 @@ def _safe_class_value(value):
     return bool(tokens) and all(_safe_class_token(token) for token in tokens)
 
 
-def _allow_attribute(tag, name, value):
+def _safe_image_src(value, allowed_image_src_prefixes):
+    return any(value.startswith(prefix) for prefix in allowed_image_src_prefixes)
+
+
+def _drop_unsafe_images(root, allowed_image_src_prefixes):
+    for element in list(root.iter("img")):
+        if not _safe_image_src(element.attrib.get("src", ""), allowed_image_src_prefixes):
+            element.drop_tree()
+
+
+def _allow_attribute_factory(allowed_image_src_prefixes):
+    def allow_attribute(tag, name, value):
+        return _allow_attribute(tag, name, value, allowed_image_src_prefixes)
+
+    return allow_attribute
+
+
+def _allow_attribute(tag, name, value, allowed_image_src_prefixes):
     if name == "class":
         return tag in {"a", "code", "div", "li", "pre", "span", "ul"} and _safe_class_value(
             value
@@ -878,7 +895,7 @@ def _allow_attribute(tag, name, value):
 
     if tag == "img":
         if name == "src":
-            return value.startswith("https://")
+            return _safe_image_src(value, allowed_image_src_prefixes)
         return name in {"alt", "title", "width", "height"}
 
     if tag == "input":
@@ -892,10 +909,16 @@ def _allow_attribute(tag, name, value):
     return False
 
 
-def render_markdown_result(markdown, *, ethereum_entities=True):
+def render_markdown_result(
+    markdown,
+    *,
+    ethereum_entities=True,
+    allowed_image_src_prefixes=(),
+):
     raw_html = _render_gfm(markdown)
     root = _parse_fragment(raw_html)
     _drop_scriptable_content(root)
+    _drop_unsafe_images(root, tuple(allowed_image_src_prefixes))
     highlight_stats = _highlight_blocks(root)
     _post_process_links(root)
     if ethereum_entities:
@@ -905,7 +928,7 @@ def render_markdown_result(markdown, *, ethereum_entities=True):
     cleaned_html = bleach.clean(
         processed_html,
         tags=ALLOWED_TAGS,
-        attributes=_allow_attribute,
+        attributes=_allow_attribute_factory(tuple(allowed_image_src_prefixes)),
         protocols=["http", "https", "mailto"],
         strip=True,
         strip_comments=True,

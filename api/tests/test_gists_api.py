@@ -462,6 +462,7 @@ def test_sanitizer_strips_scriptable_content(client, app):
     markdown = """
 <script>alert(1)</script>
 <img src="javascript:alert(1)" onerror="alert(1)">
+![tracker](https://tracker.example/pixel.png)
 <a href="javascript:alert(1)" onclick="alert(1)">bad</a>
 <svg><script>alert(1)</script></svg>
 """
@@ -475,6 +476,8 @@ def test_sanitizer_strips_scriptable_content(client, app):
     assert "<script" not in html
     assert "alert(1)" not in html
     assert "javascript:" not in html
+    assert "tracker.example" not in html
+    assert "<img" not in html
     assert "onerror" not in html
     assert "onclick" not in html
     assert "<svg" not in html
@@ -535,7 +538,7 @@ def test_oversized_request_body_returns_json_413(client, app):
         content_type="application/json",
     )
 
-    assert app.config["MAX_CONTENT_LENGTH"] == app.config["MAX_REQUEST_BYTES"]
+    assert app.config["MAX_CONTENT_LENGTH"] >= app.config["MAX_MULTIPART_REQUEST_BYTES"]
     assert response.status_code == 413
     assert response.get_json()["error"]["code"] == "payload_too_large"
 

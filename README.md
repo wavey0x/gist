@@ -116,8 +116,14 @@ Backend environment variables:
 | --- | --- | --- |
 | `SQLITE_DB_PATH` | required | Path to the dedicated SQLite database. |
 | `PUBLIC_GIST_BASE_URL` | deployment-specific | Public frontend base URL used in API responses. |
-| `PUBLIC_API_BASE_URL` | `http://localhost:3001` | Public backend base URL used when generating stored avatar URLs. |
+| `PUBLIC_API_BASE_URL` | `http://localhost:3001` | Public backend base URL used when generating stored avatar and image URLs. |
 | `AVATAR_STORAGE_DIR` | sibling `avatars/` directory next to the SQLite database | Directory for avatar images saved by the admin CLI. |
+| `GIST_IMAGE_STORAGE_DIR` | sibling `images/` directory next to the SQLite database | Directory for uploaded gist image files. |
+| `GIST_IMAGE_STORAGE_LIMIT_BYTES` | `5368709120` | Global image storage cap. |
+| `GIST_IMAGE_MAX_BYTES` | `20971520` | Maximum size for one uploaded image. |
+| `GIST_IMAGE_MAX_DIMENSION` | `4096` | Maximum image width or height. |
+| `GIST_IMAGE_MAX_PER_REQUEST` | `10` | Maximum images accepted in one multipart request. |
+| `MAX_MULTIPART_REQUEST_BYTES` | markdown plus image upload limits | Maximum multipart request body size accepted by Flask. |
 | `PORT` | `3001` | Backend port when using the module entrypoint. |
 | `MAX_MARKDOWN_BYTES` | `1048576` | Maximum Markdown payload size. |
 | `MAX_REQUEST_BYTES` | `MAX_MARKDOWN_BYTES + 2048` | Maximum JSON request body size accepted by Flask. |
@@ -176,6 +182,8 @@ GET    /api/v1/auth/session
 DELETE /api/v1/auth/session
 GET    /api/v1/me/gists
 DELETE /api/v1/me/gists/{gist_id}
+POST   /api/v1/images
+GET    /api/v1/images/{image_id}
 POST   /api/v1/gists
 GET    /api/v1/gists/{gist_id}
 GET    /api/v1/gists/{gist_id}/render
@@ -189,6 +197,16 @@ Protected routes use:
 ```text
 Authorization: Bearer <api_key>
 ```
+
+`POST /api/v1/images` accepts multipart form field `image` and returns an
+`img_...` URL plus ready-to-paste Markdown.
+
+`POST /api/v1/gists` and `PATCH /api/v1/gists/{gist_id}` also accept
+`multipart/form-data` with optional `title`, optional `markdown`, and repeated
+`images[]` file fields. Markdown references like `attachment:chart.png` are
+replaced with the stored image URL. Uploaded images that are not referenced are
+appended to the saved Markdown as image blocks, so image-only gist creation is
+valid.
 
 The web-session routes use the `wg_session` HttpOnly cookie minted from a gist
 API key.

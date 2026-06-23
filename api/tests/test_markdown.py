@@ -106,6 +106,26 @@ def test_markdown_rendering_uses_gfm_highlighting_links_and_sanitizer():
     assert "highlight/ok" in result.version
 
 
+def test_markdown_rendering_drops_images_without_allowed_prefix():
+    markdown = (
+        "![tracked](https://tracker.example/pixel.png)\n"
+        "![kept](https://api.example.com/api/v1/images/img_abc1234567890abc)"
+    )
+
+    result = render_markdown_result(markdown)
+    assert "<img" not in result.html
+
+    allowed = render_markdown_result(
+        markdown,
+        allowed_image_src_prefixes=("https://api.example.com/api/v1/images/",),
+    )
+    assert "tracker.example" not in allowed.html
+    assert (
+        '<img src="https://api.example.com/api/v1/images/img_abc1234567890abc" alt="kept">'
+        in allowed.html
+    )
+
+
 def test_ethereum_entity_rendering_marks_plain_linked_and_abbreviated_values():
     short_address = f"{ETH_ADDRESS[:8]}...{ETH_ADDRESS[-6:]}"
     short_tx = f"{ETH_TX_HASH[:8]}...{ETH_TX_HASH[-6:]}"

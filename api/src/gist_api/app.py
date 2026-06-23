@@ -31,7 +31,10 @@ def create_app(config_overrides=None):
         app.config["MAX_REQUEST_BYTES"] = (
             app.config.get("MAX_MARKDOWN_BYTES", 1048576) + 2048
         )
-    app.config["MAX_CONTENT_LENGTH"] = app.config.get("MAX_REQUEST_BYTES")
+    app.config["MAX_CONTENT_LENGTH"] = max(
+        app.config.get("MAX_REQUEST_BYTES"),
+        app.config.get("MAX_MULTIPART_REQUEST_BYTES"),
+    )
 
     init_gist_database(app)
     app.register_blueprint(gists_api)

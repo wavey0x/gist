@@ -79,8 +79,16 @@ def test_key_verification_rejects_non_gist_key_format_and_revocation(app):
     with gist_connection(app) as conn:
         gist_key = create_api_key(conn, "reader")
         non_gist_key = gist_key["key"].replace("wapi_gist_", "wapi_prices_", 1)
+        long_prefix_key = gist_key["key"].replace("wapi_gist_", "wapi_gist_long", 1)
+        long_secret_key = f"{gist_key}A"
 
         auth, error = verify_api_key(conn, f"Bearer {non_gist_key}")
+        assert auth is None
+        assert error == "unauthorized"
+        auth, error = verify_api_key(conn, f"Bearer {long_prefix_key}")
+        assert auth is None
+        assert error == "unauthorized"
+        auth, error = verify_api_key(conn, f"Bearer {long_secret_key}")
         assert auth is None
         assert error == "unauthorized"
 
@@ -193,6 +201,14 @@ def test_web_session_stores_only_hash_and_rejects_expired_sessions(app):
             )
 
         auth, error = verify_web_session(conn, token)
+
+    assert auth is None
+    assert error == "unauthorized"
+
+
+def test_web_session_rejects_non_ascii_cookie_without_error(app):
+    with gist_connection(app) as conn:
+        auth, error = verify_web_session(conn, "not-a-token-\N{SNOWMAN}")
 
     assert auth is None
     assert error == "unauthorized"

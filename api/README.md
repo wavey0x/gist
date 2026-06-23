@@ -80,6 +80,24 @@ DELETE /api/v1/me/gists/{gist_id}
 `/api/v1/me/gists` returns gists whose first revision was created by the logged
 in key and does not include Markdown or rendered HTML.
 
+## Image Uploads
+
+Upload one reusable image with:
+
+```text
+POST /api/v1/images
+```
+
+Use `multipart/form-data` field `image`. The response includes a public
+`img_...` URL and Markdown image snippet.
+
+Create or update a gist with new images in one request by sending
+`multipart/form-data` to `POST /api/v1/gists` or
+`PATCH /api/v1/gists/{gist_id}`. Include optional `markdown`, optional `title`,
+and repeated `images[]` file fields. `attachment:<filename>` references in
+Markdown are replaced with the stored image URL; unreferenced uploads are
+appended to the saved Markdown, so image-only gist creation is valid.
+
 `PATCH /api/v1/gists/{gist_id}` only updates gists whose first revision was
 created by the authenticated key.
 

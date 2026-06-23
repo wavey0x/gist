@@ -7,6 +7,13 @@ from .auth import utc_now
 from .db import gist_connection
 from .errors import GistError
 from .external_ids import generate_external_id, validate_external_id
+from .images import (
+    cleanup_staged_images,
+    insert_image_assets,
+    plan_image_assets,
+    rewrite_attachment_markdown,
+    stage_images,
+)
 from .markdown import render_markdown_result, render_version
 
 
@@ -81,9 +88,14 @@ def ethereum_entity_rendering_enabled(app):
 
 
 def render_markdown_for_app(app, markdown):
+    image_prefix = (
+        f"{app.config.get('PUBLIC_API_BASE_URL', 'http://localhost:3001').rstrip('/')}"
+        "/api/v1/images/"
+    )
     return render_markdown_result(
         markdown,
         ethereum_entities=ethereum_entity_rendering_enabled(app),
+        allowed_image_src_prefixes=(image_prefix,),
     )
 
 
@@ -160,65 +172,88 @@ def _insert_revision(
     )
 
 
-def create_gist(app, key_id, author_name, payload):
+def create_gist(app, key_id, author_name, payload, image_uploads=None):
     author_name = normalize_author_name(author_name)
-    markdown = normalize_markdown(payload.get("markdown"))
-    validate_markdown(app, markdown)
-    title = normalize_title(payload.get("title"), present="title" in payload)
-    rendered = render_markdown_for_app(app, markdown)
-    rendered_html = rendered.html
-    version = rendered.version
-    digest = content_sha256(markdown)
-    now = utc_now()
+    staged_images = stage_images(app, image_uploads or [])
+    try:
+        image_assets = plan_image_assets(app, staged_images)
+        if "markdown" in payload:
+            markdown = normalize_markdown(payload["markdown"])
+        elif image_assets:
+            markdown = ""
+        else:
+            markdown = normalize_markdown(payload.get("markdown"))
+        markdown = rewrite_attachment_markdown(markdown, image_assets)
+        validate_markdown(app, markdown)
+        title = normalize_title(payload.get("title"), present="title" in payload)
+        rendered = render_markdown_for_app(app, markdown)
+        rendered_html = rendered.html
+        version = rendered.version
+        digest = content_sha256(markdown)
+        now = utc_now()
 
-    with gist_connection(app) as conn:
-        for _ in range(8):
-            external_id = generate_external_id(app.config["GIST_EXTERNAL_ID_LENGTH"])
-            try:
-                with conn:
-                    cursor = conn.execute(
-                        """
-                        insert into gists(
-                            external_id, title, author_name, markdown, rendered_html,
-                            render_version, content_sha256, latest_revision_number,
-                            created_at, updated_at
+        with gist_connection(app) as conn:
+            for _ in range(8):
+                external_id = generate_external_id(app.config["GIST_EXTERNAL_ID_LENGTH"])
+                try:
+                    with conn:
+                        cursor = conn.execute(
+                            """
+                            insert into gists(
+                                external_id, title, author_name, markdown, rendered_html,
+                                render_version, content_sha256, latest_revision_number,
+                                created_at, updated_at
+                            )
+                            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                external_id,
+                                title,
+                                author_name,
+                                markdown,
+                                rendered_html,
+                                version,
+                                digest,
+                                1,
+                                now,
+                                now,
+                            ),
                         )
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            external_id,
+                        gist_id = cursor.lastrowid
+                        _insert_revision(
+                            conn,
+                            gist_id,
+                            1,
                             title,
                             author_name,
                             markdown,
                             rendered_html,
                             version,
                             digest,
-                            1,
+                            key_id,
                             now,
-                            now,
-                        ),
-                    )
-                    gist_id = cursor.lastrowid
-                    _insert_revision(
-                        conn,
-                        gist_id,
-                        1,
-                        title,
-                        author_name,
-                        markdown,
-                        rendered_html,
-                        version,
-                        digest,
-                        key_id,
-                        now,
-                    )
-                row = conn.execute(
-                    "select * from gists where id = ?",
-                    (gist_id,),
-                ).fetchone()
-                return _row_to_api(app, row)
-            except sqlite3.IntegrityError:
-                continue
+                        )
+                        insert_image_assets(
+                            conn,
+                            app,
+                            key_id,
+                            staged_images,
+                            image_assets,
+                        )
+                    row = conn.execute(
+                        "select * from gists where id = ?",
+                        (gist_id,),
+                    ).fetchone()
+                    body = _row_to_api(app, row)
+                    if image_assets:
+                        body["markdown"] = markdown
+                        body["images"] = image_assets
+                    return body
+                except sqlite3.IntegrityError:
+                    continue
+    except Exception:
+        cleanup_staged_images(staged_images)
+        raise
 
     raise GistError("internal_error", "Internal error", 500)
 
@@ -405,113 +440,131 @@ def get_public_render(app, external_id, revision_number=None):
         return body
 
 
-def patch_gist(app, key_id, author_name, external_id, payload):
+def patch_gist(app, key_id, author_name, external_id, payload, image_uploads=None):
     if not validate_external_id(external_id):
         raise GistError("not_found", "Not found", 404)
-    if "markdown" not in payload and "title" not in payload:
-        raise GistError("invalid_request", "markdown or title is required", 400)
-    author_name = normalize_author_name(author_name)
+    staged_images = stage_images(app, image_uploads or [])
+    try:
+        image_assets = plan_image_assets(app, staged_images)
+        if "markdown" not in payload and "title" not in payload and not image_assets:
+            raise GistError("invalid_request", "markdown or title is required", 400)
+        author_name = normalize_author_name(author_name)
 
-    expected_digest = payload.get("expected_content_sha256")
-    if expected_digest is not None and not (
-        isinstance(expected_digest, str) and SHA_RE.fullmatch(expected_digest)
-    ):
-        raise GistError("invalid_request", "expected_content_sha256 is invalid", 400)
+        expected_digest = payload.get("expected_content_sha256")
+        if expected_digest is not None and not (
+            isinstance(expected_digest, str) and SHA_RE.fullmatch(expected_digest)
+        ):
+            raise GistError("invalid_request", "expected_content_sha256 is invalid", 400)
 
-    if "markdown" in payload:
-        markdown = normalize_markdown(payload["markdown"])
-        validate_markdown(app, markdown)
-        rendered = render_markdown_for_app(app, markdown)
-        rendered_html = rendered.html
-        version = rendered.version
-        digest = content_sha256(markdown)
-    else:
-        markdown = None
-        rendered_html = None
-        version = None
-        digest = None
+        markdown = (
+            normalize_markdown(payload["markdown"]) if "markdown" in payload else None
+        )
 
-    title = (
-        normalize_title(payload.get("title"), present=True)
-        if "title" in payload
-        else None
-    )
-    now = utc_now()
+        title = (
+            normalize_title(payload.get("title"), present=True)
+            if "title" in payload
+            else None
+        )
+        now = utc_now()
 
-    with gist_connection(app) as conn:
-        with conn:
-            current = conn.execute(
-                """
-                select *
-                from gists
-                where external_id = ?
-                  and deleted_at is null
-                  and exists (
-                      select 1
-                      from gist_revisions
-                      where gist_revisions.gist_id = gists.id
-                        and gist_revisions.revision_number = 1
-                        and gist_revisions.created_by_key_id = ?
-                  )
-                """,
-                (external_id, key_id),
-            ).fetchone()
-            if current is None:
-                raise GistError("not_found", "Not found", 404)
-            if (
-                expected_digest is not None
-                and expected_digest != current["content_sha256"]
-            ):
-                raise GistError("conflict", "Conflict", 409)
+        with gist_connection(app) as conn:
+            with conn:
+                current = conn.execute(
+                    """
+                    select *
+                    from gists
+                    where external_id = ?
+                      and deleted_at is null
+                      and exists (
+                          select 1
+                          from gist_revisions
+                          where gist_revisions.gist_id = gists.id
+                            and gist_revisions.revision_number = 1
+                            and gist_revisions.created_by_key_id = ?
+                      )
+                    """,
+                    (external_id, key_id),
+                ).fetchone()
+                if current is None:
+                    raise GistError("not_found", "Not found", 404)
+                if (
+                    expected_digest is not None
+                    and expected_digest != current["content_sha256"]
+                ):
+                    raise GistError("conflict", "Conflict", 409)
 
-            next_title = title if "title" in payload else current["title"]
-            next_markdown = markdown if markdown is not None else current["markdown"]
-            next_rendered_html = (
-                rendered_html if rendered_html is not None else current["rendered_html"]
-            )
-            next_version = version if version is not None else current["render_version"]
-            next_digest = digest if digest is not None else current["content_sha256"]
-            next_revision_number = current["latest_revision_number"] + 1
+                next_title = title if "title" in payload else current["title"]
+                base_markdown = markdown if markdown is not None else current["markdown"]
+                next_markdown = rewrite_attachment_markdown(
+                    base_markdown,
+                    image_assets,
+                )
+                markdown_changed = markdown is not None or bool(image_assets)
+                if markdown_changed:
+                    validate_markdown(app, next_markdown)
+                    rendered = render_markdown_for_app(app, next_markdown)
+                    next_rendered_html = rendered.html
+                    next_version = rendered.version
+                    next_digest = content_sha256(next_markdown)
+                else:
+                    next_rendered_html = current["rendered_html"]
+                    next_version = current["render_version"]
+                    next_digest = current["content_sha256"]
+                next_revision_number = current["latest_revision_number"] + 1
 
-            conn.execute(
-                """
-                update gists
-                set title = ?, author_name = ?, markdown = ?, rendered_html = ?,
-                    render_version = ?, content_sha256 = ?,
-                    latest_revision_number = ?, updated_at = ?
-                where id = ?
-                """,
-                (
+                insert_image_assets(
+                    conn,
+                    app,
+                    key_id,
+                    staged_images,
+                    image_assets,
+                )
+                conn.execute(
+                    """
+                    update gists
+                    set title = ?, author_name = ?, markdown = ?, rendered_html = ?,
+                        render_version = ?, content_sha256 = ?,
+                        latest_revision_number = ?, updated_at = ?
+                    where id = ?
+                    """,
+                    (
+                        next_title,
+                        author_name,
+                        next_markdown,
+                        next_rendered_html,
+                        next_version,
+                        next_digest,
+                        next_revision_number,
+                        now,
+                        current["id"],
+                    ),
+                )
+                _insert_revision(
+                    conn,
+                    current["id"],
+                    next_revision_number,
                     next_title,
                     author_name,
                     next_markdown,
                     next_rendered_html,
                     next_version,
                     next_digest,
-                    next_revision_number,
+                    key_id,
                     now,
-                    current["id"],
-                ),
-            )
-            _insert_revision(
-                conn,
-                current["id"],
-                next_revision_number,
-                next_title,
-                author_name,
-                next_markdown,
-                next_rendered_html,
-                next_version,
-                next_digest,
-                key_id,
-                now,
-            )
+                )
 
-        row = conn.execute(
-            "select * from gists where id = ?",
-            (current["id"],),
-        ).fetchone()
-        return _row_to_api(app, row)
+            row = conn.execute(
+                "select * from gists where id = ?",
+                (current["id"],),
+            ).fetchone()
+            body = _row_to_api(app, row)
+            if image_assets:
+                body["markdown"] = next_markdown
+                body["images"] = image_assets
+            return body
+    except Exception:
+        cleanup_staged_images(staged_images)
+        raise
 
 
 def delete_gist_created_by_key(app, key_id, external_id):

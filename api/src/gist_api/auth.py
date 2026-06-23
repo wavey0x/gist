@@ -10,7 +10,7 @@ from .avatars import normalize_avatar_url
 
 
 KEY_RE = re.compile(
-    r"^wapi_gist_([A-Za-z0-9_-]{8,})_([A-Za-z0-9_-]{43,})$"
+    r"^wapi_gist_([A-Za-z0-9_-]{8})_([A-Za-z0-9_-]{43})$"
 )
 
 
@@ -86,7 +86,7 @@ def _new_key_material():
 
 
 def _token_hash(token):
-    return hashlib.sha256(token.encode("ascii")).hexdigest()
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def _github_avatar_url(github_login):

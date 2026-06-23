@@ -37,7 +37,7 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
             )
         }
 
-    assert versions == [1, 8]
+    assert versions == [1, 8, 9]
     assert api_key_columns == [
         "id",
         "name",
@@ -52,7 +52,10 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
     assert "web_sessions" in tables
     assert "api_write_events" in tables
     assert "api_auth_failure_events" in tables
+    assert "image_blobs" in tables
+    assert "image_assets" in tables
     assert "idx_gist_revisions_creator_revision" in indexes
+    assert "idx_image_assets_public_id" in indexes
 
 
 def test_migrations_ignore_current_working_directory(monkeypatch, tmp_path):

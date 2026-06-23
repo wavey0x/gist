@@ -12,6 +12,7 @@ def app(tmp_path):
         {
             "SQLITE_DB_PATH": str(tmp_path / "gists.sqlite3"),
             "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
+            "PUBLIC_API_BASE_URL": "https://api.example.com",
             "MAX_MARKDOWN_BYTES": 1024 * 1024,
             "ALLOW_EMPTY_MARKDOWN": False,
             "SQLITE_BUSY_TIMEOUT_MS": 5000,

@@ -19,6 +19,8 @@ def _bool_env(name, default):
 
 def load_settings():
     max_markdown_bytes = _int_env("MAX_MARKDOWN_BYTES", 1048576)
+    image_max_bytes = _int_env("GIST_IMAGE_MAX_BYTES", 20 * 1024 * 1024)
+    image_max_per_request = _int_env("GIST_IMAGE_MAX_PER_REQUEST", 10)
     return {
         "SQLITE_DB_PATH": os.getenv("SQLITE_DB_PATH"),
         "PUBLIC_GIST_BASE_URL": os.getenv(
@@ -30,6 +32,18 @@ def load_settings():
             "http://localhost:3001",
         ),
         "AVATAR_STORAGE_DIR": os.getenv("AVATAR_STORAGE_DIR"),
+        "IMAGE_STORAGE_DIR": os.getenv("GIST_IMAGE_STORAGE_DIR"),
+        "IMAGE_STORAGE_LIMIT_BYTES": _int_env(
+            "GIST_IMAGE_STORAGE_LIMIT_BYTES",
+            5 * 1024 * 1024 * 1024,
+        ),
+        "IMAGE_MAX_BYTES": image_max_bytes,
+        "IMAGE_MAX_DIMENSION": _int_env("GIST_IMAGE_MAX_DIMENSION", 4096),
+        "IMAGE_MAX_PER_REQUEST": image_max_per_request,
+        "MAX_MULTIPART_REQUEST_BYTES": _int_env(
+            "MAX_MULTIPART_REQUEST_BYTES",
+            max_markdown_bytes + (image_max_bytes * image_max_per_request) + 8192,
+        ),
         "PORT": _int_env("PORT", 3001),
         "MAX_MARKDOWN_BYTES": max_markdown_bytes,
         "MAX_REQUEST_BYTES": _int_env("MAX_REQUEST_BYTES", None),
