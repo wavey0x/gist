@@ -1,3 +1,4 @@
+import errno
 import io
 
 from gist_api.db import gist_connection
@@ -100,6 +101,9 @@ def test_image_upload_rejects_invalid_type_size_dimensions_and_quota(client, app
         data={"image": _upload_tuple(PNG_1X1, "large.png")},
     )
     assert too_large.status_code == 413
+    too_large_error = too_large.get_json()["error"]
+    assert too_large_error["code"] == "payload_too_large"
+    assert "without this image" in too_large_error["message"]
     app.config["IMAGE_MAX_BYTES"] = 20 * 1024 * 1024
 
     app.config["IMAGE_MAX_DIMENSION"] = 0
@@ -118,7 +122,48 @@ def test_image_upload_rejects_invalid_type_size_dimensions_and_quota(client, app
         data={"image": _upload_tuple(PNG_1X1, "quota.png")},
     )
     assert quota.status_code == 413
-    assert quota.get_json()["error"]["code"] == "storage_quota_exceeded"
+    quota_error = quota.get_json()["error"]
+    assert quota_error["code"] == "storage_quota_exceeded"
+    assert "without images" in quota_error["message"]
+
+
+def test_image_upload_storage_capacity_errors_are_actionable(client, app, monkeypatch):
+    key = make_key(app)
+
+    def fail_replace(_source, _destination):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr("gist_api.images.os.replace", fail_replace)
+
+    response = client.post(
+        "/api/v1/images",
+        headers=auth_header(key),
+        data={"image": _upload_tuple(PNG_1X1, "full.png")},
+    )
+
+    assert response.status_code == 507
+    error = response.get_json()["error"]
+    assert error["code"] == "image_storage_unavailable"
+    assert "without images" in error["message"]
+
+
+def test_multipart_size_error_is_image_actionable(client, app):
+    key = make_key(app)
+    app.config["MAX_MULTIPART_REQUEST_BYTES"] = 1
+
+    response = client.post(
+        "/api/v1/gists",
+        headers=auth_header(key),
+        data={
+            "markdown": "# Too large",
+            "images[]": [_upload_tuple(PNG_1X1, "large.png")],
+        },
+    )
+
+    assert response.status_code == 413
+    error = response.get_json()["error"]
+    assert error["code"] == "payload_too_large"
+    assert "without images" in error["message"]
 
 
 def test_multipart_gist_replaces_attachment_references(client, app):

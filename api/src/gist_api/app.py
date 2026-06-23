@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 
-from flask import Flask
+from flask import Flask, request
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from .errors import error_response
@@ -59,6 +59,15 @@ def create_app(config_overrides=None):
 
     @app.errorhandler(RequestEntityTooLarge)
     def handle_request_entity_too_large(_error):
+        if request.mimetype == "multipart/form-data":
+            return error_response(
+                "payload_too_large",
+                (
+                    "Multipart upload is too large. Try publishing again without "
+                    "images or with smaller images."
+                ),
+                413,
+            )
         return error_response("payload_too_large", "Payload too large", 413)
 
     @app.after_request

@@ -1,4 +1,5 @@
 import base64
+import errno
 import hashlib
 import os
 import re
@@ -20,6 +21,12 @@ SUPPORTED_IMAGE_TYPES = {
     "png": "image/png",
     "jpg": "image/jpeg",
     "webp": "image/webp",
+}
+IMAGE_RETRY_HINT = "Try publishing again without images or with smaller images."
+IMAGE_STORAGE_CAPACITY_ERRNOS = {
+    errno.EDQUOT,
+    errno.EFBIG,
+    errno.ENOSPC,
 }
 
 
@@ -64,6 +71,15 @@ def _base64url_random(byte_count):
 
 def _new_public_id():
     return f"img_{_base64url_random(16)}"
+
+
+def _raise_if_storage_capacity_error(exc):
+    if getattr(exc, "errno", None) in IMAGE_STORAGE_CAPACITY_ERRNOS:
+        raise GistError(
+            "image_storage_unavailable",
+            f"Server image storage capacity was reached. {IMAGE_RETRY_HINT}",
+            507,
+        ) from exc
 
 
 def _normalize_filename(filename):
@@ -215,16 +231,20 @@ def _stage_image(app, file_storage):
     filename = _normalize_filename(getattr(file_storage, "filename", None))
     max_bytes = int(app.config.get("IMAGE_MAX_BYTES", 20 * 1024 * 1024))
     storage_dir = _image_storage_dir(app)
-    storage_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        tmp_file = tempfile.NamedTemporaryFile(
+            prefix=".upload-",
+            suffix=".tmp",
+            dir=storage_dir,
+            delete=False,
+        )
+    except OSError as exc:
+        _raise_if_storage_capacity_error(exc)
+        raise
 
     digest = hashlib.sha256()
     byte_count = 0
-    tmp_file = tempfile.NamedTemporaryFile(
-        prefix=".upload-",
-        suffix=".tmp",
-        dir=storage_dir,
-        delete=False,
-    )
     tmp_path = Path(tmp_file.name)
     try:
         with tmp_file:
@@ -234,7 +254,14 @@ def _stage_image(app, file_storage):
                     break
                 byte_count += len(chunk)
                 if byte_count > max_bytes:
-                    raise GistError("payload_too_large", "Image is too large", 413)
+                    raise GistError(
+                        "payload_too_large",
+                        (
+                            "Image is too large. Try publishing again without this "
+                            "image or with a smaller image."
+                        ),
+                        413,
+                    )
                 digest.update(chunk)
                 tmp_file.write(chunk)
 
@@ -254,11 +281,13 @@ def _stage_image(app, file_storage):
             width=width,
             height=height,
         )
-    except Exception:
+    except Exception as exc:
         try:
             tmp_path.unlink()
         except FileNotFoundError:
             pass
+        if isinstance(exc, OSError):
+            _raise_if_storage_capacity_error(exc)
         raise
 
 
@@ -331,18 +360,26 @@ def _new_blob_bytes(conn, staged_images):
 def _ensure_quota(conn, app, staged_images):
     limit = int(app.config.get("IMAGE_STORAGE_LIMIT_BYTES", 5 * 1024 * 1024 * 1024))
     if _quota_bytes(conn) + _new_blob_bytes(conn, staged_images) > limit:
-        raise GistError("storage_quota_exceeded", "Image storage quota exceeded", 413)
+        raise GistError(
+            "storage_quota_exceeded",
+            f"Server image storage quota was reached. {IMAGE_RETRY_HINT}",
+            413,
+        )
 
 
 def _install_blob_file(app, staged):
     relative_path = _blob_relative_path(staged.sha256, staged.extension)
     final_path = _blob_absolute_path(app, relative_path)
-    final_path.parent.mkdir(parents=True, exist_ok=True)
-    if final_path.exists():
-        staged.tmp_path.unlink()
-    else:
-        os.replace(staged.tmp_path, final_path)
-        final_path.chmod(0o600)
+    try:
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        if final_path.exists():
+            staged.tmp_path.unlink()
+        else:
+            os.replace(staged.tmp_path, final_path)
+            final_path.chmod(0o600)
+    except OSError as exc:
+        _raise_if_storage_capacity_error(exc)
+        raise
     return relative_path
 
 

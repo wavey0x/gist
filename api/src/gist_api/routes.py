@@ -15,7 +15,7 @@ from .auth import (
 )
 from .db import gist_connection
 from .errors import GistError, error_response
-from .images import create_image_asset, send_image_asset
+from .images import IMAGE_RETRY_HINT, create_image_asset, send_image_asset
 from .rate_limits import check_write_rate_limit, record_auth_failure_and_check_limit
 from .service import (
     create_gist,
@@ -78,7 +78,11 @@ def parse_json_body():
 def _check_multipart_size():
     max_bytes = current_app.config.get("MAX_MULTIPART_REQUEST_BYTES")
     if request.content_length is not None and request.content_length > max_bytes:
-        raise GistError("payload_too_large", "Payload too large", 413)
+        raise GistError(
+            "payload_too_large",
+            f"Multipart upload is too large. {IMAGE_RETRY_HINT}",
+            413,
+        )
 
 
 def parse_multipart_gist_body():
