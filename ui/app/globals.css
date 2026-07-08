@@ -1103,6 +1103,48 @@ button {
   overflow-x: auto;
 }
 
+.markdown-body .mermaid-render {
+  max-width: 100%;
+  margin: 16px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.markdown-body .mermaid-render-fallback {
+  text-align: left;
+}
+
+.markdown-body .mermaid-render-output,
+.markdown-body .mermaid-render-error {
+  display: none;
+}
+
+.markdown-body .mermaid-render-output svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.markdown-body .mermaid-render-error {
+  margin-top: 8px;
+  color: var(--fgColor-danger);
+  font-size: 12px;
+  text-align: left;
+}
+
+.markdown-body .mermaid-render[data-mermaid-state="rendered"] .mermaid-render-fallback {
+  display: none;
+}
+
+.markdown-body .mermaid-render[data-mermaid-state="rendered"] .mermaid-render-output {
+  display: block;
+}
+
+.markdown-body .mermaid-render[data-mermaid-state="error"] .mermaid-render-error {
+  display: block;
+}
+
 .markdown-body table {
   display: block;
   width: max-content;

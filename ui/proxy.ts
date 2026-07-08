@@ -10,7 +10,9 @@ export function proxy(request: NextRequest) {
     "frame-ancestors 'none'",
     "img-src 'self' https:",
     "font-src 'self' data:",
-    `style-src 'self'${isDevelopment ? " 'unsafe-inline'" : ""}`,
+    `style-src 'self' 'nonce-${nonce}'`,
+    "style-src-elem 'self' 'unsafe-inline'",
+    "style-src-attr 'unsafe-inline'",
     `script-src 'self' 'nonce-${nonce}'${isDevelopment ? " 'unsafe-eval'" : ""}`,
     `connect-src 'self'${isDevelopment ? " ws:" : ""}`
   ].join("; ");

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { GistViewer } from "../../../../../components/GistViewer";
+import { MermaidRenderer } from "../../../../../components/MermaidRenderer";
 import { RevisionDiffViewer } from "../../../../../components/RevisionDiffViewer";
 import {
   PublicGistNotFoundError,
@@ -72,6 +73,7 @@ export default async function GistRevisionDiffPage({ params }: PageProps) {
           />
         }
       />
+      <MermaidRenderer gistId={gist.id} revisionNumber={gist.revision_number} />
     </main>
   );
 }

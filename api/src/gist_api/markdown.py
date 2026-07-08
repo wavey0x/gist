@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -17,9 +18,10 @@ from lxml import etree, html
 
 logger = logging.getLogger(__name__)
 
-SANITIZER_CONFIG_VERSION = "2026-06-23.1"
+SANITIZER_CONFIG_VERSION = "2026-07-08.2"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
 ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.3"
+MERMAID_RENDER_VERSION = "2026-07-08.2"
 HIGHLIGHT_GRAMMAR_SET = "all"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -140,6 +142,10 @@ ETHEREUM_TOKEN_HREF_RE = re.compile(
     r"/token/(0x[0-9A-Fa-f]{40})(?=$|[/?#])",
     re.IGNORECASE,
 )
+FENCE_OPEN_RE = re.compile(
+    r"^(?P<indent> {0,3})(?P<fence>`{3,}|~{3,})(?P<info>[^\r\n]*)(?P<line_end>\r?\n?)$"
+)
+MERMAID_PLACEHOLDER_PREFIX = "wavey-gist-mermaid-placeholder-"
 
 
 @dataclass(frozen=True)
@@ -217,6 +223,68 @@ def _render_gfm(markdown):
         markdown,
         options=Options.CMARK_OPT_UNSAFE,
     )
+
+
+def _is_fence_close(line, fence_char, fence_length):
+    candidate = line.rstrip("\r\n")
+    stripped = candidate.lstrip(" ")
+    if len(candidate) - len(stripped) > 3:
+        return False
+    if not stripped.startswith(fence_char * fence_length):
+        return False
+    index = 0
+    while index < len(stripped) and stripped[index] == fence_char:
+        index += 1
+    return index >= fence_length and not stripped[index:].strip()
+
+
+def _mermaid_placeholder_language(render_token, index):
+    return f"{MERMAID_PLACEHOLDER_PREFIX}{render_token}-{index}"
+
+
+def _protect_mermaid_fences(markdown):
+    render_token = secrets.token_hex(12)
+    placeholder_languages = set()
+    protected_lines = []
+    active_fence = None
+    mermaid_index = 0
+
+    for line in markdown.splitlines(keepends=True):
+        if active_fence is not None:
+            protected_lines.append(line)
+            fence_char, fence_length = active_fence
+            if _is_fence_close(line, fence_char, fence_length):
+                active_fence = None
+            continue
+
+        match = FENCE_OPEN_RE.match(line)
+        if not match:
+            protected_lines.append(line)
+            continue
+
+        fence = match.group("fence")
+        fence_char = fence[0]
+        info = match.group("info").strip()
+        if fence_char == "`" and "`" in info:
+            protected_lines.append(line)
+            continue
+
+        active_fence = (fence_char, len(fence))
+        language = info.split(maxsplit=1)[0].lower() if info else ""
+        if language != "mermaid":
+            protected_lines.append(line)
+            continue
+
+        placeholder_language = _mermaid_placeholder_language(
+            render_token, mermaid_index
+        )
+        mermaid_index += 1
+        placeholder_languages.add(placeholder_language)
+        protected_lines.append(
+            f"{match.group('indent')}{fence}{placeholder_language}{match.group('line_end')}"
+        )
+
+    return "".join(protected_lines), frozenset(placeholder_languages)
 
 
 def _is_code_context(element):
@@ -666,6 +734,45 @@ def _plain_code_block(language, code):
     return pre
 
 
+def _code_block_language(pre):
+    return pre.attrib.get("lang", "").strip().split(maxsplit=1)[0].lower()
+
+
+def _is_protected_mermaid_code_block(pre, placeholder_languages):
+    return _code_block_language(pre) in placeholder_languages
+
+
+def _mermaid_render_block(code):
+    wrapper = etree.Element("div")
+    wrapper.attrib["class"] = "mermaid-render js-mermaid-render"
+    wrapper.attrib["dir"] = "auto"
+    wrapper.attrib["aria-label"] = "mermaid rendered output container"
+
+    fallback = etree.SubElement(wrapper, "div")
+    fallback.attrib["class"] = "mermaid-render-fallback"
+    fallback.attrib["dir"] = "auto"
+
+    fallback_pre = etree.SubElement(fallback, "pre")
+    fallback_pre.attrib["lang"] = "mermaid"
+    fallback_pre.attrib["aria-label"] = "Raw mermaid code"
+    fallback_pre.text = code
+
+    output = etree.SubElement(wrapper, "div")
+    output.attrib["class"] = "mermaid-render-output js-mermaid-render-output"
+
+    error = etree.SubElement(wrapper, "div")
+    error.attrib["class"] = "mermaid-render-error"
+
+    return wrapper
+
+
+def _enrich_mermaid_blocks(root, placeholder_languages):
+    for pre in list(root.xpath(".//pre[@lang]")):
+        if not _is_protected_mermaid_code_block(pre, placeholder_languages):
+            continue
+        pre.getparent().replace(pre, _mermaid_render_block(_code_text(pre)))
+
+
 def _scope_to_highlight_class(scope):
     safe_scope = re.sub(r"[^A-Za-z0-9_.+-]", "-", scope)
     return f"highlight-{safe_scope.replace('.', '-')}"
@@ -718,11 +825,15 @@ def _highlight_payload(blocks):
     return highlighted, False
 
 
-def _highlight_blocks(root):
+def _highlight_blocks(root, mermaid_placeholder_languages=frozenset()):
     stats = HighlightStats()
     candidates = []
     total_candidate_bytes = 0
-    pre_elements = list(root.xpath(".//pre[@lang]"))
+    pre_elements = [
+        pre
+        for pre in root.xpath(".//pre[@lang]")
+        if not _is_protected_mermaid_code_block(pre, mermaid_placeholder_languages)
+    ]
     for index, pre in enumerate(pre_elements):
         language = pre.attrib.get("lang", "")
         code = _code_text(pre)
@@ -869,14 +980,26 @@ def _drop_unsafe_images(root, allowed_image_src_prefixes):
             element.drop_tree()
 
 
-def _allow_attribute_factory(allowed_image_src_prefixes):
+def _allow_attribute_factory(allowed_image_src_prefixes, mermaid_placeholder_languages):
     def allow_attribute(tag, name, value):
-        return _allow_attribute(tag, name, value, allowed_image_src_prefixes)
+        return _allow_attribute(
+            tag,
+            name,
+            value,
+            allowed_image_src_prefixes,
+            mermaid_placeholder_languages,
+        )
 
     return allow_attribute
 
 
-def _allow_attribute(tag, name, value, allowed_image_src_prefixes):
+def _allow_attribute(
+    tag,
+    name,
+    value,
+    allowed_image_src_prefixes,
+    mermaid_placeholder_languages=frozenset(),
+):
     if name == "class":
         return tag in {"a", "code", "div", "li", "pre", "span", "ul"} and _safe_class_value(
             value
@@ -903,6 +1026,9 @@ def _allow_attribute(tag, name, value, allowed_image_src_prefixes):
             return value == "checkbox"
         return name in {"checked", "disabled"}
 
+    if tag == "pre" and name == "lang":
+        return value in mermaid_placeholder_languages
+
     if tag in {"td", "th"} and name == "align":
         return value in {"left", "right", "center"}
 
@@ -915,11 +1041,14 @@ def render_markdown_result(
     ethereum_entities=True,
     allowed_image_src_prefixes=(),
 ):
-    raw_html = _render_gfm(markdown)
+    protected_markdown, mermaid_placeholder_languages = _protect_mermaid_fences(
+        markdown
+    )
+    raw_html = _render_gfm(protected_markdown)
     root = _parse_fragment(raw_html)
     _drop_scriptable_content(root)
     _drop_unsafe_images(root, tuple(allowed_image_src_prefixes))
-    highlight_stats = _highlight_blocks(root)
+    highlight_stats = _highlight_blocks(root, mermaid_placeholder_languages)
     _post_process_links(root)
     if ethereum_entities:
         _post_process_ethereum_entities(root)
@@ -928,13 +1057,19 @@ def render_markdown_result(
     cleaned_html = bleach.clean(
         processed_html,
         tags=ALLOWED_TAGS,
-        attributes=_allow_attribute_factory(tuple(allowed_image_src_prefixes)),
+        attributes=_allow_attribute_factory(
+            tuple(allowed_image_src_prefixes),
+            mermaid_placeholder_languages,
+        ),
         protocols=["http", "https", "mailto"],
         strip=True,
         strip_comments=True,
     )
+    cleaned_root = _parse_fragment(cleaned_html)
+    _enrich_mermaid_blocks(cleaned_root, mermaid_placeholder_languages)
+    enriched_html = _serialize_fragment(cleaned_root)
     return RenderedMarkdown(
-        html=cleaned_html,
+        html=enriched_html,
         version=render_version(
             highlight_stats.status,
             ethereum_entities=ethereum_entities,
@@ -952,6 +1087,7 @@ def render_version(highlight_status="unknown", *, ethereum_entities=True):
         f"grammar/{HIGHLIGHT_GRAMMAR_SET};"
         f"highlight/{highlight_status};"
         f"ethereum-entities/{ethereum_status};"
+        f"mermaid-enrichment/{MERMAID_RENDER_VERSION};"
         f"bleach/{_package_version('bleach')};"
         f"lxml/{_package_version('lxml')};"
         f"syntax-css/{SYNTAX_CSS_VERSION};"

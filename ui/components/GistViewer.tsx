@@ -34,6 +34,7 @@ const GITHUB_LOGIN_RE =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 const ETH_ENTITY_ID_CLASS_RE = /^eth-id-[a-f0-9]{12}$/;
 const ETH_ENTITY_GROUP_HOVER_CLASS = "eth-entity-group-hover";
+const MARKDOWN_BODY_SELECTOR = "article.markdown-body";
 const GIST_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "long",
   day: "numeric",
@@ -182,7 +183,9 @@ export function GistViewer({
       return undefined;
     }
 
-    const markdownRoot = markdownRef.current;
+    const markdownRoot =
+      markdownRef.current ??
+      document.querySelector<HTMLElement>(MARKDOWN_BODY_SELECTOR);
     if (!markdownRoot) {
       return undefined;
     }

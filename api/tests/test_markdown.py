@@ -106,6 +106,83 @@ def test_markdown_rendering_uses_gfm_highlighting_links_and_sanitizer():
     assert "highlight/ok" in result.version
 
 
+def test_markdown_rendering_enriches_mermaid_blocks_without_highlighting():
+    result = render_markdown_result(
+        "```mermaid title=Flow\n"
+        "graph TD\n"
+        "  A[Start] --> B{Done?}\n"
+        "```\n"
+    )
+    html = result.html
+
+    assert 'class="mermaid-render js-mermaid-render"' in html
+    assert 'aria-label="mermaid rendered output container"' in html
+    assert 'pre lang="mermaid" aria-label="Raw mermaid code"' in html
+    assert "graph TD" in html
+    assert "A[Start] --&gt; B{Done?}" in html
+    assert "highlight-source-mermaid" not in html
+    assert "mermaid-enrichment/" in result.version
+
+
+def test_markdown_rendering_mermaid_fallback_escapes_scriptable_source():
+    result = render_markdown_result(
+        "```mermaid\n"
+        "graph TD\n"
+        "  A[<script>alert(1)</script>] --> B\n"
+        "```\n"
+    )
+    html = result.html
+
+    assert 'class="mermaid-render js-mermaid-render"' in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "<script" not in html
+
+
+def test_markdown_rendering_keeps_braced_mermaid_fences_as_code():
+    result = render_markdown_result(
+        "```{mermaid}\n"
+        "graph TD\n"
+        "  A --> B\n"
+        "```\n"
+    )
+    html = result.html
+
+    assert "mermaid-render" not in html
+    assert '<code class="language--mermaid-">graph TD' in html
+
+
+def test_markdown_rendering_does_not_enrich_raw_mermaid_html():
+    result = render_markdown_result(
+        '<pre lang="mermaid"><code>graph TD\n'
+        "  A --> B\n"
+        "</code></pre>\n"
+    )
+    html = result.html
+
+    assert "js-mermaid-render" not in html
+    assert "mermaid-render-output" not in html
+    assert "highlight-source-mermaid" in html
+    assert "pl-ent" in html
+
+
+def test_markdown_rendering_strips_user_supplied_mermaid_hook_classes():
+    result = render_markdown_result(
+        '<div class="mermaid-render js-mermaid-render">'
+        '<div class="mermaid-render-fallback">'
+        '<pre lang="mermaid">graph TD\nA --> B</pre>'
+        "</div>"
+        '<div class="mermaid-render-output js-mermaid-render-output"></div>'
+        "</div>"
+    )
+    html = result.html
+
+    assert 'class="mermaid-render' not in html
+    assert "js-mermaid-render" not in html
+    assert "js-mermaid-render-output" not in html
+    assert "highlight-source-mermaid" in html
+    assert "pl-ent" in html
+
+
 def test_markdown_rendering_drops_images_without_allowed_prefix():
     markdown = (
         "![tracked](https://tracker.example/pixel.png)\n"

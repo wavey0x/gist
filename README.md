@@ -11,6 +11,7 @@ anyone with a random gist URL can read the rendered page and raw source.
 
 - Server-rendered public gist pages.
 - GitHub-flavored Markdown rendering.
+- GitHub-style Mermaid diagram rendering for Markdown fences.
 - Sanitized stored HTML.
 - Immutable revision and revision-diff URLs.
 - Read-only rendered/raw browser views.

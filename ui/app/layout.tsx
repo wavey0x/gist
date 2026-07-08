@@ -47,6 +47,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {nonce ? <meta name="csp-nonce" content={nonce} /> : null}
         <script
           nonce={nonce}
           suppressHydrationWarning

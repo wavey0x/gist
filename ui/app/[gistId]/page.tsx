@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { GistViewer } from "../../components/GistViewer";
+import { MermaidRenderer } from "../../components/MermaidRenderer";
 import {
   PublicGistNotFoundError,
   fetchPublicGist,
@@ -50,6 +51,7 @@ export default async function GistPage({ params }: PageProps) {
   return (
     <main className="page-shell">
       <GistViewer chrome={chrome} gist={gist} />
+      <MermaidRenderer gistId={gist.id} revisionNumber={gist.revision_number} />
     </main>
   );
 }
