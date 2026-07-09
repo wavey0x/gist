@@ -1146,8 +1146,16 @@ button {
   cursor: grabbing;
 }
 
+.markdown-body .mermaid-panzoom[data-panzoom-layout="compact"] {
+  height: var(--mermaid-compact-height);
+}
+
 .markdown-body .mermaid-panzoom-canvas {
   width: 100%;
+}
+
+.markdown-body .mermaid-panzoom[data-panzoom-layout="compact"] .mermaid-panzoom-canvas {
+  height: 100%;
 }
 
 .markdown-body .mermaid-panzoom-canvas svg {
@@ -1156,6 +1164,10 @@ button {
   max-width: none !important;
   height: auto !important;
   margin: 0;
+}
+
+.markdown-body .mermaid-panzoom[data-panzoom-layout="compact"] .mermaid-panzoom-canvas svg {
+  height: 100% !important;
 }
 
 .markdown-body .mermaid-panzoom-controls {
@@ -1193,13 +1205,10 @@ button {
   width: 30px;
   height: 30px;
   place-items: center;
-  border-radius: 5px;
-  color: var(--button-fg);
-}
-
-.markdown-body .mermaid-panzoom-button {
   border: 1px solid transparent;
+  border-radius: 5px;
   background: transparent;
+  color: var(--button-fg);
   cursor: pointer;
 }
 

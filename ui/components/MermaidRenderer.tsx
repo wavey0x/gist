@@ -17,12 +17,22 @@ const PANZOOM_MIN_SCALE = 0.5;
 const PANZOOM_MAX_SCALE = 4;
 const PANZOOM_STEP = 1.2;
 const PANZOOM_CONTROLS_VISIBLE_MS = 2500;
+const PANZOOM_COMPACT_HEIGHT_TOLERANCE = 24;
+const PANZOOM_COMPACT_BREAKPOINT = 640;
+const PANZOOM_COMPACT_DESKTOP_MIN_HEIGHT = 360;
+const PANZOOM_COMPACT_DESKTOP_MAX_HEIGHT = 640;
+const PANZOOM_COMPACT_MOBILE_MIN_HEIGHT = 280;
+const PANZOOM_COMPACT_MOBILE_MAX_HEIGHT = 560;
 const ZOOM_IN_ICON =
   '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>';
 const ZOOM_OUT_ICON =
   '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>';
 const RESET_VIEW_ICON =
   '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-15.74-5.95L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15.74 5.95L21 16"/><path d="M16 16h5v5"/></svg>';
+const EXPAND_DIAGRAM_ICON =
+  '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="m14 10 7-7"/><path d="M9 21H3v-6"/><path d="m10 14-7 7"/></svg>';
+const COMPACT_DIAGRAM_ICON =
+  '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3v5H3"/><path d="m3 8 6-6"/><path d="M16 21v-5h5"/><path d="m21 16-6 6"/></svg>';
 
 const mermaidPanZoomCleanups = new WeakMap<HTMLElement, () => void>();
 
@@ -48,11 +58,20 @@ type PanZoomViewBox = {
   height: number;
 };
 
+type PanZoomContentBox = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
 type PanZoomState = {
   scale: number;
   viewX: number;
   viewY: number;
   baseViewBox: PanZoomViewBox;
+  isCompactable: boolean;
+  isExpanded: boolean;
   dragPointerId: number | null;
   dragStartX: number;
   dragStartY: number;
@@ -161,6 +180,29 @@ function pointCenter(first: PanZoomPoint, second: PanZoomPoint) {
   };
 }
 
+function compactViewportHeight() {
+  const viewportWidth =
+    window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight =
+    window.innerHeight || document.documentElement.clientHeight || 800;
+  if (viewportWidth < PANZOOM_COMPACT_BREAKPOINT) {
+    return Math.round(
+      clamp(
+        viewportHeight * 0.7,
+        PANZOOM_COMPACT_MOBILE_MIN_HEIGHT,
+        PANZOOM_COMPACT_MOBILE_MAX_HEIGHT
+      )
+    );
+  }
+  return Math.round(
+    clamp(
+      viewportHeight * 0.68,
+      PANZOOM_COMPACT_DESKTOP_MIN_HEIGHT,
+      PANZOOM_COMPACT_DESKTOP_MAX_HEIGHT
+    )
+  );
+}
+
 function readSvgViewBox(svg: SVGSVGElement): PanZoomViewBox | null {
   const viewBox = svg.viewBox.baseVal;
   if (viewBox.width > 0 && viewBox.height > 0) {
@@ -203,6 +245,46 @@ function visibleViewBox(state: PanZoomState) {
   };
 }
 
+function panZoomAvailableWidth(viewport: HTMLElement) {
+  return (
+    viewport.clientWidth ||
+    viewport.closest<HTMLElement>(MARKDOWN_BODY_SELECTOR)?.clientWidth ||
+    viewport.parentElement?.clientWidth ||
+    0
+  );
+}
+
+function svgContentBox(
+  state: PanZoomState,
+  svg: SVGSVGElement
+): PanZoomContentBox | null {
+  const rect = svg.getBoundingClientRect();
+  const view = visibleViewBox(state);
+  if (!rect.width || !rect.height || !view.width || !view.height) {
+    return null;
+  }
+
+  const rectAspect = rect.width / rect.height;
+  const viewAspect = view.width / view.height;
+  if (rectAspect > viewAspect) {
+    const width = rect.height * viewAspect;
+    return {
+      left: rect.left + (rect.width - width) / 2,
+      top: rect.top,
+      width,
+      height: rect.height
+    };
+  }
+
+  const height = rect.width / viewAspect;
+  return {
+    left: rect.left,
+    top: rect.top + (rect.height - height) / 2,
+    width: rect.width,
+    height
+  };
+}
+
 function clampPanZoom(state: PanZoomState) {
   const { width, height } = visibleViewBox(state);
   const maxX = state.baseViewBox.width - width;
@@ -225,6 +307,44 @@ function clampPanZoom(state: PanZoomState) {
   } else {
     state.viewY = clamp(state.viewY, 0, maxY);
   }
+}
+
+function syncLayoutButton(
+  state: PanZoomState,
+  layoutButton: HTMLButtonElement
+) {
+  layoutButton.hidden = !state.isCompactable;
+  const label = state.isExpanded ? "Compact diagram" : "Expand diagram";
+  layoutButton.setAttribute("aria-label", label);
+  layoutButton.title = label;
+  layoutButton.innerHTML = state.isExpanded
+    ? COMPACT_DIAGRAM_ICON
+    : EXPAND_DIAGRAM_ICON;
+}
+
+function updatePanZoomLayout(
+  state: PanZoomState,
+  viewport: HTMLElement,
+  layoutButton: HTMLButtonElement
+) {
+  const availableWidth = panZoomAvailableWidth(viewport);
+  const compactHeight = compactViewportHeight();
+  const naturalHeight =
+    availableWidth > 0
+      ? (availableWidth * state.baseViewBox.height) / state.baseViewBox.width
+      : 0;
+
+  state.isCompactable =
+    naturalHeight > compactHeight + PANZOOM_COMPACT_HEIGHT_TOLERANCE;
+  if (!state.isCompactable) {
+    state.isExpanded = false;
+  }
+
+  const layout =
+    state.isCompactable && !state.isExpanded ? "compact" : "expanded";
+  viewport.dataset.panzoomLayout = layout;
+  viewport.style.setProperty("--mermaid-compact-height", `${compactHeight}px`);
+  syncLayoutButton(state, layoutButton);
 }
 
 function applyPanZoom(
@@ -251,25 +371,23 @@ function setPanZoomScale(
   clientY?: number
 ) {
   const nextScale = clamp(scale, PANZOOM_MIN_SCALE, PANZOOM_MAX_SCALE);
-  const rect = svg.getBoundingClientRect();
+  const contentBox = svgContentBox(state, svg);
   const focalX =
-    clientX === undefined
-      ? rect.width / 2
-      : clamp(clientX - rect.left, 0, rect.width);
+    clientX === undefined || !contentBox
+      ? 0.5
+      : clamp((clientX - contentBox.left) / contentBox.width, 0, 1);
   const focalY =
-    clientY === undefined
-      ? rect.height / 2
-      : clamp(clientY - rect.top, 0, rect.height);
+    clientY === undefined || !contentBox
+      ? 0.5
+      : clamp((clientY - contentBox.top) / contentBox.height, 0, 1);
   const currentView = visibleViewBox(state);
-  const focusRatioX = rect.width ? focalX / rect.width : 0.5;
-  const focusRatioY = rect.height ? focalY / rect.height : 0.5;
-  const contentX = state.viewX + focusRatioX * currentView.width;
-  const contentY = state.viewY + focusRatioY * currentView.height;
+  const contentX = state.viewX + focalX * currentView.width;
+  const contentY = state.viewY + focalY * currentView.height;
 
   state.scale = nextScale;
   const nextView = visibleViewBox(state);
-  state.viewX = contentX - focusRatioX * nextView.width;
-  state.viewY = contentY - focusRatioY * nextView.height;
+  state.viewX = contentX - focalX * nextView.width;
+  state.viewY = contentY - focalY * nextView.height;
   applyPanZoom(state, viewport, svg);
 }
 
@@ -287,7 +405,7 @@ function resetPanZoom(
 function createPanZoomButton(
   label: string,
   icon: string,
-  onClick: () => void
+  onClick: (button: HTMLButtonElement) => void
 ) {
   const button = document.createElement("button");
   button.type = "button";
@@ -298,7 +416,7 @@ function createPanZoomButton(
   button.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    onClick();
+    onClick(button);
   });
   return button;
 }
@@ -327,6 +445,7 @@ function initializeMermaidPanZoom(output: HTMLElement) {
   svg.style.width = "100%";
   svg.style.maxWidth = "none";
   svg.style.height = "auto";
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
 
   const viewport = document.createElement("div");
   viewport.className = "mermaid-panzoom";
@@ -351,6 +470,8 @@ function initializeMermaidPanZoom(output: HTMLElement) {
     viewX: 0,
     viewY: 0,
     baseViewBox,
+    isCompactable: false,
+    isExpanded: false,
     dragPointerId: null,
     dragStartX: 0,
     dragStartY: 0,
@@ -373,6 +494,17 @@ function initializeMermaidPanZoom(output: HTMLElement) {
     }, PANZOOM_CONTROLS_VISIBLE_MS);
   };
 
+  const layoutButton = createPanZoomButton(
+    "Expand diagram",
+    EXPAND_DIAGRAM_ICON,
+    (button) => {
+      revealControls();
+      state.isExpanded = !state.isExpanded;
+      updatePanZoomLayout(state, viewport, button);
+      resetPanZoom(state, viewport, svg);
+    }
+  );
+
   controls.append(
     createPanZoomButton("Zoom in", ZOOM_IN_ICON, () => {
       revealControls();
@@ -385,11 +517,14 @@ function initializeMermaidPanZoom(output: HTMLElement) {
     createPanZoomButton("Reset view", RESET_VIEW_ICON, () => {
       revealControls();
       resetPanZoom(state, viewport, svg);
-    })
+    }),
+    layoutButton
   );
+  syncLayoutButton(state, layoutButton);
 
   viewport.append(canvas, controls);
   output.replaceChildren(viewport);
+  updatePanZoomLayout(state, viewport, layoutButton);
 
   const startDrag = (pointerId: number, point: PanZoomPoint) => {
     state.dragPointerId = pointerId;
@@ -474,13 +609,15 @@ function initializeMermaidPanZoom(output: HTMLElement) {
     }
 
     if (state.dragPointerId === event.pointerId) {
-      const rect = svg.getBoundingClientRect();
+      const contentBox = svgContentBox(state, svg);
       const currentView = visibleViewBox(state);
-      const deltaX = rect.width
-        ? ((event.clientX - state.dragStartX) / rect.width) * currentView.width
+      const deltaX = contentBox?.width
+        ? ((event.clientX - state.dragStartX) / contentBox.width) *
+          currentView.width
         : 0;
-      const deltaY = rect.height
-        ? ((event.clientY - state.dragStartY) / rect.height) * currentView.height
+      const deltaY = contentBox?.height
+        ? ((event.clientY - state.dragStartY) / contentBox.height) *
+          currentView.height
         : 0;
 
       state.viewX = state.dragOriginViewX - deltaX;
@@ -552,7 +689,15 @@ function initializeMermaidPanZoom(output: HTMLElement) {
   const resizeObserver =
     typeof ResizeObserver === "undefined"
       ? null
-      : new ResizeObserver(() => resetPanZoom(state, viewport, svg));
+      : new ResizeObserver(() => {
+          updatePanZoomLayout(state, viewport, layoutButton);
+          resetPanZoom(state, viewport, svg);
+        });
+
+  const handleWindowResize = () => {
+    updatePanZoomLayout(state, viewport, layoutButton);
+    resetPanZoom(state, viewport, svg);
+  };
 
   viewport.addEventListener("pointerdown", handlePointerDown);
   viewport.addEventListener("pointermove", handlePointerMove);
@@ -562,9 +707,13 @@ function initializeMermaidPanZoom(output: HTMLElement) {
   viewport.addEventListener("keydown", handleKeyDown);
   viewport.addEventListener("focusin", revealControls);
   viewport.addEventListener("pointerenter", revealControls);
+  window.addEventListener("resize", handleWindowResize);
   resizeObserver?.observe(viewport);
 
-  window.requestAnimationFrame(() => resetPanZoom(state, viewport, svg));
+  window.requestAnimationFrame(() => {
+    updatePanZoomLayout(state, viewport, layoutButton);
+    resetPanZoom(state, viewport, svg);
+  });
 
   mermaidPanZoomCleanups.set(output, () => {
     if (controlsHideTimeout !== null) {
@@ -579,6 +728,7 @@ function initializeMermaidPanZoom(output: HTMLElement) {
     viewport.removeEventListener("keydown", handleKeyDown);
     viewport.removeEventListener("focusin", revealControls);
     viewport.removeEventListener("pointerenter", revealControls);
+    window.removeEventListener("resize", handleWindowResize);
   });
 }
 
