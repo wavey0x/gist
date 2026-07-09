@@ -1148,8 +1148,6 @@ button {
 
 .markdown-body .mermaid-panzoom-canvas {
   width: 100%;
-  transform-origin: 0 0;
-  will-change: transform;
 }
 
 .markdown-body .mermaid-panzoom-canvas svg {
@@ -1190,7 +1188,6 @@ button {
   transform: translateY(0);
 }
 
-.markdown-body .mermaid-panzoom-grip,
 .markdown-body .mermaid-panzoom-button {
   display: inline-grid;
   width: 30px;
@@ -1198,10 +1195,6 @@ button {
   place-items: center;
   border-radius: 5px;
   color: var(--button-fg);
-}
-
-.markdown-body .mermaid-panzoom-grip {
-  color: var(--muted-fg);
 }
 
 .markdown-body .mermaid-panzoom-button {
@@ -1220,7 +1213,6 @@ button {
   outline-offset: 1px;
 }
 
-.markdown-body .mermaid-panzoom-grip svg,
 .markdown-body .mermaid-panzoom-button svg {
   width: 16px;
   height: 16px;

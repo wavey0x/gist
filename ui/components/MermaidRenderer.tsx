@@ -22,9 +22,7 @@ const ZOOM_IN_ICON =
 const ZOOM_OUT_ICON =
   '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>';
 const RESET_VIEW_ICON =
-  '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.34-5.66"/><path d="M4 4v6h6"/></svg>';
-const PAN_ICON =
-  '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2v20"/><path d="m8 6 4-4 4 4"/><path d="m8 18 4 4 4-4"/><path d="M2 12h20"/><path d="m6 8-4 4 4 4"/><path d="m18 8 4 4-4 4"/></svg>';
+  '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-15.74-5.95L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15.74 5.95L21 16"/><path d="M16 16h5v5"/></svg>';
 
 const mermaidPanZoomCleanups = new WeakMap<HTMLElement, () => void>();
 
@@ -43,15 +41,23 @@ type PanZoomPoint = {
   clientY: number;
 };
 
-type PanZoomState = {
-  scale: number;
+type PanZoomViewBox = {
   x: number;
   y: number;
+  width: number;
+  height: number;
+};
+
+type PanZoomState = {
+  scale: number;
+  viewX: number;
+  viewY: number;
+  baseViewBox: PanZoomViewBox;
   dragPointerId: number | null;
   dragStartX: number;
   dragStartY: number;
-  dragOriginX: number;
-  dragOriginY: number;
+  dragOriginViewX: number;
+  dragOriginViewY: number;
   pinchStartDistance: number | null;
   pinchStartScale: number;
   pointers: Map<number, PanZoomPoint>;
@@ -155,75 +161,127 @@ function pointCenter(first: PanZoomPoint, second: PanZoomPoint) {
   };
 }
 
-function clampPanZoom(
-  state: PanZoomState,
-  viewport: HTMLElement,
-  canvas: HTMLElement
-) {
-  const viewportWidth = viewport.clientWidth;
-  const viewportHeight = viewport.clientHeight;
-  const contentWidth = canvas.offsetWidth * state.scale;
-  const contentHeight = canvas.offsetHeight * state.scale;
+function readSvgViewBox(svg: SVGSVGElement): PanZoomViewBox | null {
+  const viewBox = svg.viewBox.baseVal;
+  if (viewBox.width > 0 && viewBox.height > 0) {
+    return {
+      x: viewBox.x,
+      y: viewBox.y,
+      width: viewBox.width,
+      height: viewBox.height
+    };
+  }
 
-  if (!viewportWidth || !viewportHeight || !contentWidth || !contentHeight) {
-    state.x = 0;
-    state.y = 0;
+  const rawViewBox = svg.getAttribute("viewBox");
+  const values = rawViewBox
+    ?.trim()
+    .split(/[\s,]+/)
+    .map((value) => Number(value));
+
+  if (
+    values &&
+    values.length === 4 &&
+    values.every(Number.isFinite) &&
+    values[2] > 0 &&
+    values[3] > 0
+  ) {
+    return {
+      x: values[0],
+      y: values[1],
+      width: values[2],
+      height: values[3]
+    };
+  }
+
+  return null;
+}
+
+function visibleViewBox(state: PanZoomState) {
+  return {
+    width: state.baseViewBox.width / state.scale,
+    height: state.baseViewBox.height / state.scale
+  };
+}
+
+function clampPanZoom(state: PanZoomState) {
+  const { width, height } = visibleViewBox(state);
+  const maxX = state.baseViewBox.width - width;
+  const maxY = state.baseViewBox.height - height;
+
+  if (!width || !height) {
+    state.viewX = 0;
+    state.viewY = 0;
     return;
   }
 
-  if (contentWidth <= viewportWidth) {
-    state.x = (viewportWidth - contentWidth) / 2;
+  if (maxX <= 0) {
+    state.viewX = maxX / 2;
   } else {
-    state.x = clamp(state.x, viewportWidth - contentWidth, 0);
+    state.viewX = clamp(state.viewX, 0, maxX);
   }
 
-  if (contentHeight <= viewportHeight) {
-    state.y = (viewportHeight - contentHeight) / 2;
+  if (maxY <= 0) {
+    state.viewY = maxY / 2;
   } else {
-    state.y = clamp(state.y, viewportHeight - contentHeight, 0);
+    state.viewY = clamp(state.viewY, 0, maxY);
   }
 }
 
 function applyPanZoom(
   state: PanZoomState,
   viewport: HTMLElement,
-  canvas: HTMLElement
+  svg: SVGSVGElement
 ) {
-  clampPanZoom(state, viewport, canvas);
-  canvas.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scale(${state.scale})`;
+  clampPanZoom(state);
+  const { width, height } = visibleViewBox(state);
+  // Zoom through the SVG viewBox so text and edges stay vector-crisp.
+  svg.setAttribute(
+    "viewBox",
+    `${state.baseViewBox.x + state.viewX} ${state.baseViewBox.y + state.viewY} ${width} ${height}`
+  );
   viewport.dataset.panzoomScale = state.scale.toFixed(2);
 }
 
 function setPanZoomScale(
   state: PanZoomState,
   viewport: HTMLElement,
-  canvas: HTMLElement,
+  svg: SVGSVGElement,
   scale: number,
   clientX?: number,
   clientY?: number
 ) {
   const nextScale = clamp(scale, PANZOOM_MIN_SCALE, PANZOOM_MAX_SCALE);
-  const rect = viewport.getBoundingClientRect();
-  const focalX = clientX === undefined ? rect.width / 2 : clientX - rect.left;
-  const focalY = clientY === undefined ? rect.height / 2 : clientY - rect.top;
-  const contentX = (focalX - state.x) / state.scale;
-  const contentY = (focalY - state.y) / state.scale;
+  const rect = svg.getBoundingClientRect();
+  const focalX =
+    clientX === undefined
+      ? rect.width / 2
+      : clamp(clientX - rect.left, 0, rect.width);
+  const focalY =
+    clientY === undefined
+      ? rect.height / 2
+      : clamp(clientY - rect.top, 0, rect.height);
+  const currentView = visibleViewBox(state);
+  const focusRatioX = rect.width ? focalX / rect.width : 0.5;
+  const focusRatioY = rect.height ? focalY / rect.height : 0.5;
+  const contentX = state.viewX + focusRatioX * currentView.width;
+  const contentY = state.viewY + focusRatioY * currentView.height;
 
   state.scale = nextScale;
-  state.x = focalX - contentX * nextScale;
-  state.y = focalY - contentY * nextScale;
-  applyPanZoom(state, viewport, canvas);
+  const nextView = visibleViewBox(state);
+  state.viewX = contentX - focusRatioX * nextView.width;
+  state.viewY = contentY - focusRatioY * nextView.height;
+  applyPanZoom(state, viewport, svg);
 }
 
 function resetPanZoom(
   state: PanZoomState,
   viewport: HTMLElement,
-  canvas: HTMLElement
+  svg: SVGSVGElement
 ) {
   state.scale = 1;
-  state.x = 0;
-  state.y = 0;
-  applyPanZoom(state, viewport, canvas);
+  state.viewX = 0;
+  state.viewY = 0;
+  applyPanZoom(state, viewport, svg);
 }
 
 function createPanZoomButton(
@@ -261,6 +319,11 @@ function initializeMermaidPanZoom(output: HTMLElement) {
     return;
   }
 
+  const baseViewBox = readSvgViewBox(svg);
+  if (!baseViewBox) {
+    return;
+  }
+
   svg.style.width = "100%";
   svg.style.maxWidth = "none";
   svg.style.height = "auto";
@@ -285,13 +348,14 @@ function initializeMermaidPanZoom(output: HTMLElement) {
 
   const state: PanZoomState = {
     scale: 1,
-    x: 0,
-    y: 0,
+    viewX: 0,
+    viewY: 0,
+    baseViewBox,
     dragPointerId: null,
     dragStartX: 0,
     dragStartY: 0,
-    dragOriginX: 0,
-    dragOriginY: 0,
+    dragOriginViewX: 0,
+    dragOriginViewY: 0,
     pinchStartDistance: null,
     pinchStartScale: 1,
     pointers: new Map()
@@ -312,23 +376,17 @@ function initializeMermaidPanZoom(output: HTMLElement) {
   controls.append(
     createPanZoomButton("Zoom in", ZOOM_IN_ICON, () => {
       revealControls();
-      setPanZoomScale(state, viewport, canvas, state.scale * PANZOOM_STEP);
+      setPanZoomScale(state, viewport, svg, state.scale * PANZOOM_STEP);
     }),
     createPanZoomButton("Zoom out", ZOOM_OUT_ICON, () => {
       revealControls();
-      setPanZoomScale(state, viewport, canvas, state.scale / PANZOOM_STEP);
+      setPanZoomScale(state, viewport, svg, state.scale / PANZOOM_STEP);
     }),
     createPanZoomButton("Reset view", RESET_VIEW_ICON, () => {
       revealControls();
-      resetPanZoom(state, viewport, canvas);
+      resetPanZoom(state, viewport, svg);
     })
   );
-
-  const panAffordance = document.createElement("span");
-  panAffordance.className = "mermaid-panzoom-grip";
-  panAffordance.title = "Drag to pan";
-  panAffordance.innerHTML = PAN_ICON;
-  controls.prepend(panAffordance);
 
   viewport.append(canvas, controls);
   output.replaceChildren(viewport);
@@ -337,8 +395,8 @@ function initializeMermaidPanZoom(output: HTMLElement) {
     state.dragPointerId = pointerId;
     state.dragStartX = point.clientX;
     state.dragStartY = point.clientY;
-    state.dragOriginX = state.x;
-    state.dragOriginY = state.y;
+    state.dragOriginViewX = state.viewX;
+    state.dragOriginViewY = state.viewY;
     viewport.setAttribute("data-panzoom-state", "dragging");
   };
 
@@ -406,7 +464,7 @@ function initializeMermaidPanZoom(output: HTMLElement) {
       setPanZoomScale(
         state,
         viewport,
-        canvas,
+        svg,
         state.pinchStartScale * (distance / state.pinchStartDistance),
         center.clientX,
         center.clientY
@@ -416,9 +474,18 @@ function initializeMermaidPanZoom(output: HTMLElement) {
     }
 
     if (state.dragPointerId === event.pointerId) {
-      state.x = state.dragOriginX + event.clientX - state.dragStartX;
-      state.y = state.dragOriginY + event.clientY - state.dragStartY;
-      applyPanZoom(state, viewport, canvas);
+      const rect = svg.getBoundingClientRect();
+      const currentView = visibleViewBox(state);
+      const deltaX = rect.width
+        ? ((event.clientX - state.dragStartX) / rect.width) * currentView.width
+        : 0;
+      const deltaY = rect.height
+        ? ((event.clientY - state.dragStartY) / rect.height) * currentView.height
+        : 0;
+
+      state.viewX = state.dragOriginViewX - deltaX;
+      state.viewY = state.dragOriginViewY - deltaY;
+      applyPanZoom(state, viewport, svg);
       event.preventDefault();
     }
   };
@@ -445,7 +512,11 @@ function initializeMermaidPanZoom(output: HTMLElement) {
   };
 
   const handleWheel = (event: WheelEvent) => {
-    if (!event.ctrlKey && !event.metaKey) {
+    const activeElement = document.activeElement;
+    const viewportHasFocus =
+      activeElement instanceof Element && viewport.contains(activeElement);
+
+    if (!viewportHasFocus && !event.ctrlKey && !event.metaKey) {
       return;
     }
 
@@ -455,7 +526,7 @@ function initializeMermaidPanZoom(output: HTMLElement) {
     setPanZoomScale(
       state,
       viewport,
-      canvas,
+      svg,
       state.scale * scaleFactor,
       event.clientX,
       event.clientY
@@ -465,15 +536,15 @@ function initializeMermaidPanZoom(output: HTMLElement) {
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === "+" || event.key === "=") {
       revealControls();
-      setPanZoomScale(state, viewport, canvas, state.scale * PANZOOM_STEP);
+      setPanZoomScale(state, viewport, svg, state.scale * PANZOOM_STEP);
       event.preventDefault();
     } else if (event.key === "-") {
       revealControls();
-      setPanZoomScale(state, viewport, canvas, state.scale / PANZOOM_STEP);
+      setPanZoomScale(state, viewport, svg, state.scale / PANZOOM_STEP);
       event.preventDefault();
     } else if (event.key === "0" || event.key === "Escape") {
       revealControls();
-      resetPanZoom(state, viewport, canvas);
+      resetPanZoom(state, viewport, svg);
       event.preventDefault();
     }
   };
@@ -481,7 +552,7 @@ function initializeMermaidPanZoom(output: HTMLElement) {
   const resizeObserver =
     typeof ResizeObserver === "undefined"
       ? null
-      : new ResizeObserver(() => resetPanZoom(state, viewport, canvas));
+      : new ResizeObserver(() => resetPanZoom(state, viewport, svg));
 
   viewport.addEventListener("pointerdown", handlePointerDown);
   viewport.addEventListener("pointermove", handlePointerMove);
@@ -493,7 +564,7 @@ function initializeMermaidPanZoom(output: HTMLElement) {
   viewport.addEventListener("pointerenter", revealControls);
   resizeObserver?.observe(viewport);
 
-  window.requestAnimationFrame(() => resetPanZoom(state, viewport, canvas));
+  window.requestAnimationFrame(() => resetPanZoom(state, viewport, svg));
 
   mermaidPanZoomCleanups.set(output, () => {
     if (controlsHideTimeout !== null) {
