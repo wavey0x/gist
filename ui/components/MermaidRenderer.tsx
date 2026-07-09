@@ -10,6 +10,9 @@ const MERMAID_ERROR_SELECTOR = ".mermaid-render-error";
 const MERMAID_RENDER_ERROR_TEXT = "Unable to render Mermaid diagram.";
 const MERMAID_MAX_DIAGRAMS = 32;
 const MERMAID_MAX_SOURCE_CHARS = 50000;
+const FLOWCHART_RE = /^\s*(?:flowchart|graph)\b/i;
+const UNQUOTED_EDGE_LABEL_WITH_PUNCTUATION_RE =
+  /([-<>=.ox]+)\|([^|"\n]*[()[\],;][^|"\n]*)\|/g;
 
 type MermaidApi = {
   initialize: (options: Record<string, unknown>) => void;
@@ -70,6 +73,19 @@ function configureMermaid(mermaid: MermaidApi, theme: string) {
   });
 }
 
+function normalizeMermaidSource(source: string) {
+  if (!FLOWCHART_RE.test(source)) {
+    return source;
+  }
+
+  // Mermaid rejects some GitHub-accepted unquoted flowchart edge labels.
+  return source.replace(
+    UNQUOTED_EDGE_LABEL_WITH_PUNCTUATION_RE,
+    (_match, edgeOperator: string, label: string) =>
+      `${edgeOperator}|"${label.replace(/"/g, '\\"')}"|`
+  );
+}
+
 function addNonceToMermaidSvg(svg: string, nonce: string | null) {
   const template = document.createElement("template");
   template.innerHTML = svg.trim();
@@ -98,7 +114,7 @@ async function renderMermaidWithStyleNonce(
   nonce: string | null
 ) {
   if (!nonce) {
-    return mermaid.render(id, source);
+    return mermaid.render(id, normalizeMermaidSource(source));
   }
 
   const originalCreateElement = document.createElement.bind(document);
@@ -124,7 +140,7 @@ async function renderMermaidWithStyleNonce(
   }) as typeof document.createElementNS;
 
   try {
-    return await mermaid.render(id, source);
+    return await mermaid.render(id, normalizeMermaidSource(source));
   } finally {
     document.createElement = originalCreateElement;
     document.createElementNS = originalCreateElementNS;
