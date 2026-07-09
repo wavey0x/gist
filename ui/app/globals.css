@@ -1106,7 +1106,6 @@ button {
 .markdown-body .mermaid-render {
   max-width: 100%;
   margin: 16px 0;
-  overflow-x: auto;
   text-align: center;
 }
 
@@ -1124,6 +1123,112 @@ button {
   max-width: 100%;
   height: auto;
   margin: 0 auto;
+}
+
+.markdown-body .mermaid-panzoom {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--page-bg);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.markdown-body .mermaid-panzoom:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.markdown-body .mermaid-panzoom[data-panzoom-state="dragging"] {
+  cursor: grabbing;
+}
+
+.markdown-body .mermaid-panzoom-canvas {
+  width: 100%;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.markdown-body .mermaid-panzoom-canvas svg {
+  display: block;
+  width: 100% !important;
+  max-width: none !important;
+  height: auto !important;
+  margin: 0;
+}
+
+.markdown-body .mermaid-panzoom-controls {
+  position: absolute;
+  z-index: 1;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--page-bg);
+  background: color-mix(in srgb, var(--page-bg) 88%, transparent);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.markdown-body .mermaid-panzoom:hover .mermaid-panzoom-controls,
+.markdown-body .mermaid-panzoom:focus-within .mermaid-panzoom-controls,
+.markdown-body .mermaid-panzoom[data-panzoom-controls="visible"] .mermaid-panzoom-controls {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.markdown-body .mermaid-panzoom-grip,
+.markdown-body .mermaid-panzoom-button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 5px;
+  color: var(--button-fg);
+}
+
+.markdown-body .mermaid-panzoom-grip {
+  color: var(--muted-fg);
+}
+
+.markdown-body .mermaid-panzoom-button {
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.markdown-body .mermaid-panzoom-button:hover {
+  border-color: var(--border);
+  background: var(--button-bg-active);
+}
+
+.markdown-body .mermaid-panzoom-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.markdown-body .mermaid-panzoom-grip svg,
+.markdown-body .mermaid-panzoom-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .markdown-body .mermaid-render-error {
