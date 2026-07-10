@@ -8,7 +8,7 @@ import {
   History,
   TextSearch
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { getGistHeaderTitle } from "../lib/gist-title";
 import type { PublicGistPayload, RevisionHistoryItem } from "../lib/gists";
@@ -122,6 +122,10 @@ export function GistViewer({
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const historyControlRef = useRef<HTMLDivElement | null>(null);
   const markdownRef = useRef<HTMLElement | null>(null);
+  const renderedHtml = useMemo(
+    () => ({ __html: gist.rendered_html }),
+    [gist.rendered_html]
+  );
 
   useEffect(() => {
     if (!rawCopied) {
@@ -498,7 +502,7 @@ export function GistViewer({
         <article
           ref={markdownRef}
           className="markdown-body"
-          dangerouslySetInnerHTML={{ __html: gist.rendered_html }}
+          dangerouslySetInnerHTML={renderedHtml}
         />
       ) : viewMode === "custom" && customContent ? (
         customContent

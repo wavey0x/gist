@@ -26,6 +26,7 @@ export const viewport: Viewport = {
 
 const themeScript = `
 (() => {
+  document.documentElement.dataset.js = "enabled";
   try {
     const saved = localStorage.getItem("theme");
     const preferred = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";

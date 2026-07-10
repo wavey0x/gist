@@ -35,6 +35,8 @@ export const LLMS_TXT =
     "",
     "Markdown should be complete and self-contained. Prefer starting Markdown with a non-empty `# Title` heading.",
     "Raw Markdown is public to anyone with the gist URL, so do not publish secrets or credentials.",
+    "Mermaid diagrams are supported in fenced code blocks tagged `mermaid`; use standard Mermaid syntax and do not rely on renderer-specific extensions.",
+    "For Mermaid sequence diagrams, avoid raw semicolons in message text; use a comma, period, or Mermaid entity text such as `#59;` when a literal semicolon is required.",
     "",
     "### Create",
     "",

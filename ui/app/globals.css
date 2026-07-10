@@ -1113,6 +1113,13 @@ button {
   text-align: left;
 }
 
+:root[data-js="enabled"]
+  .markdown-body
+  .mermaid-render:not([data-mermaid-state="error"])
+  .mermaid-render-fallback {
+  display: none;
+}
+
 .markdown-body .mermaid-render-output,
 .markdown-body .mermaid-render-error {
   display: none;
@@ -1243,6 +1250,7 @@ button {
   display: none;
 }
 
+.markdown-body .mermaid-render[data-mermaid-state="loading"] .mermaid-render-output,
 .markdown-body .mermaid-render[data-mermaid-state="rendered"] .mermaid-render-output {
   display: block;
 }
@@ -1253,33 +1261,38 @@ button {
 
 .markdown-body table {
   display: block;
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  min-width: 0;
   overflow-y: hidden;
   table-layout: auto;
 }
 
 .markdown-body th,
 .markdown-body td {
-  min-width: 8ch;
-  overflow-wrap: normal;
+  min-width: 0;
+  overflow-wrap: break-word;
   word-break: normal;
 }
 
 .markdown-body th {
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .markdown-body th:last-child,
 .markdown-body td:last-child {
-  min-width: 36ch;
+  min-width: 0;
   max-width: 90ch;
   overflow-wrap: break-word;
   white-space: normal;
 }
 
+.markdown-body table code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .markdown-body table a,
-.markdown-body table code,
 .markdown-body table .eth-entity {
   white-space: nowrap;
 }

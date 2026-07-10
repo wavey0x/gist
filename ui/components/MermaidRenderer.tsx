@@ -791,7 +791,8 @@ async function renderMermaidContainer(
   container: HTMLElement,
   id: string,
   nonce: string | null,
-  theme: string
+  theme: string,
+  shouldCancel: () => boolean
 ) {
   const fallback = container.querySelector<HTMLPreElement>(
     MERMAID_FALLBACK_SELECTOR
@@ -808,9 +809,17 @@ async function renderMermaidContainer(
     markMermaidError(container, theme);
     return;
   }
+  if (shouldCancel() || !container.isConnected) {
+    return;
+  }
 
-  destroyMermaidPanZoom(output);
-  output.innerHTML = "";
+  const hasRenderedOutput =
+    container.getAttribute("data-mermaid-state") === "rendered" &&
+    Boolean(output.querySelector("svg"));
+  if (!hasRenderedOutput) {
+    destroyMermaidPanZoom(output);
+    output.innerHTML = "";
+  }
   if (error) {
     error.textContent = "";
   }
@@ -819,11 +828,18 @@ async function renderMermaidContainer(
 
   try {
     const result = await renderMermaidWithStyleNonce(mermaid, id, source, nonce);
+    if (shouldCancel() || !container.isConnected) {
+      return;
+    }
+    destroyMermaidPanZoom(output);
     output.innerHTML = addNonceToMermaidSvg(result.svg, nonce);
     initializeMermaidPanZoom(output);
     container.dataset.mermaidTheme = theme;
     container.setAttribute("data-mermaid-state", "rendered");
   } catch {
+    if (shouldCancel() || !container.isConnected) {
+      return;
+    }
     markMermaidError(container, theme);
   }
 }
@@ -846,17 +862,45 @@ function mermaidContainersNeedingRender(theme: string) {
     );
 }
 
+function nodeContainsMermaidRenderSurface(node: Node) {
+  if (!(node instanceof Element)) {
+    return false;
+  }
+  return (
+    node.matches(MARKDOWN_BODY_SELECTOR) ||
+    node.matches(MERMAID_RENDER_SELECTOR) ||
+    Boolean(
+      node.querySelector(`${MARKDOWN_BODY_SELECTOR}, ${MERMAID_RENDER_SELECTOR}`)
+    )
+  );
+}
+
+function mutationsTouchMermaidRenderSurface(mutations: MutationRecord[]) {
+  const markdownRoot =
+    document.querySelector<HTMLElement>(MARKDOWN_BODY_SELECTOR);
+
+  return mutations.some((mutation) => {
+    if (
+      markdownRoot &&
+      (mutation.target === markdownRoot || markdownRoot.contains(mutation.target))
+    ) {
+      return true;
+    }
+    return Array.from(mutation.addedNodes).some(nodeContainsMermaidRenderSurface);
+  });
+}
+
 export function MermaidRenderer({
   gistId,
   revisionNumber
 }: MermaidRendererProps) {
   useEffect(() => {
     let cancelled = false;
-    let renderGeneration = 0;
     let renderTimeout: number | null = null;
+    let renderInProgress = false;
+    let renderAgain = false;
 
-    async function renderAll() {
-      const generation = ++renderGeneration;
+    async function renderPass() {
       const theme = currentMermaidTheme();
       const containers = mermaidContainersNeedingRender(theme);
       if (!containers.length) {
@@ -877,14 +921,14 @@ export function MermaidRenderer({
         return;
       }
 
-      if (cancelled || generation !== renderGeneration) {
+      if (cancelled) {
         return;
       }
 
       configureMermaid(mermaid, theme);
       const nonce = cspNonce();
       for (const { container, index } of renderableContainers) {
-        if (cancelled || generation !== renderGeneration) {
+        if (cancelled) {
           return;
         }
         await renderMermaidContainer(
@@ -892,8 +936,26 @@ export function MermaidRenderer({
           container,
           mermaidRenderId(gistId, revisionNumber, index),
           nonce,
-          theme
+          theme,
+          () => cancelled
         );
+      }
+    }
+
+    async function renderAll() {
+      if (renderInProgress) {
+        renderAgain = true;
+        return;
+      }
+
+      renderInProgress = true;
+      try {
+        do {
+          renderAgain = false;
+          await renderPass();
+        } while (!cancelled && renderAgain);
+      } finally {
+        renderInProgress = false;
       }
     }
 
@@ -908,7 +970,11 @@ export function MermaidRenderer({
       }, 0);
     }
 
-    const domObserver = new MutationObserver(scheduleRender);
+    const domObserver = new MutationObserver((mutations) => {
+      if (mutationsTouchMermaidRenderSurface(mutations)) {
+        scheduleRender();
+      }
+    });
     domObserver.observe(document.body, {
       childList: true,
       subtree: true
@@ -924,7 +990,7 @@ export function MermaidRenderer({
 
     return () => {
       cancelled = true;
-      renderGeneration += 1;
+      renderAgain = false;
       if (renderTimeout !== null) {
         window.clearTimeout(renderTimeout);
       }
