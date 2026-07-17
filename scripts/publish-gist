@@ -232,6 +232,7 @@ def validate_read_response(
         or not isinstance(digest, str)
         or not SHA256_RE.fullmatch(digest)
         or not isinstance(markdown, str)
+        or content_sha256(markdown) != digest
         or (
             requested_revision is not None
             and revision_number != requested_revision

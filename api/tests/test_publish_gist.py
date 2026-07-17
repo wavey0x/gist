@@ -282,6 +282,16 @@ def test_exact_revision_read_rejects_wrong_identity(field, value):
         publish_gist.validate_read_response(response, GIST_ID, 2)
 
 
+def test_read_rejects_digest_that_does_not_match_markdown():
+    response = _read_payload(digest="b" * 64)
+
+    with pytest.raises(
+        publish_gist.CliError,
+        match="invalid gist read response",
+    ):
+        publish_gist.validate_read_response(response, GIST_ID, 2)
+
+
 def test_verify_checks_exact_raw_render_and_public_revision(monkeypatch, capsys):
     revision_url = f"{GIST_URL}/revisions/2"
     seen = []
