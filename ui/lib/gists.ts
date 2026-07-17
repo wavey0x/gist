@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import { apiUrl } from "./api-base";
 
-const GIST_ID_RE = /^(?:[A-Za-z0-9]{16,64}|[A-Za-z0-9_-]{32})$/;
+const GIST_ID_RE = /^[A-Za-z0-9]{16,64}$/;
 const REVISION_NUMBER_RE = /^[1-9][0-9]*$/;
+const CONTENT_SHA256_RE = /^[a-f0-9]{64}$/;
 
 export class PublicGistNotFoundError extends Error {
   constructor() {
@@ -26,6 +27,7 @@ export type PublicGistPayload = {
   author_avatar_url?: string;
   markdown: string;
   rendered_html: string;
+  content_sha256: string;
   revision_number: number;
   latest_revision_number: number;
   created_at: string;
@@ -82,6 +84,8 @@ function normalizePayload(gistId: string, payload: unknown): PublicGistPayload {
       typeof gist.author_avatar_url !== "string") ||
     typeof gist.markdown !== "string" ||
     typeof gist.rendered_html !== "string" ||
+    typeof gist.content_sha256 !== "string" ||
+    !CONTENT_SHA256_RE.test(gist.content_sha256) ||
     typeof gist.revision_number !== "number" ||
     !Number.isInteger(gist.revision_number) ||
     gist.revision_number < 1 ||
@@ -106,6 +110,7 @@ function normalizePayload(gistId: string, payload: unknown): PublicGistPayload {
     ...(gist.author_avatar_url ? { author_avatar_url: gist.author_avatar_url } : {}),
     markdown: gist.markdown,
     rendered_html: gist.rendered_html,
+    content_sha256: gist.content_sha256,
     revision_number: gist.revision_number,
     latest_revision_number: gist.latest_revision_number,
     created_at: gist.created_at,

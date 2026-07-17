@@ -9,20 +9,10 @@ type RecentlyViewedRecorderProps = {
   gist: PublicGistPayload;
 };
 
-function latestUrl(gist: PublicGistPayload) {
-  return `/${gist.id}`;
-}
-
-function revisionUrl(gist: PublicGistPayload) {
-  return `/${gist.id}/revisions/${gist.revision_number}`;
-}
-
 export function RecentlyViewedRecorder({ gist }: RecentlyViewedRecorderProps) {
   useEffect(() => {
     recordRecentlyViewedGist({
       id: gist.id,
-      url: latestUrl(gist),
-      revision_url: revisionUrl(gist),
       title: getTopLevelHeading(gist) ?? gist.title,
       author_name: gist.author_name,
       author_avatar_url: gist.author_avatar_url,

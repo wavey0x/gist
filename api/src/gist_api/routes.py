@@ -29,6 +29,10 @@ from .service import (
 
 gists_api = Blueprint("gists_api", __name__)
 AVATAR_ROUTE_RE = re.compile(f"^{AVATAR_FILE_RE}$")
+CREATE_GIST_FIELDS = frozenset({"title", "markdown"})
+UPDATE_GIST_FIELDS = frozenset(
+    {"title", "markdown", "expected_content_sha256"}
+)
 TRUSTED_PROXY_REMOTES = {
     str(ip_address(value))
     for value in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
@@ -63,7 +67,17 @@ def _client_ip():
     return normalized_remote_addr
 
 
-def parse_json_body():
+def _validate_fields(values, allowed_fields):
+    unknown_fields = sorted(set(values.keys()) - set(allowed_fields))
+    if unknown_fields:
+        raise GistError(
+            "invalid_request",
+            f"unknown field: {unknown_fields[0]}",
+            400,
+        )
+
+
+def parse_json_body(allowed_fields):
     max_bytes = current_app.config.get("MAX_REQUEST_BYTES", 1048576 + 2048)
     if request.content_length is not None and request.content_length > max_bytes:
         raise GistError("payload_too_large", "Payload too large", 413)
@@ -72,6 +86,7 @@ def parse_json_body():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         raise GistError("invalid_request", "JSON object required", 400)
+    _validate_fields(data, allowed_fields)
     return data
 
 
@@ -85,26 +100,29 @@ def _check_multipart_size():
         )
 
 
-def parse_multipart_gist_body():
+def parse_multipart_gist_body(allowed_fields):
     _check_multipart_size()
     if not request.mimetype == "multipart/form-data":
         raise GistError("invalid_request", "multipart form required", 400)
 
+    _validate_fields(request.form, allowed_fields)
+    _validate_fields(request.files, {"images[]"})
+
     payload = {}
-    for field in ("title", "markdown", "expected_content_sha256"):
-        if field in request.form:
-            payload[field] = request.form.get(field)
-    image_uploads = [
-        *request.files.getlist("images[]"),
-        *request.files.getlist("images"),
-    ]
+    for field in allowed_fields:
+        values = request.form.getlist(field)
+        if len(values) > 1:
+            raise GistError("invalid_request", f"duplicate field: {field}", 400)
+        if values:
+            payload[field] = values[0]
+    image_uploads = request.files.getlist("images[]")
     return payload, image_uploads
 
 
-def parse_gist_body():
+def parse_gist_body(allowed_fields):
     if request.mimetype == "multipart/form-data":
-        return parse_multipart_gist_body()
-    return parse_json_body(), []
+        return parse_multipart_gist_body(allowed_fields)
+    return parse_json_body(allowed_fields), []
 
 
 def require_gist_auth():
@@ -206,7 +224,7 @@ def image(image_id):
 @gists_api.route("/api/v1/auth/session", methods=["POST"])
 def post_auth_session():
     try:
-        payload = parse_json_body()
+        payload = parse_json_body({"api_key"})
     except GistError as error:
         return error_response(error.code, error.message, error.status)
 
@@ -261,10 +279,16 @@ def post_image():
         _check_multipart_size()
         if request.mimetype != "multipart/form-data":
             raise GistError("invalid_request", "multipart form required", 400)
-        file_storage = request.files.get("image")
-        if file_storage is None:
+        _validate_fields(request.form, set())
+        _validate_fields(request.files, {"image"})
+        image_uploads = request.files.getlist("image")
+        if len(image_uploads) > 1:
+            raise GistError("invalid_request", "duplicate field: image", 400)
+        if not image_uploads:
             raise GistError("invalid_request", "image file is required", 400)
-        return jsonify(create_image_asset(current_app, auth.key_id, file_storage)), 201
+        return jsonify(
+            create_image_asset(current_app, auth.key_id, image_uploads[0])
+        ), 201
     except GistError as error:
         return error_response(error.code, error.message, error.status)
 
@@ -303,7 +327,7 @@ def post_gist():
         return response
 
     try:
-        payload, image_uploads = parse_gist_body()
+        payload, image_uploads = parse_gist_body(CREATE_GIST_FIELDS)
         body = create_gist(
             current_app,
             auth.key_id,
@@ -362,7 +386,7 @@ def update_gist(gist_id):
             auth.key_id,
             auth.name,
             gist_id,
-            *parse_gist_body(),
+            *parse_gist_body(UPDATE_GIST_FIELDS),
         )
         return jsonify(body)
     except GistError as error:

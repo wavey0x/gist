@@ -10,13 +10,6 @@ def _int_env(name, default):
     return int(value)
 
 
-def _bool_env(name, default):
-    value = os.getenv(name)
-    if value is None or value == "":
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def load_settings():
     max_markdown_bytes = _int_env("MAX_MARKDOWN_BYTES", 1048576)
     image_max_bytes = _int_env("GIST_IMAGE_MAX_BYTES", 20 * 1024 * 1024)
@@ -44,14 +37,8 @@ def load_settings():
             "MAX_MULTIPART_REQUEST_BYTES",
             max_markdown_bytes + (image_max_bytes * image_max_per_request) + 8192,
         ),
-        "PORT": _int_env("PORT", 3001),
         "MAX_MARKDOWN_BYTES": max_markdown_bytes,
         "MAX_REQUEST_BYTES": _int_env("MAX_REQUEST_BYTES", None),
-        "ALLOW_EMPTY_MARKDOWN": _bool_env("ALLOW_EMPTY_MARKDOWN", False),
-        "ETHEREUM_ENTITY_RENDERING": _bool_env(
-            "GIST_ETHEREUM_ENTITY_RENDERING",
-            True,
-        ),
         "SQLITE_BUSY_TIMEOUT_MS": _int_env("SQLITE_BUSY_TIMEOUT_MS", 5000),
         "API_WRITE_LIMIT_PER_24H": _int_env("API_WRITE_LIMIT_PER_24H", 150),
         "API_AUTH_FAILURE_LIMIT_PER_MINUTE": _int_env(

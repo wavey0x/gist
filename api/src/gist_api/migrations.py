@@ -10,8 +10,7 @@ except ImportError:  # pragma: no cover - fcntl is unavailable on Windows.
     fcntl = None
 
 
-SOURCE_MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
-MIGRATIONS_DIR = SOURCE_MIGRATIONS_DIR
+MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 MIGRATION_RE = re.compile(r"^(\d{3})_[A-Za-z0-9_]+\.sql$")
 
 
@@ -42,13 +41,6 @@ def _read_migrations():
     return migrations
 
 
-def _ensure_baseline(conn, migrations):
-    version, _path, sql = migrations[0]
-    if version != 1:
-        raise RuntimeError("first gist migration must be version 001")
-    conn.executescript(sql)
-
-
 def init_gist_database(app):
     db_path = get_gist_db_path(app)
     if db_path != ":memory:":
@@ -65,19 +57,12 @@ def init_gist_database(app):
                 )
                 """
             )
-            _ensure_baseline(conn, migrations)
             applied = {
                 row["version"]
                 for row in conn.execute("select version from gist_schema_migrations")
             }
-            if 1 not in applied:
-                with conn:
-                    conn.execute(
-                        "insert into gist_schema_migrations(version) values (1)"
-                    )
-                applied.add(1)
 
-            for version, _path, sql in migrations[1:]:
+            for version, _path, sql in migrations:
                 if version in applied:
                     continue
                 with conn:

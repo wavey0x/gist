@@ -91,11 +91,50 @@ from the account page.
 
 ## Create A Gist
 
-Use the key from the previous step:
+The repository helper is the recommended interface for text-only publishing.
+It uses `WAVEY_GIST_API_KEY`, reads from `--file` or stdin, and has no
+third-party Python dependencies:
+
+```sh
+export WAVEY_GIST_API_KEY=<api_key>
+scripts/publish-gist --file plan.md --verify --json
+```
+
+Read a public gist before editing it:
+
+```sh
+scripts/publish-gist --read --gist <url-or-id> --json
+```
+
+Safely update it with the digest returned by that read:
+
+```sh
+scripts/publish-gist \
+  --gist <url-or-id> \
+  --file plan.md \
+  --expected-content-sha256 <current_sha256> \
+  --verify \
+  --json
+```
+
+`--json` reports the public URL, revision number, and content SHA. `--verify`
+checks the exact new raw revision, public render payload, and rendered page. If
+verification fails after the API accepted the write, the command exits
+nonzero and identifies the already-created revision; inspect it before taking
+further action.
+
+Supported helper options are `--file`, `--title`, `--gist`, `--read`,
+`--expected-content-sha256`, `--verify`, `--json`, `--api-base-url`, and
+`--check-key`. It uses `WAVEY_GIST_API_BASE_URL` to override the default API
+origin. Credential lookup checks `WAVEY_GIST_API_KEY`, then the file named by
+`WAVEY_GIST_ENV_FILE` (default `~/.config/wavey/gist.env`), then the existing
+macOS Keychain service. Read mode never discovers credentials.
+
+The underlying API remains available for direct integrations:
 
 ```sh
 curl -sS http://localhost:3001/api/v1/gists \
-  -H "Authorization: Bearer $GIST_API_KEY" \
+  -H "Authorization: Bearer $WAVEY_GIST_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"title":"Hello","markdown":"# Hello\n\nThis is a gist."}'
 ```
@@ -125,11 +164,9 @@ Backend environment variables:
 | `GIST_IMAGE_MAX_DIMENSION` | `4096` | Maximum image width or height. |
 | `GIST_IMAGE_MAX_PER_REQUEST` | `10` | Maximum images accepted in one multipart request. |
 | `MAX_MULTIPART_REQUEST_BYTES` | markdown plus image upload limits | Maximum multipart request body size accepted by Flask. |
-| `PORT` | `3001` | Backend port when using the module entrypoint. |
 | `MAX_MARKDOWN_BYTES` | `1048576` | Maximum Markdown payload size. |
 | `MAX_REQUEST_BYTES` | `MAX_MARKDOWN_BYTES + 2048` | Maximum JSON request body size accepted by Flask. |
 | `GIST_EXTERNAL_ID_LENGTH` | `16` | Length for newly generated random gist IDs. Must be between 16 and 64. |
-| `ALLOW_EMPTY_MARKDOWN` | `false` | Allow empty Markdown documents. |
 | `SQLITE_BUSY_TIMEOUT_MS` | `5000` | SQLite busy timeout. |
 | `API_WRITE_LIMIT_PER_24H` | `150` | Write limit per key and source IP. |
 | `API_AUTH_FAILURE_LIMIT_PER_MINUTE` | `20` | Auth failure limit per source IP. |
@@ -148,7 +185,6 @@ Frontend environment variables:
 | Name | Default | Description |
 | --- | --- | --- |
 | `GIST_API_BASE_URL` | `http://localhost:3001` | Backend base URL used by server-rendered pages. Set this explicitly in production. |
-| `SITE_BASE_URL` | deployment-specific | Canonical public frontend base URL. |
 | `GIST_BRAND_NAME` | `wavey` | Brand name shown before `gist` in the compact gist-page brand mark. |
 | `GIST_SHOW_BRANDING` | `false` | Show the compact gist-page brand mark. Use `true`, `1`, `yes`, or `on` to enable it. |
 
@@ -214,6 +250,14 @@ replaced with the stored image URL. Uploaded images that are not referenced are
 appended to the saved Markdown as image blocks, so image-only gist creation is
 valid.
 
+Requests reject unknown fields. The accepted fields are:
+
+- auth session create: JSON `api_key`;
+- gist create: `title`, `markdown`, and multipart `images[]`;
+- gist update: `title`, `markdown`, `expected_content_sha256`, and multipart
+  `images[]`;
+- standalone image upload: multipart `image`.
+
 The web-session routes use the `wg_session` HttpOnly cookie minted from a gist
 API key.
 
@@ -221,7 +265,8 @@ Update and delete routes only mutate gists whose first revision was created by
 the authenticated key. A non-owned gist returns `404`.
 
 Public render routes do not require auth because anyone with the random gist
-URL can view the rendered page and raw Markdown source.
+URL can view the rendered page and raw Markdown source. Their JSON payloads
+include the exact revision's `content_sha256`.
 
 ## Deployment
 

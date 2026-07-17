@@ -70,4 +70,44 @@ def test_migrations_ignore_current_working_directory(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     reloaded = importlib.reload(migration_module)
 
-    assert reloaded.MIGRATIONS_DIR == reloaded.SOURCE_MIGRATIONS_DIR
+    assert reloaded.MIGRATIONS_DIR.name == "migrations"
+    assert reloaded.MIGRATIONS_DIR.parent.name == "api"
+
+
+def test_existing_migration_ledger_is_not_replayed(monkeypatch, tmp_path):
+    database_path = tmp_path / "existing.sqlite3"
+    config = {
+        "SQLITE_DB_PATH": str(database_path),
+        "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
+        "PUBLIC_API_BASE_URL": "https://api.example.com",
+    }
+    app = create_app(config)
+    with gist_connection(app) as conn:
+        assert conn.execute(
+            "select 1 from gist_schema_migrations where version = 1"
+        ).fetchone()
+
+    replacement_migrations = tmp_path / "replacement-migrations"
+    replacement_migrations.mkdir()
+    (replacement_migrations / "001_initial.sql").write_text(
+        "create table should_not_run(id integer primary key);",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        migration_module,
+        "MIGRATIONS_DIR",
+        replacement_migrations,
+    )
+
+    reopened = create_app(config)
+    with gist_connection(reopened) as conn:
+        assert (
+            conn.execute(
+                """
+                select name
+                from sqlite_master
+                where type = 'table' and name = 'should_not_run'
+                """
+            ).fetchone()
+            is None
+        )

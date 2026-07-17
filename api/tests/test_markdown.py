@@ -563,21 +563,6 @@ block 22481234
     assert "eth-entity" not in code_block_html
 
 
-def test_ethereum_entity_rendering_can_be_disabled():
-    result = render_markdown_result(
-        f"{ETH_ADDRESS} {ETH_TX_HASH} {ENS_NAME} {ETH_SELECTOR} block 22481234",
-        ethereum_entities=False,
-    )
-
-    assert "eth-entity" not in result.html
-    assert ETH_ADDRESS in result.html
-    assert ETH_TX_HASH in result.html
-    assert ENS_NAME in result.html
-    assert ETH_SELECTOR in result.html
-    assert "22481234" in result.html
-    assert "ethereum-entities/off" in result.version
-
-
 def test_ethereum_entity_rendering_leaves_unlinked_abbreviations_plain():
     result = render_markdown_result("Not enough context: 0x1234...5678 and 0x123..678")
 
@@ -767,7 +752,7 @@ def test_rerender_gists_updates_current_rows_and_revisions(client, app):
     assert "highlight/ok" in revision["render_version"]
 
 
-def test_rerender_gists_honors_ethereum_entity_rendering_config(client, app):
+def test_rerender_gists_uses_current_ethereum_rendering(client, app):
     write_key = make_key(app, name="renderer")
     created = create_gist(client, write_key, markdown=ETH_ADDRESS)
     assert created.status_code == 201
@@ -792,9 +777,8 @@ def test_rerender_gists_honors_ethereum_entity_rendering_config(client, app):
                 (gist_id,),
             )
 
-    app.config["ETHEREUM_ENTITY_RENDERING"] = False
     result = rerender_gists(app, external_id=gist_id)
-    assert "ethereum-entities/off" in result["render_version"]
+    assert "ethereum-entities/on@" in result["render_version"]
 
     with gist_connection(app) as conn:
         row = conn.execute(
@@ -810,7 +794,7 @@ def test_rerender_gists_honors_ethereum_entity_rendering_config(client, app):
             (gist_id,),
         ).fetchone()
 
-    assert "eth-entity" not in row["rendered_html"]
-    assert "ethereum-entities/off" in row["render_version"]
-    assert "eth-entity" not in revision["rendered_html"]
-    assert "ethereum-entities/off" in revision["render_version"]
+    assert "eth-address" in row["rendered_html"]
+    assert "ethereum-entities/on@" in row["render_version"]
+    assert "eth-address" in revision["rendered_html"]
+    assert "ethereum-entities/on@" in revision["render_version"]

@@ -1,6 +1,8 @@
+import hashlib
 import json
 
 import pytest
+from werkzeug.datastructures import MultiDict
 
 from gist_api.app import create_app
 from gist_api.db import gist_connection
@@ -25,7 +27,6 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
         json={
             "title": "Title",
             "markdown": "# Hello\n\n- [x] done",
-            "author_name": "spoofed",
         },
     )
     assert created.status_code == 201
@@ -53,6 +54,10 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     assert public.status_code == 200
     public_body = public.get_json()
     assert public_body["markdown"] == "# Hello\n\n- [x] done"
+    assert public_body["content_sha256"] == hashlib.sha256(
+        public_body["markdown"].encode()
+    ).hexdigest()
+    assert public_body["content_sha256"] == body["content_sha256"]
     assert public_body["author_name"] == "creator"
     assert public_body["revision_number"] == 1
     assert public_body["latest_revision_number"] == 1
@@ -128,6 +133,9 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     assert latest.status_code == 200
     latest_body = latest.get_json()
     assert latest_body["markdown"] == "# Updated"
+    assert latest_body["content_sha256"] == hashlib.sha256(
+        latest_body["markdown"].encode()
+    ).hexdigest()
     assert latest_body["author_name"] == "creator"
     assert latest_body["revision_number"] == 2
     assert latest_body["latest_revision_number"] == 2
@@ -144,6 +152,10 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     assert first_revision.status_code == 200
     first_revision_body = first_revision.get_json()
     assert first_revision_body["markdown"] == "# Hello\n\n- [x] done"
+    assert first_revision_body["content_sha256"] == hashlib.sha256(
+        first_revision_body["markdown"].encode()
+    ).hexdigest()
+    assert first_revision_body["content_sha256"] != latest_body["content_sha256"]
     assert first_revision_body["author_name"] == "creator"
     assert first_revision_body["revision_number"] == 1
     assert first_revision_body["latest_revision_number"] == 2
@@ -174,7 +186,6 @@ def test_configured_external_id_length_create_render_patch_and_delete(tmp_path):
             "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
             "PUBLIC_API_BASE_URL": "https://api.example.com",
             "MAX_MARKDOWN_BYTES": 1024 * 1024,
-            "ALLOW_EMPTY_MARKDOWN": False,
             "SQLITE_BUSY_TIMEOUT_MS": 5000,
             "API_WRITE_LIMIT_PER_24H": 1000,
             "API_AUTH_FAILURE_LIMIT_PER_MINUTE": 1000,
@@ -243,7 +254,7 @@ def test_public_deployment_requires_public_api_base_url(tmp_path):
         )
 
 
-def test_api_ethereum_entity_rendering_defaults_on_and_can_be_disabled(client, app):
+def test_api_ethereum_entity_rendering_is_always_enabled(client, app):
     write_key = make_key(app, name="ethereum")
 
     created = create_gist(client, write_key, markdown=f"Address {ETH_ADDRESS}")
@@ -264,23 +275,6 @@ def test_api_ethereum_entity_rendering_defaults_on_and_can_be_disabled(client, a
     assert "eth-entity" in latest["rendered_html"]
     assert "eth-tx" in latest["rendered_html"]
 
-    app.config["ETHEREUM_ENTITY_RENDERING"] = False
-    disabled = create_gist(client, write_key, markdown=f"Address {ETH_ADDRESS}")
-    assert disabled.status_code == 201
-    disabled_id = disabled.get_json()["id"]
-    disabled_public = client.get(f"/api/v1/gists/{disabled_id}/render").get_json()
-    assert ETH_ADDRESS in disabled_public["rendered_html"]
-    assert "eth-entity" not in disabled_public["rendered_html"]
-
-    disabled_update = client.patch(
-        f"/api/v1/gists/{disabled_id}",
-        headers=auth_header(write_key),
-        json={"markdown": f"Tx {ETH_TX_HASH}"},
-    )
-    assert disabled_update.status_code == 200
-    disabled_latest = client.get(f"/api/v1/gists/{disabled_id}/render").get_json()
-    assert ETH_TX_HASH in disabled_latest["rendered_html"]
-    assert "eth-entity" not in disabled_latest["rendered_html"]
 
 
 def test_delete_gist_requires_original_creator(client, app):
@@ -537,6 +531,62 @@ def test_validation_and_non_gist_routes_are_not_globally_authed(client, app):
         json={"title": "x" * 201, "markdown": "ok"},
     )
     assert long_title.status_code == 400
+
+
+def test_gist_routes_reject_unknown_and_route_inappropriate_json_fields(
+    client,
+    app,
+):
+    key = make_key(app)
+    created = create_gist(client, key, "# Existing")
+    gist_id = created.get_json()["id"]
+
+    unknown_create = client.post(
+        "/api/v1/gists",
+        headers=auth_header(key),
+        json={"markdown": "# New", "author_name": "spoofed"},
+    )
+    create_concurrency = client.post(
+        "/api/v1/gists",
+        headers=auth_header(key),
+        json={
+            "markdown": "# New",
+            "expected_content_sha256": "a" * 64,
+        },
+    )
+    unknown_update = client.patch(
+        f"/api/v1/gists/{gist_id}",
+        headers=auth_header(key),
+        json={"markdown": "# Updated", "extra": True},
+    )
+
+    for response in (unknown_create, create_concurrency, unknown_update):
+        assert response.status_code == 400
+        assert response.get_json()["error"]["code"] == "invalid_request"
+        assert "unknown field" in response.get_json()["error"]["message"]
+
+
+def test_multipart_gist_rejects_duplicate_scalar_fields(client, app):
+    key = make_key(app)
+
+    response = client.post(
+        "/api/v1/gists",
+        headers=auth_header(key),
+        data=MultiDict(
+            [
+                ("title", "First"),
+                ("title", "Second"),
+                ("markdown", "# Duplicate"),
+            ]
+        ),
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == {
+        "code": "invalid_request",
+        "message": "duplicate field: title",
+    }
 
 
 def test_oversized_request_body_returns_json_413(client, app):

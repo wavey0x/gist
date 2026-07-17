@@ -206,10 +206,6 @@ button {
   outline-offset: 2px;
 }
 
-.app-link-button {
-  cursor: pointer;
-}
-
 .app-identity {
   min-width: 0;
   display: inline-flex;
@@ -288,8 +284,7 @@ button {
 }
 
 .login-form input:focus,
-.login-form button:focus-visible,
-.text-link-button:focus-visible {
+.login-form button:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -300,12 +295,6 @@ button {
   color: var(--muted-fg);
   font-size: 13px;
   line-height: 1.45;
-}
-
-.auth-top-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 18px;
 }
 
 .account-panel {
@@ -427,50 +416,6 @@ button {
 .api-key-copy-action:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-}
-
-.auth-identity {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  color: var(--muted-fg);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.auth-avatar {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-}
-
-.auth-name {
-  min-width: 0;
-  max-width: 220px;
-  overflow: hidden;
-  color: var(--page-fg);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.auth-separator {
-  color: var(--border);
-}
-
-.text-link-button {
-  border: 0;
-  background: transparent;
-  color: var(--muted-fg);
-  padding: 0;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.text-link-button:hover {
-  color: var(--page-fg);
 }
 
 .me-tabs-section {

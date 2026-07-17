@@ -24,7 +24,7 @@ type MeGistTabsProps = {
 type ListItem = {
   id: string;
   url: string;
-  revisionUrl?: string | null;
+  revisionUrl: string;
   title: string | null;
   displayTitle?: string | null;
   authorName: string;
@@ -188,16 +188,12 @@ function GistList({
                       authorName={item.authorName}
                       authorAvatarUrl={item.authorAvatarUrl}
                     /> -{" "}
-                    {item.revisionUrl ? (
-                      <a
-                        className="gist-list-meta-link"
-                        href={item.revisionUrl}
-                      >
-                        revision {item.revisionNumber}
-                      </a>
-                    ) : (
-                      <>revision {item.revisionNumber}</>
-                    )}{" "}
+                    <a
+                      className="gist-list-meta-link"
+                      href={item.revisionUrl}
+                    >
+                      revision {item.revisionNumber}
+                    </a>{" "}
                     -{" "}
                     {item.dateLabel}{" "}
                     <time dateTime={item.dateTime}>

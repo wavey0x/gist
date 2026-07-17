@@ -61,7 +61,8 @@ uv run admin keys rotate <key_prefix_or_id> --avatar-url <https_url>
 A gist API key can create gists and update/delete gists whose first revision
 was created by that key. The `github_login` value can derive a browser avatar
 URL for key-backed web sessions. `--avatar-url` or `--avatar-file` stores an
-explicit avatar for the account and public gist bylines.
+explicit avatar for the account and public gist bylines. Rotation changes the
+secret in place, preserves gist ownership, and revokes existing web sessions.
 
 ## Auth Routes
 
@@ -103,3 +104,18 @@ created by the authenticated key.
 
 `DELETE /api/v1/me/gists/{gist_id}` only deletes gists whose first revision was
 created by the authenticated session key.
+
+## Request Contracts
+
+Unknown fields and duplicate scalar multipart fields return
+`400 invalid_request`. Accepted input fields are:
+
+| Route | Scalar fields | File fields |
+| --- | --- | --- |
+| `POST /api/v1/auth/session` | JSON `api_key` | none |
+| `POST /api/v1/gists` | `title`, `markdown` | repeated `images[]` |
+| `PATCH /api/v1/gists/{gist_id}` | `title`, `markdown`, `expected_content_sha256` | repeated `images[]` |
+| `POST /api/v1/images` | none | one `image` |
+
+Public latest and historical render responses include `content_sha256` for the
+exact Markdown revision returned.

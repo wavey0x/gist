@@ -237,7 +237,6 @@ def verify_web_session(conn, token):
     row = conn.execute(
         """
         select
-            web_sessions.id as session_id,
             api_keys.id as api_key_id,
             api_keys.name,
             api_keys.github_login,
@@ -257,10 +256,6 @@ def verify_web_session(conn, token):
         return None, "unauthorized"
 
     with conn:
-        conn.execute(
-            "update web_sessions set last_used_at = ? where id = ?",
-            (now, row["session_id"]),
-        )
         conn.execute(
             "update api_keys set last_used_at = ? where id = ?",
             (now, row["api_key_id"]),
@@ -341,15 +336,22 @@ def rotate_api_key(
     github_login=_PRESERVE,
     avatar_url=_PRESERVE,
 ):
-    selector_is_id = str(key_prefix_or_id).isdigit()
     if str(key_prefix_or_id).isdigit():
         row = conn.execute(
-            "select id, name, github_login, avatar_url from api_keys where id = ?",
+            """
+            select id, name, github_login, avatar_url, created_at
+            from api_keys
+            where id = ?
+            """,
             (int(key_prefix_or_id),),
         ).fetchone()
     else:
         row = conn.execute(
-            "select id, name, github_login, avatar_url from api_keys where key_prefix = ?",
+            """
+            select id, name, github_login, avatar_url, created_at
+            from api_keys
+            where key_prefix = ?
+            """,
             (key_prefix_or_id,),
         ).fetchone()
 
@@ -371,13 +373,17 @@ def rotate_api_key(
         full_key, key_prefix = _new_key_material()
         try:
             with conn:
-                cursor = conn.execute(
+                conn.execute(
                     """
-                    insert into api_keys(
-                        name, github_login, avatar_url, key_value, key_prefix,
-                        created_at
-                    )
-                    values (?, ?, ?, ?, ?, ?)
+                    update api_keys
+                    set name = ?,
+                        github_login = ?,
+                        avatar_url = ?,
+                        key_value = ?,
+                        key_prefix = ?,
+                        last_used_at = null,
+                        revoked_at = null
+                    where id = ?
                     """,
                     (
                         new_name,
@@ -385,27 +391,25 @@ def rotate_api_key(
                         new_avatar_url,
                         full_key,
                         key_prefix,
-                        now,
+                        row["id"],
                     ),
                 )
-                if selector_is_id:
-                    conn.execute(
-                        "update api_keys set revoked_at = coalesce(revoked_at, ?) where id = ?",
-                        (now, row["id"]),
-                    )
-                else:
-                    conn.execute(
-                        "update api_keys set revoked_at = coalesce(revoked_at, ?) where key_prefix = ?",
-                        (now, key_prefix_or_id),
-                    )
+                conn.execute(
+                    """
+                    update web_sessions
+                    set revoked_at = coalesce(revoked_at, ?)
+                    where api_key_id = ?
+                    """,
+                    (now, row["id"]),
+                )
             return {
-                "id": cursor.lastrowid,
+                "id": row["id"],
                 "key": full_key,
                 "key_prefix": key_prefix,
                 "name": new_name,
                 "github_login": new_github_login,
                 "avatar_url": new_avatar_url,
-                "created_at": now,
+                "created_at": row["created_at"],
             }
         except sqlite3.IntegrityError:
             continue

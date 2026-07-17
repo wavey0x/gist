@@ -46,7 +46,7 @@ def main(argv=None):
     create.add_argument("--github-login")
     _add_avatar_arguments(create)
 
-    list_cmd = key_commands.add_parser("list")
+    key_commands.add_parser("list")
 
     revoke = key_commands.add_parser("revoke")
     revoke.add_argument("key_prefix_or_id")

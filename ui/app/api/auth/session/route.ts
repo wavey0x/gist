@@ -1,9 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiUrl } from "../../../../lib/api-base";
-import {
-  forwardBackendSetCookie,
-  proxyJsonWithSession
-} from "../../../../lib/auth";
+import { forwardBackendSetCookie } from "../../../../lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -49,15 +46,11 @@ export async function POST(request: NextRequest) {
     return response;
   }
 
-  if (backendResponse.status === 401 || backendResponse.status === 403) {
+  if (backendResponse.status === 401) {
     return loginRedirect(request, "invalid");
   }
   if (backendResponse.status === 429) {
     return loginRedirect(request, "rate_limited");
   }
   return loginRedirect(request, "server");
-}
-
-export async function GET(request: NextRequest) {
-  return proxyJsonWithSession(request, "/api/v1/auth/session");
 }

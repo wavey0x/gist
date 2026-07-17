@@ -1038,7 +1038,6 @@ def _allow_attribute(
 def render_markdown_result(
     markdown,
     *,
-    ethereum_entities=True,
     allowed_image_src_prefixes=(),
 ):
     protected_markdown, mermaid_placeholder_languages = _protect_mermaid_fences(
@@ -1050,8 +1049,7 @@ def render_markdown_result(
     _drop_unsafe_images(root, tuple(allowed_image_src_prefixes))
     highlight_stats = _highlight_blocks(root, mermaid_placeholder_languages)
     _post_process_links(root)
-    if ethereum_entities:
-        _post_process_ethereum_entities(root)
+    _post_process_ethereum_entities(root)
     processed_html = _serialize_fragment(root)
 
     cleaned_html = bleach.clean(
@@ -1070,23 +1068,17 @@ def render_markdown_result(
     enriched_html = _serialize_fragment(cleaned_root)
     return RenderedMarkdown(
         html=enriched_html,
-        version=render_version(
-            highlight_stats.status,
-            ethereum_entities=ethereum_entities,
-        ),
+        version=render_version(highlight_stats.status),
     )
 
 
-def render_version(highlight_status="unknown", *, ethereum_entities=True):
-    ethereum_status = (
-        f"on@{ETHEREUM_ENTITY_RENDER_VERSION}" if ethereum_entities else "off"
-    )
+def render_version(highlight_status="unknown"):
     return (
         f"cmarkgfm/{_package_version('cmarkgfm')};"
         f"starry-night/{_node_package_version('@wooorm/starry-night')};"
         f"grammar/{HIGHLIGHT_GRAMMAR_SET};"
         f"highlight/{highlight_status};"
-        f"ethereum-entities/{ethereum_status};"
+        f"ethereum-entities/on@{ETHEREUM_ENTITY_RENDER_VERSION};"
         f"mermaid-enrichment/{MERMAID_RENDER_VERSION};"
         f"bleach/{_package_version('bleach')};"
         f"lxml/{_package_version('lxml')};"

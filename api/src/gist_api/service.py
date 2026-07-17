@@ -75,16 +75,12 @@ def validate_markdown(app, markdown):
     max_bytes = app.config.get("MAX_MARKDOWN_BYTES", 1048576)
     if len(markdown.encode("utf-8")) > max_bytes:
         raise GistError("payload_too_large", "Payload too large", 413)
-    if not app.config.get("ALLOW_EMPTY_MARKDOWN", False) and not markdown.strip():
+    if not markdown.strip():
         raise GistError("invalid_request", "markdown is required", 400)
 
 
 def content_sha256(markdown):
     return hashlib.sha256(markdown.encode("utf-8")).hexdigest()
-
-
-def ethereum_entity_rendering_enabled(app):
-    return app.config.get("ETHEREUM_ENTITY_RENDERING", True)
 
 
 def render_markdown_for_app(app, markdown):
@@ -94,15 +90,12 @@ def render_markdown_for_app(app, markdown):
     )
     return render_markdown_result(
         markdown,
-        ethereum_entities=ethereum_entity_rendering_enabled(app),
         allowed_image_src_prefixes=(image_prefix,),
     )
 
 
 def render_version_for_app(app):
-    return render_version(
-        ethereum_entities=ethereum_entity_rendering_enabled(app),
-    )
+    return render_version()
 
 
 def parse_revision_number(revision_number):
@@ -376,6 +369,7 @@ def get_public_render(app, external_id, revision_number=None):
                     gists.author_name,
                     gists.markdown,
                     gists.rendered_html,
+                    gists.content_sha256,
                     gists.latest_revision_number,
                     gists.created_at,
                     gists.updated_at,
@@ -400,6 +394,7 @@ def get_public_render(app, external_id, revision_number=None):
                        gists.created_at,
                        gist_revisions.title, gist_revisions.author_name,
                        gist_revisions.markdown, gist_revisions.rendered_html,
+                       gist_revisions.content_sha256,
                        gist_revisions.created_at as updated_at,
                        gist_revisions.revision_number,
                        author_key.avatar_url as author_avatar_url
@@ -423,6 +418,7 @@ def get_public_render(app, external_id, revision_number=None):
             "author_name": row["author_name"],
             "markdown": row["markdown"],
             "rendered_html": row["rendered_html"],
+            "content_sha256": row["content_sha256"],
             "revision_number": revision_number,
             "latest_revision_number": row["latest_revision_number"],
             "created_at": row["created_at"],

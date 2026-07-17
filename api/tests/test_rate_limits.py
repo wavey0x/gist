@@ -14,7 +14,6 @@ def _limited_app(db_path, *, write_limit=2, auth_failure_limit=2):
             "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
             "PUBLIC_API_BASE_URL": "https://api.example.com",
             "MAX_MARKDOWN_BYTES": 1024 * 1024,
-            "ALLOW_EMPTY_MARKDOWN": False,
             "SQLITE_BUSY_TIMEOUT_MS": 5000,
             "API_WRITE_LIMIT_PER_24H": write_limit,
             "API_AUTH_FAILURE_LIMIT_PER_MINUTE": auth_failure_limit,

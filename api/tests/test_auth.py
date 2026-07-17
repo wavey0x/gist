@@ -11,6 +11,8 @@ from gist_api.auth import (
 )
 from gist_api.db import gist_connection
 
+from .conftest import auth_header, create_gist
+
 
 def test_api_keys_are_stored_and_verified_as_cleartext(app):
     with gist_connection(app) as conn:
@@ -64,12 +66,16 @@ def test_key_rotation_revokes_old_key_and_returns_new_secret(app):
 
         old_auth, old_error = verify_api_key(conn, f"Bearer {created['key']}")
         new_auth, new_error = verify_api_key(conn, f"Bearer {rotated['key']}")
+        key_rows = conn.execute("select count(*) from api_keys").fetchone()[0]
 
     assert old_auth is None
     assert old_error == "unauthorized"
     assert new_auth is not None
     assert new_error is None
     assert rotated["key"].startswith("wapi_gist_")
+    assert rotated["id"] == created["id"]
+    assert rotated["created_at"] == created["created_at"]
+    assert key_rows == 1
     assert rotated["github_login"] == "rotate"
     assert "domain" not in rotated
     assert "scopes" not in rotated
@@ -206,6 +212,90 @@ def test_web_session_stores_only_hash_and_rejects_expired_sessions(app):
     assert error == "unauthorized"
 
 
+def test_web_session_reads_do_not_write_session_last_used_at(app):
+    with gist_connection(app) as conn:
+        created = create_api_key(conn, "reader")
+        token, auth, error = create_web_session(conn, created["key"])
+        assert error is None
+        with conn:
+            conn.execute(
+                "update api_keys set last_used_at = ? where id = ?",
+                ("2000-01-01T00:00:00.000Z", auth.key_id),
+            )
+
+        verified, error = verify_web_session(conn, token)
+        row = conn.execute(
+            """
+            select web_sessions.last_used_at as session_last_used_at,
+                   api_keys.last_used_at as key_last_used_at
+            from web_sessions
+            join api_keys on api_keys.id = web_sessions.api_key_id
+            where web_sessions.api_key_id = ?
+            """,
+            (auth.key_id,),
+        ).fetchone()
+
+    assert error is None
+    assert verified.key_id == auth.key_id
+    assert row["session_last_used_at"] is None
+    assert row["key_last_used_at"] != "2000-01-01T00:00:00.000Z"
+
+
+def test_rotation_reactivates_same_identity_and_preserves_gist_ownership(
+    client,
+    app,
+):
+    with gist_connection(app) as conn:
+        created = create_api_key(conn, "owner")
+        token, _auth, error = create_web_session(conn, created["key"])
+        assert error is None
+
+    gist = create_gist(client, created["key"], "# Before rotation")
+    assert gist.status_code == 201
+    gist_id = gist.get_json()["id"]
+
+    with gist_connection(app) as conn:
+        revoke_api_key(conn, created["id"])
+        rotated = rotate_api_key(conn, created["id"])
+        key_rows = conn.execute("select count(*) from api_keys").fetchone()[0]
+        stored = conn.execute(
+            "select id, created_at, revoked_at from api_keys"
+        ).fetchone()
+        session = conn.execute(
+            "select revoked_at from web_sessions where api_key_id = ?",
+            (created["id"],),
+        ).fetchone()
+        old_session_auth, old_session_error = verify_web_session(conn, token)
+
+    assert rotated["id"] == created["id"]
+    assert rotated["created_at"] == created["created_at"]
+    assert key_rows == 1
+    assert stored["id"] == created["id"]
+    assert stored["created_at"] == created["created_at"]
+    assert stored["revoked_at"] is None
+    assert session["revoked_at"] is not None
+    assert old_session_auth is None
+    assert old_session_error == "unauthorized"
+
+    read = client.get(
+        f"/api/v1/gists/{gist_id}",
+        headers=auth_header(rotated["key"]),
+    )
+    updated = client.patch(
+        f"/api/v1/gists/{gist_id}",
+        headers=auth_header(rotated["key"]),
+        json={"markdown": "# After rotation"},
+    )
+    deleted = client.delete(
+        f"/api/v1/gists/{gist_id}",
+        headers=auth_header(rotated["key"]),
+    )
+
+    assert read.status_code == 200
+    assert updated.status_code == 200
+    assert deleted.status_code == 204
+
+
 def test_web_session_rejects_non_ascii_cookie_without_error(app):
     with gist_connection(app) as conn:
         auth, error = verify_web_session(conn, "not-a-token-\N{SNOWMAN}")
@@ -220,6 +310,16 @@ def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
 
     invalid = client.post("/api/v1/auth/session", json={"api_key": "nope"})
     assert invalid.status_code == 401
+
+    unknown = client.post(
+        "/api/v1/auth/session",
+        json={"api_key": created["key"], "extra": True},
+    )
+    assert unknown.status_code == 400
+    assert unknown.get_json()["error"] == {
+        "code": "invalid_request",
+        "message": "unknown field: extra",
+    }
 
     response = client.post(
         "/api/v1/auth/session",

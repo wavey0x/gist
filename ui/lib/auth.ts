@@ -16,7 +16,7 @@ export type MyGistItem = {
   id: string;
   url: string;
   title: string | null;
-  display_title?: string | null;
+  display_title: string;
   author_name: string;
   author_avatar_url?: string;
   revision_number: number;
@@ -64,9 +64,7 @@ function isMyGistItem(value: unknown): value is MyGistItem {
     typeof item.id === "string" &&
     typeof item.url === "string" &&
     (item.title === null || typeof item.title === "string") &&
-    (item.display_title === undefined ||
-      item.display_title === null ||
-      typeof item.display_title === "string") &&
+    typeof item.display_title === "string" &&
     typeof item.author_name === "string" &&
     (item.author_avatar_url === undefined ||
       typeof item.author_avatar_url === "string") &&
@@ -104,7 +102,7 @@ export async function fetchCurrentSession(): Promise<SessionIdentity | null> {
     }
   });
 
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401) {
     return null;
   }
   if (!response.ok) {
@@ -132,7 +130,7 @@ export async function fetchMyGists(): Promise<MyGistsPayload | null> {
     }
   });
 
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401) {
     return null;
   }
   if (!response.ok) {
@@ -171,8 +169,7 @@ export async function proxyJsonWithSession(
       Cookie: cookieHeader
     }
   });
-  const hasBody =
-    backendResponse.status !== 204 && backendResponse.status !== 304;
+  const hasBody = backendResponse.status !== 204;
   const body = hasBody ? await backendResponse.text() : null;
   const response = new NextResponse(body, {
     status: backendResponse.status,
@@ -216,8 +213,7 @@ export async function proxyDeleteWithSession(
     );
   }
 
-  const hasBody =
-    backendResponse.status !== 204 && backendResponse.status !== 304;
+  const hasBody = backendResponse.status !== 204;
   const body = hasBody ? await backendResponse.text() : null;
   const headers = new Headers();
   const contentType = backendResponse.headers.get("content-type");

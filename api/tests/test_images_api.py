@@ -83,6 +83,37 @@ def test_image_upload_accepts_jpeg_and_webp(client, app):
     assert webp.get_json()["mime_type"] == "image/webp"
 
 
+def test_image_upload_rejects_aliases_and_extra_fields(client, app):
+    key = make_key(app)
+
+    extra_scalar = client.post(
+        "/api/v1/images",
+        headers=auth_header(key),
+        data={"image": _upload_tuple(), "title": "not allowed"},
+    )
+    extra_file = client.post(
+        "/api/v1/images",
+        headers=auth_header(key),
+        data={
+            "image": _upload_tuple(),
+            "other": _upload_tuple(filename="other.png"),
+        },
+    )
+    gist_image_alias = client.post(
+        "/api/v1/gists",
+        headers=auth_header(key),
+        data={
+            "markdown": "# Alias",
+            "images": _upload_tuple(),
+        },
+    )
+
+    for response in (extra_scalar, extra_file, gist_image_alias):
+        assert response.status_code == 400
+        assert response.get_json()["error"]["code"] == "invalid_request"
+        assert "unknown field" in response.get_json()["error"]["message"]
+
+
 def test_image_upload_rejects_invalid_type_size_dimensions_and_quota(client, app):
     key = make_key(app)
 
