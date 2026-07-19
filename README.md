@@ -15,8 +15,8 @@ anyone with a random gist URL can read the rendered page and raw source.
 - Sanitized stored HTML.
 - Immutable revision and revision-diff URLs.
 - Read-only rendered/raw browser views.
-- Browser-local recently viewed gist list.
-- Key-backed private list of gists created by the logged-in API key.
+- Home-page tabs for browser-local recent views and the logged-in key's gists.
+- Account settings for browser Web Push enrollment and publication alerts.
 - Gist API keys with owner-scoped mutation.
 - SQLite persistence by default.
 
@@ -143,10 +143,11 @@ Open the returned `url` in the browser.
 
 ## List Your Gists
 
-Visit `/me` to see recently viewed gists stored in this browser. To list your
-own gists, open `http://localhost:3000/login` and enter the API key once. The
-browser stores an HttpOnly `wg_session` cookie, and the authenticated `/me`
-page can copy the current API key.
+Visit `/` to see recently viewed gists stored in this browser. Log in at
+`http://localhost:3000/login` with an API key to use the `MY GISTS` home-page
+tab. The browser stores an HttpOnly `wg_session` cookie. The linked account page
+at `/me` contains notification settings, API-key and logout actions, and the
+account's compact gist list.
 
 ## Configuration
 
@@ -291,10 +292,11 @@ forwarded IP for rate limits.
 ## Security Model
 
 Gist URLs are bearer-capability URLs: anyone with the URL can read that gist.
-The `/me` page stores recently viewed gists only in browser `localStorage`.
-When authenticated, `/me` can copy the current API key and lists only gists
-created by that key. There is no public listing, account system, editor,
-comments, analytics, or social graph.
+The home page stores recently viewed gists only in browser `localStorage`.
+When authenticated, the home page and `/me` list only gists created by that
+key; `/me` can also copy the current API key and manage notification settings.
+There is no public listing, account system, editor, comments, analytics, or
+social graph.
 
 The backend sanitizes rendered HTML before storage. API keys are stored in
 cleartext for account-page disclosure; web session tokens are stored only as

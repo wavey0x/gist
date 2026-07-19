@@ -32,7 +32,7 @@ function errorMessage(error: string | string[] | undefined) {
 export default async function LoginPage({ searchParams }: PageProps) {
   const session = await fetchCurrentSession();
   if (session) {
-    redirect("/me");
+    redirect("/");
   }
 
   const params = await searchParams;

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { AlertSettings } from "../../components/AlertSettings";
 import { ApiKeyCopyButton } from "../../components/ApiKeyCopyButton";
+import { OwnedGistList } from "../../components/GistHistory";
 import { LogoutButton } from "../../components/LogoutButton";
-import { MeGistTabs } from "../../components/MeGistTabs";
 import {
   fetchCurrentSession,
   fetchMyGists,
@@ -13,52 +14,66 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "Your gists - Wavey Gist"
+  title: "Settings - Wavey Gist"
 };
 
 export default async function MePage() {
   const session = await fetchCurrentSession();
-  const [payload, notificationSettings] = session
-    ? await Promise.all([fetchMyGists(), fetchNotificationSettings()])
-    : [null, null];
-  const activeSession = payload && notificationSettings ? session : null;
+  if (!session) {
+    redirect("/login");
+  }
+  const [payload, notificationSettings] = await Promise.all([
+    fetchMyGists(),
+    fetchNotificationSettings()
+  ]);
+  if (!payload || !notificationSettings) {
+    redirect("/login");
+  }
 
   return (
-    <main className="auth-shell" aria-label="Your gists">
-      {activeSession ? (
-        <section className="account-panel" aria-label="Account">
-          <div className="account-profile">
-            <div className="account-identity">
-              {activeSession.avatar_url ? (
-                <img
-                  className="account-avatar"
-                  src={activeSession.avatar_url}
-                  alt=""
-                  width={24}
-                  height={24}
-                />
-              ) : null}
-              <span className="account-name">{activeSession.name}</span>
-            </div>
-            <div className="account-actions">
-              <LogoutButton />
-              <span className="account-action-separator" aria-hidden="true">
-                |
-              </span>
-              <ApiKeyCopyButton apiKey={activeSession.key} />
-            </div>
+    <main className="auth-shell settings-shell" aria-label="Account settings">
+      <header className="settings-page-header">
+        <div className="account-profile">
+          <div className="account-identity">
+            {session.avatar_url ? (
+              <img
+                className="account-avatar"
+                src={session.avatar_url}
+                alt=""
+                width={28}
+                height={28}
+              />
+            ) : null}
+            <span className="account-name">{session.name}</span>
           </div>
-        </section>
-      ) : null}
+          <div className="account-actions">
+            <LogoutButton />
+            <span className="account-action-separator" aria-hidden="true">
+              |
+            </span>
+            <ApiKeyCopyButton apiKey={session.key} />
+          </div>
+        </div>
+      </header>
 
-      {activeSession && notificationSettings ? (
+      <section className="settings-panel" aria-labelledby="settings-title">
+        <div className="settings-panel-heading">
+          <h1 id="settings-title">Settings</h1>
+          <p>Manage alerts for this account and browser.</p>
+        </div>
         <AlertSettings initialSettings={notificationSettings} />
-      ) : null}
+      </section>
 
-      <MeGistTabs
-        myGists={payload?.gists ?? []}
-        isAuthenticated={Boolean(activeSession)}
-      />
+      <section
+        className="owned-gists-section"
+        aria-labelledby="owned-gists-title"
+      >
+        <div className="owned-gists-heading">
+          <h2 id="owned-gists-title">My gists</h2>
+          <p>Gists published by this account.</p>
+        </div>
+        <OwnedGistList myGists={payload.gists} />
+      </section>
     </main>
   );
 }

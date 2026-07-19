@@ -8,6 +8,8 @@
   --button-bg-active: #f6f8fa;
   --button-fg: #24292f;
   --focus: #0969da;
+  --switch-on: #1f883d;
+  --switch-off: #8c959f;
   --shadow: 0 8px 24px rgb(140 149 159 / 20%);
   color-scheme: light;
 }
@@ -22,6 +24,8 @@
   --button-bg-active: #21262d;
   --button-fg: #e6edf3;
   --focus: #2f81f7;
+  --switch-on: #3fb950;
+  --switch-off: #6e7681;
   --shadow: 0 8px 24px rgb(1 4 9 / 45%);
   color-scheme: dark;
 }
@@ -93,12 +97,16 @@ button {
   margin: 0 auto;
   padding: 32px 32px 64px;
   display: grid;
-  grid-template-rows: auto auto;
+  gap: 32px;
   align-content: start;
 }
 
+.home-shell-authenticated {
+  padding-top: 38px;
+}
+
 .home-intro {
-  margin-top: clamp(48px, 10vh, 92px);
+  margin-top: clamp(24px, 6vh, 56px);
   display: grid;
   justify-items: center;
   gap: 8px;
@@ -121,17 +129,12 @@ button {
 }
 
 .home-gist-history {
-  margin-top: clamp(96px, 18vh, 170px);
-  padding-top: 22px;
+  margin-top: 8px;
   text-align: left;
 }
 
-.home-gist-history .me-tabs {
-  justify-content: center;
-}
-
-.home-gist-history .me-tab-button[aria-selected="true"] {
-  color: var(--muted-fg);
+.home-shell-authenticated .home-gist-history {
+  margin-top: 0;
 }
 
 .app-header {
@@ -297,12 +300,13 @@ button {
   line-height: 1.45;
 }
 
-.account-panel {
+.settings-shell {
   display: grid;
-  gap: 7px;
-  margin-bottom: 16px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
+  gap: 24px;
+}
+
+.settings-page-header {
+  min-width: 0;
 }
 
 .account-profile {
@@ -319,8 +323,8 @@ button {
 }
 
 .account-avatar {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
   border-radius: 50%;
 }
@@ -329,7 +333,7 @@ button {
   min-width: 0;
   overflow: hidden;
   color: var(--page-fg);
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -342,7 +346,7 @@ button {
   align-items: baseline;
   flex-wrap: wrap;
   gap: 6px 8px;
-  padding-left: 32px;
+  padding-left: 36px;
 }
 
 .account-logout-form {
@@ -418,12 +422,41 @@ button {
   outline-offset: 2px;
 }
 
+.settings-panel {
+  display: grid;
+  gap: 18px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--button-bg);
+  padding: 16px;
+}
+
+.settings-panel-heading,
+.owned-gists-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-panel-heading h1,
+.owned-gists-heading h2 {
+  margin: 0;
+  color: var(--page-fg);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.settings-panel-heading p,
+.owned-gists-heading p {
+  margin: 0;
+  color: var(--muted-fg);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .alert-settings {
   display: grid;
-  gap: 10px;
-  margin-bottom: 16px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
+  gap: 0;
   color: var(--muted-fg);
   font-size: 12px;
   line-height: 1.45;
@@ -431,90 +464,136 @@ button {
 
 .alert-settings-heading {
   min-width: 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px 16px;
+  padding-bottom: 10px;
 }
 
 .alert-settings h2 {
   margin: 0;
   color: var(--page-fg);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.4;
 }
 
-.alert-enrollment {
-  min-width: 0;
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 5px 8px;
-  text-align: right;
+.alert-settings-heading p {
+  margin: 2px 0 0;
 }
 
-.alert-enrollment button {
-  border: 0;
-  background: transparent;
+.alert-browser-row,
+.alert-preference-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--border);
+  padding: 11px 0;
+}
+
+.alert-preference-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.alert-preference-label {
+  color: var(--page-fg);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.alert-preference-description {
   color: var(--muted-fg);
-  padding: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.alert-enrollment {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.alert-enrollment-button {
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: var(--button-fg);
+  padding: 4px 9px;
   font: inherit;
+  font-size: 12px;
   cursor: pointer;
 }
 
-.alert-enrollment button:hover:not(:disabled),
-.alert-enrollment button:focus-visible {
-  color: var(--page-fg);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+.alert-enrollment-button:hover:not(:disabled),
+.alert-enrollment-button:focus-visible {
+  background: var(--button-bg-active);
 }
 
-.alert-enrollment button:focus-visible {
+.alert-enrollment-button:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
-.alert-enrollment button:disabled {
+.alert-enrollment-button:disabled {
   cursor: default;
   opacity: 0.65;
-}
-
-.alert-enabled {
-  color: var(--page-fg);
 }
 
 .alert-preferences {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px 18px;
+  display: grid;
 }
 
-.alert-preferences label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--page-fg);
+.settings-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--switch-off);
+  padding: 0;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    opacity 140ms ease;
 }
 
-.alert-preferences input {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--focus);
+.settings-switch[aria-checked="true"] {
+  background: var(--switch-on);
 }
 
-.alert-preferences label:has(input:disabled) {
-  cursor: default;
-  opacity: 0.65;
+.settings-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(31 35 40 / 30%);
+  transition: transform 140ms ease;
 }
 
-.alert-preferences input:focus-visible {
+.settings-switch[aria-checked="true"] .settings-switch-thumb {
+  transform: translateX(18px);
+}
+
+.settings-switch:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.settings-switch:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.settings-switch[aria-busy="true"] {
+  opacity: 0.7;
 }
 
 .alert-status,
@@ -523,7 +602,14 @@ button {
 }
 
 .alert-message {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
   overflow-wrap: anywhere;
+}
+
+.owned-gists-section {
+  display: grid;
+  gap: 12px;
 }
 
 .me-tabs-section {
@@ -1626,26 +1712,29 @@ button {
   }
 
   .home-shell {
+    gap: 24px;
     padding: 28px 16px 36px;
   }
 
+  .home-intro {
+    margin-top: 20px;
+  }
+
   .home-gist-history {
-    margin-top: 72px;
-    padding-top: 18px;
+    margin-top: 0;
   }
 
   .account-actions {
-    padding-left: 32px;
+    padding-left: 36px;
   }
 
-  .alert-settings-heading {
+  .settings-panel {
+    padding: 14px;
+  }
+
+  .alert-browser-row {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .alert-enrollment {
-    justify-content: flex-start;
-    text-align: left;
   }
 
   .login-form {

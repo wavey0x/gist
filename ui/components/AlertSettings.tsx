@@ -25,6 +25,40 @@ type AlertSettingsProps = {
   initialSettings: NotificationSettings;
 };
 
+type NotificationSwitchProps = {
+  checked: boolean;
+  disabled: boolean;
+  labelId: string;
+  descriptionId: string;
+  saving: boolean;
+  onToggle: () => void;
+};
+
+function NotificationSwitch({
+  checked,
+  disabled,
+  labelId,
+  descriptionId,
+  saving,
+  onToggle
+}: NotificationSwitchProps) {
+  return (
+    <button
+      type="button"
+      className="settings-switch"
+      role="switch"
+      aria-checked={checked}
+      aria-labelledby={labelId}
+      aria-describedby={descriptionId}
+      aria-busy={saving}
+      disabled={disabled}
+      onClick={onToggle}
+    >
+      <span className="settings-switch-thumb" aria-hidden="true" />
+    </button>
+  );
+}
+
 export function AlertSettings({
   initialSettings
 }: AlertSettingsProps) {
@@ -189,38 +223,47 @@ export function AlertSettings({
   if (!settings.available) {
     return (
       <section className="alert-settings" aria-labelledby="alert-settings-title">
-        <h2 id="alert-settings-title">Alerts</h2>
+        <h2 id="alert-settings-title">Notifications</h2>
         <p className="alert-status">Alerts are not configured.</p>
       </section>
     );
   }
 
+  let browserStatus = "Checking this browser…";
+  if (browserState === "unsupported") {
+    browserStatus = "Alerts are not supported in this browser.";
+  } else if (browserState === "ios-install") {
+    browserStatus =
+      "Add waveygist to your Home Screen, reopen it, then enable alerts.";
+  } else if (browserState === "blocked") {
+    browserStatus =
+      "Notifications are blocked in system or browser settings.";
+  } else if (browserState === "unavailable") {
+    browserStatus = "Alerts are unavailable right now.";
+  } else if (browserState === "ready") {
+    browserStatus = "Enable this browser to receive your selected alerts.";
+  } else if (browserState === "enabled") {
+    browserStatus = "Alerts are enabled on this browser.";
+  }
+
   return (
     <section className="alert-settings" aria-labelledby="alert-settings-title">
       <div className="alert-settings-heading">
-        <h2 id="alert-settings-title">Alerts</h2>
+        <div>
+          <h2 id="alert-settings-title">Notifications</h2>
+          <p>Choose which publication events should alert you.</p>
+        </div>
+      </div>
+
+      <div className="alert-browser-row">
+        <div className="alert-preference-copy">
+          <span className="alert-preference-label">This browser</span>
+          <span className="alert-preference-description">{browserStatus}</span>
+        </div>
         <div className="alert-enrollment">
-          {browserState === "checking" ? (
-            <span>Checking this browser…</span>
-          ) : null}
-          {browserState === "unsupported" ? (
-            <span>Alerts are not supported in this browser.</span>
-          ) : null}
-          {browserState === "ios-install" ? (
-            <span>
-              Add waveygist to your Home Screen, reopen it, then enable alerts.
-            </span>
-          ) : null}
-          {browserState === "blocked" ? (
-            <span>
-              Notifications are blocked in system or browser settings.
-            </span>
-          ) : null}
-          {browserState === "unavailable" ? (
-            <span>Alerts are unavailable right now.</span>
-          ) : null}
           {browserState === "ready" ? (
             <button
+              className="alert-enrollment-button"
               type="button"
               onClick={() => void enableAlerts()}
               disabled={browserBusy}
@@ -229,43 +272,71 @@ export function AlertSettings({
             </button>
           ) : null}
           {browserState === "enabled" ? (
-            <>
-              <span className="alert-enabled">Enabled</span>
-              <button
-                type="button"
-                onClick={() => void disableAlerts()}
-                disabled={browserBusy}
-              >
-                {browserBusy ? "Disabling…" : "Disable"}
-              </button>
-            </>
+            <button
+              className="alert-enrollment-button"
+              type="button"
+              onClick={() => void disableAlerts()}
+              disabled={browserBusy}
+            >
+              {browserBusy ? "Disabling…" : "Disable"}
+            </button>
           ) : null}
         </div>
       </div>
 
       <div className="alert-preferences" aria-label="Alert types">
-        <label>
-          <input
-            type="checkbox"
+        <div className="alert-preference-row">
+          <div className="alert-preference-copy">
+            <span
+              className="alert-preference-label"
+              id="new-gist-alert-label"
+            >
+              New gist published
+            </span>
+            <span
+              className="alert-preference-description"
+              id="new-gist-alert-description"
+            >
+              Alert when this account publishes a new gist.
+            </span>
+          </div>
+          <NotificationSwitch
             checked={settings.new_gist}
             disabled={savingSetting !== null}
-            onChange={(event) =>
-              void updateSetting("new_gist", event.currentTarget.checked)
+            labelId="new-gist-alert-label"
+            descriptionId="new-gist-alert-description"
+            saving={savingSetting === "new_gist"}
+            onToggle={() =>
+              void updateSetting("new_gist", !settings.new_gist)
             }
           />
-          <span>New gist published</span>
-        </label>
-        <label>
-          <input
-            type="checkbox"
+        </div>
+        <div className="alert-preference-row">
+          <div className="alert-preference-copy">
+            <span
+              className="alert-preference-label"
+              id="edited-gist-alert-label"
+            >
+              Gist edited
+            </span>
+            <span
+              className="alert-preference-description"
+              id="edited-gist-alert-description"
+            >
+              Alert when one of your gists gets a new revision.
+            </span>
+          </div>
+          <NotificationSwitch
             checked={settings.edited_gist}
             disabled={savingSetting !== null}
-            onChange={(event) =>
-              void updateSetting("edited_gist", event.currentTarget.checked)
+            labelId="edited-gist-alert-label"
+            descriptionId="edited-gist-alert-description"
+            saving={savingSetting === "edited_gist"}
+            onToggle={() =>
+              void updateSetting("edited_gist", !settings.edited_gist)
             }
           />
-          <span>Gist edited</span>
-        </label>
+        </div>
       </div>
 
       {message ? (

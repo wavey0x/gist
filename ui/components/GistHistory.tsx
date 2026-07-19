@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { MyGistItem } from "../lib/auth";
 import {
@@ -16,9 +16,13 @@ const GITHUB_LOGIN_RE =
 
 type TabId = "recent" | "mine";
 
-type MeGistTabsProps = {
+type GistHistoryTabsProps = {
   myGists: MyGistItem[];
   isAuthenticated: boolean;
+};
+
+type OwnedGistListProps = {
+  myGists: MyGistItem[];
 };
 
 type ListItem = {
@@ -234,10 +238,10 @@ function GistList({
   );
 }
 
-export function MeGistTabs({
+export function GistHistoryTabs({
   myGists,
   isAuthenticated
-}: MeGistTabsProps) {
+}: GistHistoryTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("recent");
   const [recentGists, setRecentGists] = useState<RecentGistItem[] | null>(null);
   const [pages, setPages] = useState<Record<TabId, number>>({
@@ -261,12 +265,6 @@ export function MeGistTabs({
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setActiveTab("recent");
-    }
-  }, [isAuthenticated]);
-
   const recentItems = useMemo(
     () => (recentGists ?? []).map(recentGistToListItem),
     [recentGists]
@@ -289,68 +287,123 @@ export function MeGistTabs({
     }));
   }
 
+  function selectTabFromKeyboard(
+    event: KeyboardEvent<HTMLButtonElement>,
+    nextTab: TabId
+  ) {
+    event.preventDefault();
+    setActiveTab(nextTab);
+    document.getElementById(`gist-${nextTab}-tab`)?.focus();
+  }
+
+  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      selectTabFromKeyboard(
+        event,
+        activeTab === "recent" ? "mine" : "recent"
+      );
+    } else if (event.key === "Home") {
+      selectTabFromKeyboard(event, "recent");
+    } else if (event.key === "End") {
+      selectTabFromKeyboard(event, "mine");
+    }
+  }
+
   return (
     <section className="me-tabs-section" aria-label="Gists">
       <div className="me-tabs" role="tablist" aria-label="Gist views">
         <button
+          id="gist-recent-tab"
           type="button"
           className="me-tab-button"
           role="tab"
           aria-selected={activeTab === "recent"}
+          aria-controls="gist-recent-panel"
+          tabIndex={activeTab === "recent" ? 0 : -1}
           onClick={() => setActiveTab("recent")}
+          onKeyDown={handleTabKeyDown}
         >
           RECENTLY VIEWED
         </button>
-        {isAuthenticated ? (
-          <>
-            <span className="me-tab-separator" aria-hidden="true">
-              |
-            </span>
-            <button
-              type="button"
-              className="me-tab-button"
-              role="tab"
-              aria-selected={activeTab === "mine"}
-              onClick={() => setActiveTab("mine")}
-            >
-              MY GISTS
-            </button>
-          </>
-        ) : null}
+        <span className="me-tab-separator" aria-hidden="true">
+          |
+        </span>
+        <button
+          id="gist-mine-tab"
+          type="button"
+          className="me-tab-button"
+          role="tab"
+          aria-selected={activeTab === "mine"}
+          aria-controls="gist-mine-panel"
+          tabIndex={activeTab === "mine" ? 0 : -1}
+          onClick={() => setActiveTab("mine")}
+          onKeyDown={handleTabKeyDown}
+        >
+          MY GISTS
+        </button>
       </div>
 
       {activeTab === "recent" ? (
-        <GistList
-          items={recentItems}
-          emptyState={
-            recentGists === null ? (
-              "Loading recent views."
-            ) : (
-              "No recently viewed gists."
-            )
-          }
-          page={activePage}
-          onPageChange={setActivePage}
-        />
+        <div
+          id="gist-recent-panel"
+          role="tabpanel"
+          aria-labelledby="gist-recent-tab"
+        >
+          <GistList
+            items={recentItems}
+            emptyState={
+              recentGists === null ? (
+                "Loading recent views."
+              ) : (
+                "No recently viewed gists."
+              )
+            }
+            page={activePage}
+            onPageChange={setActivePage}
+          />
+        </div>
       ) : (
-        <GistList
-          items={myItems}
-          emptyState={
-            isAuthenticated ? (
-              "No gists yet."
-            ) : (
-              <>
-                <a className="inline-link" href="/login">
-                  Log in
-                </a>{" "}
-                to view your gists.
-              </>
-            )
-          }
-          page={activePage}
-          onPageChange={setActivePage}
-        />
+        <div
+          id="gist-mine-panel"
+          role="tabpanel"
+          aria-labelledby="gist-mine-tab"
+        >
+          <GistList
+            items={myItems}
+            emptyState={
+              isAuthenticated ? (
+                "No gists yet."
+              ) : (
+                <>
+                  <a className="inline-link" href="/login">
+                    Log in
+                  </a>{" "}
+                  to view your gists.
+                </>
+              )
+            }
+            page={activePage}
+            onPageChange={setActivePage}
+          />
+        </div>
       )}
     </section>
+  );
+}
+
+export function OwnedGistList({ myGists }: OwnedGistListProps) {
+  const [page, setPage] = useState(0);
+  const items = useMemo(
+    () => myGists.map(myGistToListItem),
+    [myGists]
+  );
+
+  return (
+    <GistList
+      items={items}
+      emptyState="No gists yet."
+      page={page}
+      onPageChange={setPage}
+    />
   );
 }

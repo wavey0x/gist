@@ -2,7 +2,7 @@ const SUPPORTED_TYPES = new Set(["gist.published", "gist.updated"]);
 const FALLBACK_NOTIFICATION = {
   title: "waveygist alert",
   body: "Open waveygist to view the update.",
-  path: "/me",
+  path: "/",
   tag: "waveygist-alert"
 };
 
@@ -81,7 +81,7 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const path = safePath(event.notification.data?.path) ?? "/me";
+  const path = safePath(event.notification.data?.path) ?? "/";
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })

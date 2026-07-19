@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (backendResponse.ok) {
-    const response = NextResponse.redirect(new URL("/me", request.url), {
+    const response = NextResponse.redirect(new URL("/", request.url), {
       status: 303
     });
     forwardBackendSetCookie(response, backendResponse);

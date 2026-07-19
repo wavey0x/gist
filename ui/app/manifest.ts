@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "waveygist",
     short_name: "waveygist",
-    start_url: "/me",
+    start_url: "/",
     scope: "/",
     display: "standalone",
     background_color: "#0d1117",
