@@ -21,6 +21,14 @@ def test_api_keys_are_stored_and_verified_as_cleartext(app):
             "select key_value, key_prefix from api_keys where id = ?",
             (created["id"],),
         ).fetchone()
+        settings = conn.execute(
+            """
+            select new_gist_enabled, edited_gist_enabled
+            from notification_settings
+            where api_key_id = ?
+            """,
+            (created["id"],),
+        ).fetchone()
 
         auth, error = verify_api_key(conn, f"Bearer {created['key']}")
 
@@ -32,6 +40,10 @@ def test_api_keys_are_stored_and_verified_as_cleartext(app):
     assert error is None
     assert "domain" not in created
     assert "scopes" not in created
+    assert dict(settings) == {
+        "new_gist_enabled": 1,
+        "edited_gist_enabled": 0,
+    }
 
 
 def test_hash_only_key_storage_is_not_accepted(app):

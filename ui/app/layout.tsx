@@ -8,6 +8,33 @@ import "./syntax.css";
 
 export const metadata: Metadata = {
   title: "Wavey Gist",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      {
+        url: "/icons/icon-192.png",
+        sizes: "192x192",
+        type: "image/png"
+      },
+      {
+        url: "/icons/icon-512.png",
+        sizes: "512x512",
+        type: "image/png"
+      }
+    ],
+    apple: [
+      {
+        url: "/icons/apple-touch-icon.png",
+        sizes: "180x180",
+        type: "image/png"
+      }
+    ]
+  },
+  appleWebApp: {
+    capable: true,
+    title: "waveygist",
+    statusBarStyle: "black-translucent"
+  },
   robots: {
     index: false,
     follow: false,
@@ -21,7 +48,11 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: "light dark",
   width: "device-width",
-  initialScale: 1
+  initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d1117" }
+  ]
 };
 
 const themeScript = `

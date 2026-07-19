@@ -140,6 +140,16 @@ def create_api_key(conn, name, github_login=None, avatar_url=None):
                         now,
                     ),
                 )
+                conn.execute(
+                    """
+                    insert into notification_settings(
+                        api_key_id, new_gist_enabled, edited_gist_enabled,
+                        created_at, updated_at
+                    )
+                    values (?, 1, 0, ?, ?)
+                    """,
+                    (cursor.lastrowid, now, now),
+                )
             return {
                 "id": cursor.lastrowid,
                 "key": full_key,
@@ -318,14 +328,27 @@ def revoke_api_key(conn, key_prefix_or_id):
     now = utc_now()
     with conn:
         if str(key_prefix_or_id).isdigit():
-            conn.execute(
-                "update api_keys set revoked_at = coalesce(revoked_at, ?) where id = ?",
-                (now, int(key_prefix_or_id)),
-            )
+            selector = "id = ?"
+            selector_value = int(key_prefix_or_id)
         else:
+            selector = "key_prefix = ?"
+            selector_value = key_prefix_or_id
+        row = conn.execute(
+            f"select id from api_keys where {selector}",
+            (selector_value,),
+        ).fetchone()
+        if row is not None:
             conn.execute(
-                "update api_keys set revoked_at = coalesce(revoked_at, ?) where key_prefix = ?",
-                (now, key_prefix_or_id),
+                """
+                update api_keys
+                set revoked_at = coalesce(revoked_at, ?)
+                where id = ?
+                """,
+                (now, row["id"]),
+            )
+            conn.execute(
+                "delete from push_subscriptions where api_key_id = ?",
+                (row["id"],),
             )
 
 

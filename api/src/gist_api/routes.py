@@ -16,6 +16,12 @@ from .auth import (
 from .db import gist_connection
 from .errors import GistError, error_response
 from .images import IMAGE_RETRY_HINT, create_image_asset, send_image_asset
+from .notifications import (
+    delete_push_subscription,
+    get_notification_settings,
+    update_notification_settings,
+    upsert_push_subscription,
+)
 from .rate_limits import check_write_rate_limit, record_auth_failure_and_check_limit
 from .service import (
     create_gist,
@@ -299,6 +305,53 @@ def list_my_gists():
     if response:
         return response
     return jsonify(list_gists_created_by_key(current_app, auth.key_id))
+
+
+@gists_api.route("/api/v1/me/notification-settings", methods=["GET"])
+def read_notification_settings():
+    auth, response = require_web_session()
+    if response:
+        return response
+    return jsonify(get_notification_settings(current_app, auth.key_id))
+
+
+@gists_api.route("/api/v1/me/notification-settings", methods=["PUT"])
+def put_notification_settings():
+    auth, response = require_web_session()
+    if response:
+        return response
+    try:
+        payload = parse_json_body({"new_gist", "edited_gist"})
+        return jsonify(
+            update_notification_settings(current_app, auth.key_id, payload)
+        )
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
+
+
+@gists_api.route("/api/v1/me/push-subscriptions", methods=["PUT"])
+def put_push_subscription():
+    auth, response = require_web_session()
+    if response:
+        return response
+    try:
+        payload = parse_json_body({"endpoint", "keys"})
+        return jsonify(upsert_push_subscription(current_app, auth.key_id, payload))
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
+
+
+@gists_api.route("/api/v1/me/push-subscriptions", methods=["DELETE"])
+def remove_push_subscription():
+    auth, response = require_web_session()
+    if response:
+        return response
+    try:
+        payload = parse_json_body({"endpoint"})
+        delete_push_subscription(current_app, auth.key_id, payload)
+        return "", 204
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
 
 
 @gists_api.route("/api/v1/me/gists/<gist_id>", methods=["DELETE"])

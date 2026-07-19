@@ -27,6 +27,13 @@ export type MyGistsPayload = {
   gists: MyGistItem[];
 };
 
+export type NotificationSettings = {
+  available: boolean;
+  application_server_key?: string;
+  new_gist: boolean;
+  edited_gist: boolean;
+};
+
 function sessionCookieHeader(value: string | undefined) {
   return value ? `${SESSION_COOKIE_NAME}=${value}` : null;
 }
@@ -88,6 +95,33 @@ function normalizeMyGistsPayload(payload: unknown): MyGistsPayload {
   };
 }
 
+function normalizeNotificationSettings(
+  payload: unknown
+): NotificationSettings {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid notification settings payload");
+  }
+  const settings = payload as Partial<NotificationSettings>;
+  if (
+    typeof settings.available !== "boolean" ||
+    typeof settings.new_gist !== "boolean" ||
+    typeof settings.edited_gist !== "boolean" ||
+    (settings.application_server_key !== undefined &&
+      typeof settings.application_server_key !== "string") ||
+    (settings.available && !settings.application_server_key)
+  ) {
+    throw new Error("Invalid notification settings payload");
+  }
+  return {
+    available: settings.available,
+    ...(settings.application_server_key
+      ? { application_server_key: settings.application_server_key }
+      : {}),
+    new_gist: settings.new_gist,
+    edited_gist: settings.edited_gist
+  };
+}
+
 export async function fetchCurrentSession(): Promise<SessionIdentity | null> {
   const cookieHeader = await currentSessionCookieHeader();
   if (!cookieHeader) {
@@ -138,6 +172,34 @@ export async function fetchMyGists(): Promise<MyGistsPayload | null> {
   }
 
   return normalizeMyGistsPayload(await response.json());
+}
+
+export async function fetchNotificationSettings(): Promise<NotificationSettings | null> {
+  const cookieHeader = await currentSessionCookieHeader();
+  if (!cookieHeader) {
+    return null;
+  }
+
+  const response = await fetch(
+    await apiUrl("/api/v1/me/notification-settings"),
+    {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        Cookie: cookieHeader
+      }
+    }
+  );
+
+  if (response.status === 401) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Failed to load notification settings: ${response.status}`
+    );
+  }
+  return normalizeNotificationSettings(await response.json());
 }
 
 export function forwardBackendSetCookie(
@@ -213,6 +275,77 @@ export async function proxyDeleteWithSession(
     );
   }
 
+  const hasBody = backendResponse.status !== 204;
+  const body = hasBody ? await backendResponse.text() : null;
+  const headers = new Headers();
+  const contentType = backendResponse.headers.get("content-type");
+  if (contentType) {
+    headers.set("Content-Type", contentType);
+  }
+  const response = new NextResponse(body, {
+    status: backendResponse.status,
+    headers
+  });
+  forwardBackendSetCookie(response, backendResponse);
+  return response;
+}
+
+function isSameOriginJsonMutation(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  const contentType = request.headers.get("content-type") ?? "";
+  const host = request.headers.get("host");
+  const forwardedProtocol = request.headers
+    .get("x-forwarded-proto")
+    ?.split(",", 1)[0]
+    ?.trim();
+  let originMatches = false;
+  if (origin && host) {
+    try {
+      const parsedOrigin = new URL(origin);
+      const requestProtocol =
+        forwardedProtocol ?? request.nextUrl.protocol.replace(/:$/, "");
+      originMatches =
+        parsedOrigin.host === host &&
+        parsedOrigin.protocol === `${requestProtocol}:`;
+    } catch {
+      originMatches = false;
+    }
+  }
+  return (
+    originMatches &&
+    contentType.toLowerCase().startsWith("application/json")
+  );
+}
+
+export async function proxyJsonMutationWithSession(
+  request: NextRequest,
+  path: string,
+  method: "PUT" | "DELETE"
+) {
+  if (!isSameOriginJsonMutation(request)) {
+    return NextResponse.json(
+      { error: { code: "forbidden", message: "Forbidden" } },
+      { status: 403 }
+    );
+  }
+  const cookieHeader = requestSessionCookieHeader(request);
+  if (!cookieHeader) {
+    return NextResponse.json(
+      { error: { code: "unauthorized", message: "Unauthorized" } },
+      { status: 401 }
+    );
+  }
+
+  const backendResponse = await fetch(await apiUrl(path), {
+    cache: "no-store",
+    method,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Cookie: cookieHeader
+    },
+    body: await request.text()
+  });
   const hasBody = backendResponse.status !== 204;
   const body = hasBody ? await backendResponse.text() : null;
   const headers = new Headers();

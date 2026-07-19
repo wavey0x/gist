@@ -36,6 +36,22 @@ body accepted by Flask and defaults to `MAX_MARKDOWN_BYTES + 2048`.
 `GIST_EXTERNAL_ID_LENGTH` controls the length of newly generated random gist
 IDs and defaults to `16`.
 
+Web Push is optional. Configure the API and worker with
+`WEB_PUSH_VAPID_PUBLIC_KEY`; optionally override the comma-separated
+`WEB_PUSH_ALLOWED_ENDPOINT_HOSTS`. The worker additionally requires
+`WEB_PUSH_VAPID_PRIVATE_KEY_FILE` and a `mailto:` or HTTPS
+`WEB_PUSH_VAPID_SUBJECT`. Keep the private key file outside the repository with
+mode `0600`.
+
+Run the single delivery worker separately from Gunicorn:
+
+```sh
+uv run push-worker
+```
+
+Use `uv run push-worker --once` to drain rows that are currently due and exit.
+Run only one worker process.
+
 Run the service with `umask 077` so the SQLite database and WAL files are not
 readable by other local users. If a reverse proxy fronts the API, configure it
 to append or overwrite `X-Forwarded-For`; the app trusts forwarded client IPs
@@ -76,6 +92,10 @@ GET    /api/v1/auth/session
 DELETE /api/v1/auth/session
 GET    /api/v1/me/gists
 DELETE /api/v1/me/gists/{gist_id}
+GET    /api/v1/me/notification-settings
+PUT    /api/v1/me/notification-settings
+PUT    /api/v1/me/push-subscriptions
+DELETE /api/v1/me/push-subscriptions
 ```
 
 `/api/v1/me/gists` returns gists whose first revision was created by the logged

@@ -418,6 +418,114 @@ button {
   outline-offset: 2px;
 }
 
+.alert-settings {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-fg);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.alert-settings-heading {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.alert-settings h2 {
+  margin: 0;
+  color: var(--page-fg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.alert-enrollment {
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  text-align: right;
+}
+
+.alert-enrollment button {
+  border: 0;
+  background: transparent;
+  color: var(--muted-fg);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.alert-enrollment button:hover:not(:disabled),
+.alert-enrollment button:focus-visible {
+  color: var(--page-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.alert-enrollment button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.alert-enrollment button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.alert-enabled {
+  color: var(--page-fg);
+}
+
+.alert-preferences {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 18px;
+}
+
+.alert-preferences label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--page-fg);
+  cursor: pointer;
+}
+
+.alert-preferences input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--focus);
+}
+
+.alert-preferences label:has(input:disabled) {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.alert-preferences input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.alert-status,
+.alert-message {
+  margin: 0;
+}
+
+.alert-message {
+  overflow-wrap: anywhere;
+}
+
 .me-tabs-section {
   display: grid;
   gap: 12px;
@@ -1528,6 +1636,16 @@ button {
 
   .account-actions {
     padding-left: 32px;
+  }
+
+  .alert-settings-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .alert-enrollment {
+    justify-content: flex-start;
+    text-align: left;
   }
 
   .login-form {

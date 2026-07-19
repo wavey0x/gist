@@ -15,6 +15,12 @@ from .images import (
     stage_images,
 )
 from .markdown import render_markdown_result, render_version
+from .notifications import (
+    EVENT_GIST_PUBLISHED,
+    EVENT_GIST_UPDATED,
+    delete_pending_deliveries_for_gist,
+    enqueue_push_deliveries,
+)
 
 
 REVISION_RE = re.compile(r"^[1-9][0-9]*$")
@@ -141,7 +147,7 @@ def _insert_revision(
     key_id,
     created_at,
 ):
-    conn.execute(
+    cursor = conn.execute(
         """
         insert into gist_revisions(
             gist_id, revision_number, title, author_name, markdown,
@@ -163,6 +169,7 @@ def _insert_revision(
             key_id,
         ),
     )
+    return cursor.lastrowid
 
 
 def create_gist(app, key_id, author_name, payload, image_uploads=None):
@@ -213,7 +220,7 @@ def create_gist(app, key_id, author_name, payload, image_uploads=None):
                             ),
                         )
                         gist_id = cursor.lastrowid
-                        _insert_revision(
+                        revision_id = _insert_revision(
                             conn,
                             gist_id,
                             1,
@@ -232,6 +239,13 @@ def create_gist(app, key_id, author_name, payload, image_uploads=None):
                             key_id,
                             staged_images,
                             image_assets,
+                        )
+                        enqueue_push_deliveries(
+                            conn,
+                            api_key_id=key_id,
+                            event_type=EVENT_GIST_PUBLISHED,
+                            gist_revision_id=revision_id,
+                            created_at=now,
                         )
                     row = conn.execute(
                         "select * from gists where id = ?",
@@ -535,7 +549,7 @@ def patch_gist(app, key_id, author_name, external_id, payload, image_uploads=Non
                         current["id"],
                     ),
                 )
-                _insert_revision(
+                revision_id = _insert_revision(
                     conn,
                     current["id"],
                     next_revision_number,
@@ -547,6 +561,13 @@ def patch_gist(app, key_id, author_name, external_id, payload, image_uploads=Non
                     next_digest,
                     key_id,
                     now,
+                )
+                enqueue_push_deliveries(
+                    conn,
+                    api_key_id=key_id,
+                    event_type=EVENT_GIST_UPDATED,
+                    gist_revision_id=revision_id,
+                    created_at=now,
                 )
 
             row = conn.execute(
@@ -570,10 +591,10 @@ def delete_gist_created_by_key(app, key_id, external_id):
     now = utc_now()
     with gist_connection(app) as conn:
         with conn:
-            cursor = conn.execute(
+            current = conn.execute(
                 """
-                update gists
-                set deleted_at = ?
+                select gists.id
+                from gists
                 where external_id = ?
                   and deleted_at is null
                   and exists (
@@ -584,10 +605,19 @@ def delete_gist_created_by_key(app, key_id, external_id):
                         and gist_revisions.created_by_key_id = ?
                   )
                 """,
-                (now, external_id, key_id),
-            )
-            if cursor.rowcount == 0:
+                (external_id, key_id),
+            ).fetchone()
+            if current is None:
                 raise GistError("not_found", "Not found", 404)
+            conn.execute(
+                """
+                update gists
+                set deleted_at = ?
+                where id = ?
+                """,
+                (now, current["id"]),
+            )
+            delete_pending_deliveries_for_gist(conn, current["id"])
 
 
 def rerender_gists(app, *, external_id=None, dry_run=False):

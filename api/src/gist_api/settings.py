@@ -3,11 +3,25 @@ import os
 from .external_ids import DEFAULT_EXTERNAL_ID_LENGTH
 
 
+DEFAULT_WEB_PUSH_ALLOWED_ENDPOINT_HOSTS = (
+    "fcm.googleapis.com",
+    "updates.push.services.mozilla.com",
+    ".push.apple.com",
+)
+
+
 def _int_env(name, default):
     value = os.getenv(name)
     if value is None or value == "":
         return default
     return int(value)
+
+
+def _csv_env(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return tuple(item.strip() for item in value.split(",") if item.strip())
 
 
 def load_settings():
@@ -48,5 +62,14 @@ def load_settings():
         "GIST_EXTERNAL_ID_LENGTH": _int_env(
             "GIST_EXTERNAL_ID_LENGTH",
             DEFAULT_EXTERNAL_ID_LENGTH,
+        ),
+        "WEB_PUSH_VAPID_PUBLIC_KEY": os.getenv("WEB_PUSH_VAPID_PUBLIC_KEY"),
+        "WEB_PUSH_VAPID_PRIVATE_KEY_FILE": os.getenv(
+            "WEB_PUSH_VAPID_PRIVATE_KEY_FILE"
+        ),
+        "WEB_PUSH_VAPID_SUBJECT": os.getenv("WEB_PUSH_VAPID_SUBJECT"),
+        "WEB_PUSH_ALLOWED_ENDPOINT_HOSTS": _csv_env(
+            "WEB_PUSH_ALLOWED_ENDPOINT_HOSTS",
+            DEFAULT_WEB_PUSH_ALLOWED_ENDPOINT_HOSTS,
         ),
     }

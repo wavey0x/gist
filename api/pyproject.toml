@@ -11,10 +11,12 @@ dependencies = [
     "gunicorn>=23.0.0",
     "lxml>=5.3.0",
     "python-dotenv>=1.0.1",
+    "pywebpush>=2.0.3",
 ]
 
 [project.scripts]
 admin = "gist_api.admin:main"
+push-worker = "gist_api.push_worker:main"
 
 [build-system]
 requires = ["setuptools>=75.0"]
