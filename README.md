@@ -146,8 +146,8 @@ Open the returned `url` in the browser.
 Visit `/` to see recently viewed gists stored in this browser. Log in at
 `http://localhost:3000/login` with an API key to use the `MY GISTS` home-page
 tab. The browser stores an HttpOnly `wg_session` cookie. The linked account page
-at `/me` contains notification settings, API-key and logout actions, and the
-account's compact gist list.
+at `/me` contains collapsed notification settings, account stats, a ZIP export,
+and API-key and logout actions.
 
 ## Configuration
 
@@ -224,6 +224,7 @@ POST   /api/v1/auth/session
 GET    /api/v1/auth/session
 DELETE /api/v1/auth/session
 GET    /api/v1/me/gists
+GET    /api/v1/me/gists/export
 DELETE /api/v1/me/gists/{gist_id}
 POST   /api/v1/images
 GET    /api/v1/images/{image_id}
@@ -293,10 +294,10 @@ forwarded IP for rate limits.
 
 Gist URLs are bearer-capability URLs: anyone with the URL can read that gist.
 The home page stores recently viewed gists only in browser `localStorage`.
-When authenticated, the home page and `/me` list only gists created by that
-key; `/me` can also copy the current API key and manage notification settings.
-There is no public listing, account system, editor, comments, analytics, or
-social graph.
+When authenticated, the home page lists only gists created by that key. `/me`
+can copy the current API key, manage notification settings, show account stats,
+and export current owned gists. There is no public listing, account system,
+editor, comments, analytics, or social graph.
 
 The backend sanitizes rendered HTML before storage. API keys are stored in
 cleartext for account-page disclosure; web session tokens are stored only as

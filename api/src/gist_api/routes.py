@@ -1,7 +1,7 @@
 import re
 from ipaddress import ip_address
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, send_file
 
 from .avatars import AVATAR_FILE_RE, send_avatar_file
 from .auth import (
@@ -26,6 +26,7 @@ from .rate_limits import check_write_rate_limit, record_auth_failure_and_check_l
 from .service import (
     create_gist,
     delete_gist_created_by_key,
+    export_gists_created_by_key,
     get_gist,
     get_public_render,
     list_gists_created_by_key,
@@ -305,6 +306,23 @@ def list_my_gists():
     if response:
         return response
     return jsonify(list_gists_created_by_key(current_app, auth.key_id))
+
+
+@gists_api.route("/api/v1/me/gists/export", methods=["GET"])
+def export_my_gists():
+    auth, response = require_web_session()
+    if response:
+        return response
+    archive, filename = export_gists_created_by_key(current_app, auth.key_id)
+    response = send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+        max_age=0,
+    )
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
 
 
 @gists_api.route("/api/v1/me/notification-settings", methods=["GET"])

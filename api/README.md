@@ -91,6 +91,7 @@ POST   /api/v1/auth/session
 GET    /api/v1/auth/session
 DELETE /api/v1/auth/session
 GET    /api/v1/me/gists
+GET    /api/v1/me/gists/export
 DELETE /api/v1/me/gists/{gist_id}
 GET    /api/v1/me/notification-settings
 PUT    /api/v1/me/notification-settings
@@ -99,7 +100,9 @@ DELETE /api/v1/me/push-subscriptions
 ```
 
 `/api/v1/me/gists` returns gists whose first revision was created by the logged
-in key and does not include Markdown or rendered HTML.
+in key plus aggregate active-gist statistics. It does not include Markdown or
+rendered HTML. `/api/v1/me/gists/export` returns a ZIP containing a JSON
+manifest and the latest Markdown for each active owned gist.
 
 ## Image Uploads
 

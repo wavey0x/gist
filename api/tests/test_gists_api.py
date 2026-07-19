@@ -1,5 +1,7 @@
 import hashlib
+import io
 import json
+import zipfile
 
 import pytest
 from werkzeug.datastructures import MultiDict
@@ -353,6 +355,11 @@ def test_me_gists_lists_only_gists_created_by_session_key(client, app):
     assert response.status_code == 200
     body = response.get_json()
     assert len(body["gists"]) == 1
+    assert body["stats"] == {
+        "gist_count": 1,
+        "revision_count": 2,
+        "last_updated_at": body["gists"][0]["updated_at"],
+    }
     assert body["gists"][0] == {
         "id": owner_body["id"],
         "url": owner_body["url"],
@@ -364,6 +371,106 @@ def test_me_gists_lists_only_gists_created_by_session_key(client, app):
     }
     assert "markdown" not in body["gists"][0]
     assert "rendered_html" not in body["gists"][0]
+
+
+def test_me_gist_export_contains_only_current_owned_gists(client, app):
+    owner_key = make_key(app, name="owner")
+    other_key = make_key(app, name="other")
+
+    first = create_gist(
+        client,
+        owner_key,
+        markdown="# First\n\nInitial",
+        title="First title",
+    ).get_json()
+    second = create_gist(
+        client,
+        owner_key,
+        markdown="# Second\n\nKeep",
+        title=None,
+    ).get_json()
+    removed = create_gist(
+        client,
+        owner_key,
+        markdown="# Removed",
+        title="Removed",
+    ).get_json()
+    other = create_gist(
+        client,
+        other_key,
+        markdown="# Other",
+        title="Other",
+    ).get_json()
+
+    updated = client.patch(
+        f"/api/v1/gists/{first['id']}",
+        headers=auth_header(owner_key),
+        json={"markdown": "# First\n\nLatest ✓"},
+    )
+    assert updated.status_code == 200
+    deleted = client.delete(
+        f"/api/v1/gists/{removed['id']}",
+        headers=auth_header(owner_key),
+    )
+    assert deleted.status_code == 204
+
+    assert client.get("/api/v1/me/gists/export").status_code == 401
+    login = client.post("/api/v1/auth/session", json={"api_key": owner_key})
+    assert login.status_code == 200
+
+    response = client.get("/api/v1/me/gists/export")
+    assert response.status_code == 200
+    assert response.mimetype == "application/zip"
+    assert response.headers["Content-Disposition"].startswith(
+        "attachment; filename=waveygist-export-"
+    )
+    assert response.headers["Cache-Control"] == "private, no-store"
+
+    with zipfile.ZipFile(io.BytesIO(response.data)) as exported:
+        assert set(exported.namelist()) == {
+            "manifest.json",
+            f"gists/{first['id']}.md",
+            f"gists/{second['id']}.md",
+        }
+        assert (
+            exported.read(f"gists/{first['id']}.md").decode()
+            == "# First\n\nLatest ✓"
+        )
+        assert (
+            exported.read(f"gists/{second['id']}.md").decode()
+            == "# Second\n\nKeep"
+        )
+        manifest = json.loads(exported.read("manifest.json"))
+
+    assert manifest["format"] == "waveygist-export"
+    assert manifest["version"] == 1
+    assert manifest["gist_count"] == 2
+    assert [gist["id"] for gist in manifest["gists"]] == [
+        first["id"],
+        second["id"],
+    ]
+    assert manifest["gists"][0]["revision_count"] == 2
+    assert manifest["gists"][0]["display_title"] == "First title"
+    assert manifest["gists"][1]["display_title"] == "Second"
+    assert removed["id"] not in response.data.decode("latin-1")
+    assert other["id"] not in response.data.decode("latin-1")
+    assert owner_key not in response.data.decode("latin-1")
+
+
+def test_me_gist_stats_are_zero_for_an_empty_account(client, app):
+    owner_key = make_key(app, name="owner")
+    login = client.post("/api/v1/auth/session", json={"api_key": owner_key})
+    assert login.status_code == 200
+
+    body = client.get("/api/v1/me/gists").get_json()
+    assert body == {
+        "gists": [],
+        "stats": {
+            "gist_count": 0,
+            "revision_count": 0,
+            "last_updated_at": None,
+        },
+    }
 
 
 def test_custom_key_avatar_is_returned_with_public_and_account_gists(client, app):

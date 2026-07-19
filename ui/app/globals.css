@@ -422,33 +422,6 @@ button {
   outline-offset: 2px;
 }
 
-.settings-panel {
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--button-bg);
-  padding: 13px 16px;
-}
-
-.owned-gists-heading {
-  display: grid;
-  gap: 3px;
-}
-
-.owned-gists-heading h2 {
-  margin: 0;
-  color: var(--page-fg);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-.owned-gists-heading p {
-  margin: 0;
-  color: var(--muted-fg);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
 .alert-settings {
   display: grid;
   gap: 0;
@@ -459,13 +432,13 @@ button {
 
 .alert-settings-heading {
   min-width: 0;
-  padding-bottom: 7px;
+  padding-bottom: 6px;
 }
 
 .alert-settings h1 {
   margin: 0;
   color: var(--page-fg);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
 }
@@ -612,9 +585,134 @@ button {
   overflow-wrap: anywhere;
 }
 
-.owned-gists-section {
+.account-sections {
   display: grid;
+  border-top: 1px solid var(--border);
+}
+
+.account-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.account-section-summary {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  color: var(--muted-fg);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  list-style: none;
+}
+
+.account-section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-section-summary::after {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-right: 1px solid currentcolor;
+  border-bottom: 1px solid currentcolor;
+  content: "";
+  transform: rotate(45deg) translate(-2px, 2px);
+  transition: transform 140ms ease;
+}
+
+.account-section[open] .account-section-summary {
+  color: var(--page-fg);
+}
+
+.account-section[open] .account-section-summary::after {
+  transform: rotate(225deg) translate(-1px, 1px);
+}
+
+.account-section-summary:hover,
+.account-section-summary:focus-visible {
+  color: var(--page-fg);
+}
+
+.account-section-summary:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.account-section-body {
+  margin: 0 0 13px 3px;
+  border-left: 1px solid var(--border);
+  padding: 1px 0 1px 14px;
+}
+
+.account-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.account-stat {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.account-stat dt {
+  color: var(--muted-fg);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.account-stat dd {
+  margin: 0;
+  color: var(--page-fg);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.account-export {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.account-export p {
+  margin: 0;
+  color: var(--muted-fg);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.account-export-button {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: var(--button-fg);
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.account-export-button:hover,
+.account-export-button:focus-visible {
+  background: var(--button-bg-active);
+}
+
+.account-export-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .me-tabs-section {
@@ -1733,8 +1831,8 @@ button {
     padding-left: 36px;
   }
 
-  .settings-panel {
-    padding: 12px 14px;
+  .account-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .login-form {

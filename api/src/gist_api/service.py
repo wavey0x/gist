@@ -1,7 +1,10 @@
 import hashlib
 import html
+import io
+import json
 import re
 import sqlite3
+import zipfile
 
 from .auth import utc_now
 from .db import gist_connection
@@ -304,6 +307,21 @@ def list_gists_created_by_key(app, key_id, *, limit=100):
             """,
             (key_id, limit),
         ).fetchall()
+        stats_row = conn.execute(
+            """
+            select
+                count(*) as gist_count,
+                coalesce(sum(gists.latest_revision_number), 0) as revision_count,
+                max(gists.updated_at) as last_updated_at
+            from gists
+            join gist_revisions as first_revision
+              on first_revision.gist_id = gists.id
+             and first_revision.revision_number = 1
+            where first_revision.created_by_key_id = ?
+              and gists.deleted_at is null
+            """,
+            (key_id,),
+        ).fetchone()
 
     gists = []
     for row in rows:
@@ -324,7 +342,85 @@ def list_gists_created_by_key(app, key_id, *, limit=100):
             item["author_avatar_url"] = row["author_avatar_url"]
         gists.append(item)
 
-    return {"gists": gists}
+    return {
+        "gists": gists,
+        "stats": {
+            "gist_count": stats_row["gist_count"],
+            "revision_count": stats_row["revision_count"],
+            "last_updated_at": stats_row["last_updated_at"],
+        },
+    }
+
+
+def export_gists_created_by_key(app, key_id):
+    with gist_connection(app) as conn:
+        rows = conn.execute(
+            """
+            select
+                gists.external_id,
+                gists.title,
+                gists.author_name,
+                gists.markdown,
+                gists.rendered_html,
+                gists.latest_revision_number,
+                gists.created_at,
+                gists.updated_at
+            from gists
+            join gist_revisions as first_revision
+              on first_revision.gist_id = gists.id
+             and first_revision.revision_number = 1
+            where first_revision.created_by_key_id = ?
+              and gists.deleted_at is null
+            order by gists.created_at, gists.id
+            """,
+            (key_id,),
+        ).fetchall()
+
+    exported_at = utc_now()
+    manifest_gists = []
+    archive = io.BytesIO()
+    with zipfile.ZipFile(
+        archive,
+        mode="w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=6,
+    ) as export_zip:
+        for row in rows:
+            gist_id = row["external_id"]
+            file_path = f"gists/{gist_id}.md"
+            export_zip.writestr(file_path, row["markdown"])
+            manifest_gists.append(
+                {
+                    "id": gist_id,
+                    "url": public_url(app, gist_id),
+                    "title": row["title"],
+                    "display_title": display_title(
+                        row["title"],
+                        row["rendered_html"],
+                        gist_id,
+                    ),
+                    "author_name": row["author_name"],
+                    "revision_count": row["latest_revision_number"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "file": file_path,
+                }
+            )
+
+        manifest = {
+            "format": "waveygist-export",
+            "version": 1,
+            "exported_at": exported_at,
+            "gist_count": len(manifest_gists),
+            "gists": manifest_gists,
+        }
+        export_zip.writestr(
+            "manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        )
+
+    archive.seek(0)
+    return archive, f"waveygist-export-{exported_at[:10]}.zip"
 
 
 def _history_payload(app, conn, external_id, gist_id, latest_revision_number):

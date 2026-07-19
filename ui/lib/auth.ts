@@ -25,6 +25,11 @@ export type MyGistItem = {
 
 export type MyGistsPayload = {
   gists: MyGistItem[];
+  stats: {
+    gist_count: number;
+    revision_count: number;
+    last_updated_at: string | null;
+  };
 };
 
 export type NotificationSettings = {
@@ -87,11 +92,30 @@ function normalizeMyGistsPayload(payload: unknown): MyGistsPayload {
     throw new Error("Invalid gist list payload");
   }
   const body = payload as Partial<MyGistsPayload>;
-  if (!Array.isArray(body.gists) || !body.gists.every(isMyGistItem)) {
+  const stats = body.stats;
+  if (
+    !Array.isArray(body.gists) ||
+    !body.gists.every(isMyGistItem) ||
+    !stats ||
+    typeof stats !== "object" ||
+    typeof stats.gist_count !== "number" ||
+    !Number.isInteger(stats.gist_count) ||
+    stats.gist_count < 0 ||
+    typeof stats.revision_count !== "number" ||
+    !Number.isInteger(stats.revision_count) ||
+    stats.revision_count < 0 ||
+    (stats.last_updated_at !== null &&
+      typeof stats.last_updated_at !== "string")
+  ) {
     throw new Error("Invalid gist list payload");
   }
   return {
-    gists: body.gists
+    gists: body.gists,
+    stats: {
+      gist_count: stats.gist_count,
+      revision_count: stats.revision_count,
+      last_updated_at: stats.last_updated_at
+    }
   };
 }
 
@@ -239,6 +263,41 @@ export async function proxyJsonWithSession(
       "Content-Type":
         backendResponse.headers.get("content-type") ?? "application/json"
     }
+  });
+  forwardBackendSetCookie(response, backendResponse);
+  return response;
+}
+
+export async function proxyDownloadWithSession(
+  request: NextRequest,
+  path: string
+) {
+  const cookieHeader = requestSessionCookieHeader(request);
+  if (!cookieHeader) {
+    return NextResponse.json(
+      { error: { code: "unauthorized", message: "Unauthorized" } },
+      { status: 401 }
+    );
+  }
+
+  const backendResponse = await fetch(await apiUrl(path), {
+    cache: "no-store",
+    headers: {
+      Accept: "application/zip",
+      Cookie: cookieHeader
+    }
+  });
+  const headers = new Headers();
+  for (const name of ["content-type", "content-disposition"]) {
+    const value = backendResponse.headers.get(name);
+    if (value) {
+      headers.set(name, value);
+    }
+  }
+  headers.set("Cache-Control", "private, no-store");
+  const response = new NextResponse(await backendResponse.arrayBuffer(), {
+    status: backendResponse.status,
+    headers
   });
   forwardBackendSetCookie(response, backendResponse);
   return response;

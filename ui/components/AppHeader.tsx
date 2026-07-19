@@ -24,7 +24,7 @@ export async function AppHeader() {
             <Link
               className="app-identity app-identity-link"
               href="/me"
-              aria-label={`${session.name} account settings`}
+              aria-label={`${session.name} account`}
             >
               {session.avatar_url ? (
                 <img

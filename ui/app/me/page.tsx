@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AlertSettings } from "../../components/AlertSettings";
 import { ApiKeyCopyButton } from "../../components/ApiKeyCopyButton";
-import { OwnedGistList } from "../../components/GistHistory";
 import { LogoutButton } from "../../components/LogoutButton";
 import {
   fetchCurrentSession,
@@ -14,8 +13,24 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "Settings - Wavey Gist"
+  title: "Account - Wavey Gist"
 };
+
+function formatActivityDate(value: string | null) {
+  if (!value) {
+    return "—";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) {
+    return "—";
+  }
+  return new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(date);
+}
 
 export default async function MePage() {
   const session = await fetchCurrentSession();
@@ -31,7 +46,7 @@ export default async function MePage() {
   }
 
   return (
-    <main className="auth-shell settings-shell" aria-label="Account settings">
+    <main className="auth-shell settings-shell" aria-label="Account">
       <header className="settings-page-header">
         <div className="account-profile">
           <div className="account-identity">
@@ -56,22 +71,61 @@ export default async function MePage() {
         </div>
       </header>
 
-      <section
-        className="settings-panel"
-        aria-labelledby="alert-settings-title"
-      >
-        <AlertSettings initialSettings={notificationSettings} />
-      </section>
+      <section className="account-sections" aria-label="Account">
+        <details className="account-section">
+          <summary className="account-section-summary">SETTINGS</summary>
+          <div className="account-section-body">
+            <AlertSettings initialSettings={notificationSettings} />
+          </div>
+        </details>
 
-      <section
-        className="owned-gists-section"
-        aria-labelledby="owned-gists-title"
-      >
-        <div className="owned-gists-heading">
-          <h2 id="owned-gists-title">My gists</h2>
-          <p>Gists published by this account.</p>
-        </div>
-        <OwnedGistList myGists={payload.gists} />
+        <details className="account-section">
+          <summary className="account-section-summary">STATS</summary>
+          <div className="account-section-body">
+            <dl className="account-stats">
+              <div className="account-stat">
+                <dt>Gists</dt>
+                <dd>{payload.stats.gist_count}</dd>
+              </div>
+              <div className="account-stat">
+                <dt>Revisions</dt>
+                <dd>{payload.stats.revision_count}</dd>
+              </div>
+              <div className="account-stat">
+                <dt>Last update</dt>
+                <dd>
+                  {payload.stats.last_updated_at ? (
+                    <time dateTime={payload.stats.last_updated_at}>
+                      {formatActivityDate(payload.stats.last_updated_at)}
+                    </time>
+                  ) : (
+                    "—"
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </details>
+
+        <details className="account-section">
+          <summary className="account-section-summary">EXPORT</summary>
+          <div className="account-section-body account-export">
+            {payload.stats.gist_count > 0 ? (
+              <>
+                <p>Markdown files with a JSON manifest.</p>
+                <a
+                  className="account-export-button"
+                  href="/api/me/gists/export"
+                  download
+                >
+                  Download ZIP
+                </a>
+              </>
+            ) : (
+              <p>No gists to export.</p>
+            )}
+          </div>
+        </details>
       </section>
     </main>
   );
