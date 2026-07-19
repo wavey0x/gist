@@ -432,7 +432,7 @@ button {
 
 .alert-settings-heading {
   min-width: 0;
-  padding-bottom: 6px;
+  padding-bottom: 8px;
 }
 
 .alert-settings h1 {
@@ -450,8 +450,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-top: 1px solid var(--border);
-  padding: 8px 0;
+  padding: 4px 0;
 }
 
 .alert-preference-copy {
@@ -509,20 +508,19 @@ button {
 
 .alert-preferences {
   display: grid;
-  margin-left: 3px;
-  border-left: 1px solid var(--border);
+  margin-top: 7px;
   padding-left: 12px;
 }
 
 .alert-preferences-title {
-  margin: 7px 0 0;
+  margin: 0 0 2px;
   color: var(--muted-fg);
   font-size: 11px;
   line-height: 1.4;
 }
 
 .alert-preferences .alert-preference-row {
-  padding: 7px 0;
+  padding: 5px 0;
 }
 
 .settings-switch {
@@ -580,27 +578,22 @@ button {
 }
 
 .alert-message {
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
+  margin-top: 8px;
   overflow-wrap: anywhere;
 }
 
 .account-sections {
   display: grid;
-  border-top: 1px solid var(--border);
-}
-
-.account-section {
-  border-bottom: 1px solid var(--border);
+  gap: 4px;
 }
 
 .account-section-summary {
-  min-height: 42px;
+  min-height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: var(--muted-fg);
+  color: var(--page-fg);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
@@ -618,13 +611,10 @@ button {
   flex: 0 0 auto;
   border-right: 1px solid currentcolor;
   border-bottom: 1px solid currentcolor;
+  color: var(--muted-fg);
   content: "";
   transform: rotate(45deg) translate(-2px, 2px);
   transition: transform 140ms ease;
-}
-
-.account-section[open] .account-section-summary {
-  color: var(--page-fg);
 }
 
 .account-section[open] .account-section-summary::after {
@@ -643,9 +633,8 @@ button {
 }
 
 .account-section-body {
-  margin: 0 0 13px 3px;
-  border-left: 1px solid var(--border);
-  padding: 1px 0 1px 14px;
+  margin: 0 0 12px;
+  padding: 2px 0 1px 12px;
 }
 
 .account-stats {
