@@ -56,11 +56,10 @@ export default async function MePage() {
         </div>
       </header>
 
-      <section className="settings-panel" aria-labelledby="settings-title">
-        <div className="settings-panel-heading">
-          <h1 id="settings-title">Settings</h1>
-          <p>Manage alerts for this account and browser.</p>
-        </div>
+      <section
+        className="settings-panel"
+        aria-labelledby="alert-settings-title"
+      >
         <AlertSettings initialSettings={notificationSettings} />
       </section>
 

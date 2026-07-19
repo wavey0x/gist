@@ -29,7 +29,6 @@ type NotificationSwitchProps = {
   checked: boolean;
   disabled: boolean;
   labelId: string;
-  descriptionId: string;
   saving: boolean;
   onToggle: () => void;
 };
@@ -38,7 +37,6 @@ function NotificationSwitch({
   checked,
   disabled,
   labelId,
-  descriptionId,
   saving,
   onToggle
 }: NotificationSwitchProps) {
@@ -49,7 +47,6 @@ function NotificationSwitch({
       role="switch"
       aria-checked={checked}
       aria-labelledby={labelId}
-      aria-describedby={descriptionId}
       aria-busy={saving}
       disabled={disabled}
       onClick={onToggle}
@@ -100,9 +97,7 @@ export function AlertSettings({
             await bindExistingSubscription(registration);
           } catch {
             if (active) {
-              setMessage(
-                "Alerts are enabled here, but account sync failed. Try again shortly."
-              );
+              setMessage("Couldn’t sync this browser. Try again.");
             }
           }
         } else if (Notification.permission === "denied") {
@@ -144,7 +139,7 @@ export function AlertSettings({
       );
       setBrowserState(subscription ? "enabled" : "ready");
     } catch {
-      setMessage("Alerts could not be enabled. Please try again.");
+      setMessage("Couldn’t enable alerts. Try again.");
     } finally {
       setBrowserBusy(false);
     }
@@ -162,13 +157,11 @@ export function AlertSettings({
         Notification.permission === "denied" ? "blocked" : "ready"
       );
       if (!result.backendSynced) {
-        setMessage(
-          "Alerts are disabled in this browser. Server cleanup will finish automatically."
-        );
+        setMessage("Alerts are off. Cleanup will retry automatically.");
       }
     } catch {
       setBrowserState("ready");
-      setMessage("Alerts are disabled in this browser.");
+      setMessage("Alerts are off in this browser.");
     } finally {
       setBrowserBusy(false);
     }
@@ -214,7 +207,7 @@ export function AlertSettings({
       }));
     } catch {
       setSettings(previous);
-      setMessage("That alert setting could not be saved. Please try again.");
+      setMessage("Couldn’t save that change. Try again.");
     } finally {
       setSavingSetting(null);
     }
@@ -223,42 +216,39 @@ export function AlertSettings({
   if (!settings.available) {
     return (
       <section className="alert-settings" aria-labelledby="alert-settings-title">
-        <h2 id="alert-settings-title">Notifications</h2>
-        <p className="alert-status">Alerts are not configured.</p>
+        <h1 id="alert-settings-title">Notifications</h1>
+        <p className="alert-status">Not configured.</p>
       </section>
     );
   }
 
-  let browserStatus = "Checking this browser…";
+  let browserStatus: string | null = "Checking…";
   if (browserState === "unsupported") {
-    browserStatus = "Alerts are not supported in this browser.";
+    browserStatus = "Not supported in this browser.";
   } else if (browserState === "ios-install") {
-    browserStatus =
-      "Add waveygist to your Home Screen, reopen it, then enable alerts.";
+    browserStatus = "Add to Home Screen to enable alerts.";
   } else if (browserState === "blocked") {
-    browserStatus =
-      "Notifications are blocked in system or browser settings.";
+    browserStatus = "Blocked in system settings.";
   } else if (browserState === "unavailable") {
-    browserStatus = "Alerts are unavailable right now.";
-  } else if (browserState === "ready") {
-    browserStatus = "Enable this browser to receive your selected alerts.";
-  } else if (browserState === "enabled") {
-    browserStatus = "Alerts are enabled on this browser.";
+    browserStatus = "Unavailable right now.";
+  } else if (browserState === "ready" || browserState === "enabled") {
+    browserStatus = null;
   }
 
   return (
     <section className="alert-settings" aria-labelledby="alert-settings-title">
       <div className="alert-settings-heading">
-        <div>
-          <h2 id="alert-settings-title">Notifications</h2>
-          <p>Choose which publication events should alert you.</p>
-        </div>
+        <h1 id="alert-settings-title">Notifications</h1>
       </div>
 
       <div className="alert-browser-row">
         <div className="alert-preference-copy">
           <span className="alert-preference-label">This browser</span>
-          <span className="alert-preference-description">{browserStatus}</span>
+          {browserStatus ? (
+            <span className="alert-preference-description">
+              {browserStatus}
+            </span>
+          ) : null}
         </div>
         <div className="alert-enrollment">
           {browserState === "ready" ? (
@@ -268,7 +258,7 @@ export function AlertSettings({
               onClick={() => void enableAlerts()}
               disabled={browserBusy}
             >
-              {browserBusy ? "Enabling…" : "Enable alerts"}
+              {browserBusy ? "Enabling…" : "Enable"}
             </button>
           ) : null}
           {browserState === "enabled" ? (
@@ -284,60 +274,45 @@ export function AlertSettings({
         </div>
       </div>
 
-      <div className="alert-preferences" aria-label="Alert types">
-        <div className="alert-preference-row">
-          <div className="alert-preference-copy">
+      {browserState === "enabled" ? (
+        <div className="alert-preferences" aria-label="Alert types">
+          <p className="alert-preferences-title">Notify me when</p>
+          <div className="alert-preference-row">
             <span
               className="alert-preference-label"
               id="new-gist-alert-label"
             >
               New gist published
             </span>
-            <span
-              className="alert-preference-description"
-              id="new-gist-alert-description"
-            >
-              Alert when this account publishes a new gist.
-            </span>
+            <NotificationSwitch
+              checked={settings.new_gist}
+              disabled={savingSetting !== null}
+              labelId="new-gist-alert-label"
+              saving={savingSetting === "new_gist"}
+              onToggle={() =>
+                void updateSetting("new_gist", !settings.new_gist)
+              }
+            />
           </div>
-          <NotificationSwitch
-            checked={settings.new_gist}
-            disabled={savingSetting !== null}
-            labelId="new-gist-alert-label"
-            descriptionId="new-gist-alert-description"
-            saving={savingSetting === "new_gist"}
-            onToggle={() =>
-              void updateSetting("new_gist", !settings.new_gist)
-            }
-          />
-        </div>
-        <div className="alert-preference-row">
-          <div className="alert-preference-copy">
+          <div className="alert-preference-row">
             <span
               className="alert-preference-label"
               id="edited-gist-alert-label"
             >
               Gist edited
             </span>
-            <span
-              className="alert-preference-description"
-              id="edited-gist-alert-description"
-            >
-              Alert when one of your gists gets a new revision.
-            </span>
+            <NotificationSwitch
+              checked={settings.edited_gist}
+              disabled={savingSetting !== null}
+              labelId="edited-gist-alert-label"
+              saving={savingSetting === "edited_gist"}
+              onToggle={() =>
+                void updateSetting("edited_gist", !settings.edited_gist)
+              }
+            />
           </div>
-          <NotificationSwitch
-            checked={settings.edited_gist}
-            disabled={savingSetting !== null}
-            labelId="edited-gist-alert-label"
-            descriptionId="edited-gist-alert-description"
-            saving={savingSetting === "edited_gist"}
-            onToggle={() =>
-              void updateSetting("edited_gist", !settings.edited_gist)
-            }
-          />
         </div>
-      </div>
+      ) : null}
 
       {message ? (
         <p className="alert-message" role="status" aria-live="polite">
