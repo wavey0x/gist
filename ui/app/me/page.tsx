@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AlertSettings } from "../../components/AlertSettings";
 import { ApiKeyCopyButton } from "../../components/ApiKeyCopyButton";
+import { LocalTimestamp } from "../../components/LocalTimestamp";
 import { LogoutButton } from "../../components/LogoutButton";
 import {
   fetchCurrentSession,
@@ -15,22 +16,6 @@ export const revalidate = 0;
 export const metadata: Metadata = {
   title: "Account - Wavey Gist"
 };
-
-function formatActivityDate(value: string | null) {
-  if (!value) {
-    return "—";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) {
-    return "—";
-  }
-  return new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC"
-  }).format(date);
-}
 
 export default async function MePage() {
   const session = await fetchCurrentSession();
@@ -95,9 +80,10 @@ export default async function MePage() {
                 <dt>Last update</dt>
                 <dd>
                   {payload.stats.last_updated_at ? (
-                    <time dateTime={payload.stats.last_updated_at}>
-                      {formatActivityDate(payload.stats.last_updated_at)}
-                    </time>
+                    <LocalTimestamp
+                      value={payload.stats.last_updated_at}
+                      variant="compact"
+                    />
                   ) : (
                     "—"
                   )}

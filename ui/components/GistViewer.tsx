@@ -13,6 +13,7 @@ import type { ReactNode } from "react";
 import { getGistHeaderTitle } from "../lib/gist-title";
 import type { PublicGistPayload, RevisionHistoryItem } from "../lib/gists";
 import type { SiteChromeConfig } from "../lib/site-config";
+import { LocalTimestamp } from "./LocalTimestamp";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -35,18 +36,6 @@ const GITHUB_LOGIN_RE =
 const ETH_ENTITY_ID_CLASS_RE = /^eth-id-[a-f0-9]{12}$/;
 const ETH_ENTITY_GROUP_HOVER_CLASS = "eth-entity-group-hover";
 const MARKDOWN_BODY_SELECTOR = "article.markdown-body";
-const GIST_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "UTC"
-});
-const GIST_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: true,
-  timeZone: "UTC"
-});
 
 function fallbackAuthorAvatarUrl(authorName: string) {
   return GITHUB_LOGIN_RE.test(authorName)
@@ -56,22 +45,6 @@ function fallbackAuthorAvatarUrl(authorName: string) {
 
 function authorAvatarInitial(authorName: string) {
   return authorName.trim().charAt(0).toUpperCase() || "?";
-}
-
-function formatGistDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) {
-    return value;
-  }
-  return GIST_DATE_FORMATTER.format(date);
-}
-
-function formatGistTimestamp(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) {
-    return value;
-  }
-  return `${GIST_DATE_FORMATTER.format(date)} ${GIST_TIME_FORMATTER.format(date)} UTC`;
 }
 
 function latestRevisionCreatedAt(gist: PublicGistPayload) {
@@ -323,7 +296,7 @@ export function GistViewer({
     <span className="gist-date-tooltip" aria-hidden="true">
       {dateTooltipRows.map((row) => (
         <span className="gist-date-tooltip-row" key={row.label}>
-          {row.label}: {formatGistTimestamp(row.value)}
+          {row.label}: <LocalTimestamp value={row.value} />
         </span>
       ))}
     </span>
@@ -355,15 +328,13 @@ export function GistViewer({
               {lastEditedAt ? (
                 <span className="gist-date-line gist-date-line-with-tooltip">
                   <span className="gist-date-label">edited:</span>{" "}
-                  <time dateTime={lastEditedAt}>{formatGistDate(lastEditedAt)}</time>
+                  <LocalTimestamp value={lastEditedAt} />
                   {dateTooltip}
                 </span>
               ) : (
                 <span className="gist-date-line gist-date-line-with-tooltip">
                   <span className="gist-date-label">created:</span>{" "}
-                  <time dateTime={gist.created_at}>
-                    {formatGistDate(gist.created_at)}
-                  </time>
+                  <LocalTimestamp value={gist.created_at} />
                   {dateTooltip}
                 </span>
               )}

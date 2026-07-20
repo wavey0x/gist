@@ -11,6 +11,7 @@ import {
   type RecentGistItem
 } from "../lib/recent-viewed";
 import { DeleteGistButton } from "./DeleteGistButton";
+import { LocalTimestamp } from "./LocalTimestamp";
 
 const ITEMS_PER_PAGE = 20;
 const GITHUB_LOGIN_RE =
@@ -55,16 +56,6 @@ function displayTitle(
     return trimmed;
   }
   return id;
-}
-
-function formatTimestamp(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) {
-    return value;
-  }
-
-  const iso = date.toISOString();
-  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 }
 
 function revisionUrl(baseUrl: string, revisionNumber: number) {
@@ -202,9 +193,7 @@ function GistList({
                     </a>{" "}
                     -{" "}
                     {item.dateLabel}{" "}
-                    <time dateTime={item.dateTime}>
-                      {formatTimestamp(item.dateTime)}
-                    </time>
+                    <LocalTimestamp value={item.dateTime} variant="compact" />
                   </span>
                 </div>
                 {item.action ? (
