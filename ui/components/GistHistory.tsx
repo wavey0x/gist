@@ -1,7 +1,9 @@
 "use client";
 
 import type { KeyboardEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { MyGistItem } from "../lib/auth";
 import {
   readRecentlyViewedGists,
@@ -242,12 +244,21 @@ export function GistHistoryTabs({
   myGists,
   isAuthenticated
 }: GistHistoryTabsProps) {
+  const router = useRouter();
+  const [isRefreshing, startRefresh] = useTransition();
   const [activeTab, setActiveTab] = useState<TabId>("recent");
   const [recentGists, setRecentGists] = useState<RecentGistItem[] | null>(null);
   const [pages, setPages] = useState<Record<TabId, number>>({
     recent: 0,
     mine: 0
   });
+
+  const refreshGists = useCallback(() => {
+    setRecentGists(readRecentlyViewedGists());
+    startRefresh(() => {
+      router.refresh();
+    });
+  }, [router]);
 
   useEffect(() => {
     setRecentGists(readRecentlyViewedGists());
@@ -261,9 +272,19 @@ export function GistHistoryTabs({
       }
     }
 
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        refreshGists();
+      }
+    }
+
     window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refreshGists]);
 
   const recentItems = useMemo(
     () => (recentGists ?? []).map(recentGistToListItem),
@@ -311,35 +332,48 @@ export function GistHistoryTabs({
 
   return (
     <section className="me-tabs-section" aria-label="Gists">
-      <div className="me-tabs" role="tablist" aria-label="Gist views">
+      <div className="me-tabs-header">
+        <div className="me-tabs" role="tablist" aria-label="Gist views">
+          <button
+            id="gist-recent-tab"
+            type="button"
+            className="me-tab-button"
+            role="tab"
+            aria-selected={activeTab === "recent"}
+            aria-controls="gist-recent-panel"
+            tabIndex={activeTab === "recent" ? 0 : -1}
+            onClick={() => setActiveTab("recent")}
+            onKeyDown={handleTabKeyDown}
+          >
+            RECENTLY VIEWED
+          </button>
+          <span className="me-tab-separator" aria-hidden="true">
+            |
+          </span>
+          <button
+            id="gist-mine-tab"
+            type="button"
+            className="me-tab-button"
+            role="tab"
+            aria-selected={activeTab === "mine"}
+            aria-controls="gist-mine-panel"
+            tabIndex={activeTab === "mine" ? 0 : -1}
+            onClick={() => setActiveTab("mine")}
+            onKeyDown={handleTabKeyDown}
+          >
+            MY GISTS
+          </button>
+        </div>
         <button
-          id="gist-recent-tab"
           type="button"
-          className="me-tab-button"
-          role="tab"
-          aria-selected={activeTab === "recent"}
-          aria-controls="gist-recent-panel"
-          tabIndex={activeTab === "recent" ? 0 : -1}
-          onClick={() => setActiveTab("recent")}
-          onKeyDown={handleTabKeyDown}
+          className="gist-refresh-button"
+          aria-label={isRefreshing ? "Refreshing gists" : "Refresh gists"}
+          aria-busy={isRefreshing}
+          title="Refresh"
+          disabled={isRefreshing}
+          onClick={refreshGists}
         >
-          RECENTLY VIEWED
-        </button>
-        <span className="me-tab-separator" aria-hidden="true">
-          |
-        </span>
-        <button
-          id="gist-mine-tab"
-          type="button"
-          className="me-tab-button"
-          role="tab"
-          aria-selected={activeTab === "mine"}
-          aria-controls="gist-mine-panel"
-          tabIndex={activeTab === "mine" ? 0 : -1}
-          onClick={() => setActiveTab("mine")}
-          onKeyDown={handleTabKeyDown}
-        >
-          MY GISTS
+          <RefreshCw aria-hidden="true" size={15} strokeWidth={1.9} />
         </button>
       </div>
 

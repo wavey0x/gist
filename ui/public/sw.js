@@ -86,18 +86,27 @@ self.addEventListener("notificationclick", (event) => {
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then(async (windowClients) => {
-        const existing = windowClients[0];
-        if (existing) {
-          if ("navigate" in existing) {
-            try {
-              await existing.navigate(path);
-            } catch {
-              // The existing same-origin window can still be focused.
-            }
-          }
-          return existing.focus();
+        const targetUrl = new URL(path, self.location.origin).href;
+        const target = windowClients.find(
+          (windowClient) => windowClient.url === targetUrl
+        );
+        if (target) {
+          return target.focus();
         }
-        return self.clients.openWindow(path);
+
+        const existing = windowClients[0];
+        if (existing && "navigate" in existing) {
+          try {
+            const navigated = await existing.navigate(targetUrl);
+            if (navigated) {
+              return navigated.focus();
+            }
+          } catch {
+            // Opening the target is the fallback for an inactive window.
+          }
+        }
+
+        return self.clients.openWindow(targetUrl);
       })
   );
 });

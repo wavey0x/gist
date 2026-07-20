@@ -709,7 +709,14 @@ button {
   gap: 12px;
 }
 
+.me-tabs-header {
+  display: grid;
+  grid-template-columns: minmax(28px, 1fr) auto minmax(28px, 1fr);
+  align-items: center;
+}
+
 .me-tabs {
+  grid-column: 2;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -745,6 +752,53 @@ button {
   color: var(--border);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.gist-refresh-button {
+  grid-column: 3;
+  justify-self: end;
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted-fg);
+  cursor: pointer;
+}
+
+.gist-refresh-button:hover:not(:disabled),
+.gist-refresh-button:focus-visible {
+  background: var(--button-bg-active);
+  color: var(--page-fg);
+}
+
+.gist-refresh-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.gist-refresh-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.gist-refresh-button[aria-busy="true"] svg {
+  animation: gist-refresh-spin 700ms linear infinite;
+}
+
+@keyframes gist-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gist-refresh-button[aria-busy="true"] svg {
+    animation: none;
+  }
 }
 
 .gist-list {
