@@ -757,27 +757,15 @@ button {
 .gist-refresh-button {
   grid-column: 3;
   justify-self: end;
-  display: inline-grid;
   width: 28px;
   height: 28px;
-  padding: 0;
-  place-items: center;
   border: 0;
-  border-radius: 5px;
   background: transparent;
   color: var(--muted-fg);
-  cursor: pointer;
 }
 
-.gist-refresh-button:hover:not(:disabled),
-.gist-refresh-button:focus-visible {
-  background: var(--button-bg-active);
+.gist-refresh-button:hover:not(:disabled) {
   color: var(--page-fg);
-}
-
-.gist-refresh-button:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
 }
 
 .gist-refresh-button:disabled {

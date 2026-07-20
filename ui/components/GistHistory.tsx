@@ -366,7 +366,7 @@ export function GistHistoryTabs({
         </div>
         <button
           type="button"
-          className="gist-refresh-button"
+          className="icon-button gist-refresh-button"
           aria-label={isRefreshing ? "Refreshing gists" : "Refresh gists"}
           aria-busy={isRefreshing}
           title="Refresh"
