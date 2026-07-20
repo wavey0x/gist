@@ -84,9 +84,33 @@ def test_build_payload_uses_immutable_revision_without_markdown():
         "title": "Gist edited",
         "body": "A useful title",
         "path": "/AbCdEf0123456789/revisions/4",
-        "tag": "gist-updated:AbCdEf0123456789:4",
+        "tag": "gist:AbCdEf0123456789",
     }
     assert "markdown" not in payload
+
+
+def test_build_payload_reuses_tag_for_newer_gist_event():
+    published = build_payload(
+        {
+            "event_type": "gist.published",
+            "external_id": "AbCdEf0123456789",
+            "revision_number": 1,
+            "title": "First",
+            "rendered_html": "<h1>First</h1>",
+        }
+    )
+    updated = build_payload(
+        {
+            "event_type": "gist.updated",
+            "external_id": "AbCdEf0123456789",
+            "revision_number": 2,
+            "title": "Second",
+            "rendered_html": "<h1>Second</h1>",
+        }
+    )
+
+    assert published["tag"] == updated["tag"] == "gist:AbCdEf0123456789"
+    assert updated["path"] == "/AbCdEf0123456789/revisions/2"
 
 
 def test_worker_success_sends_safe_payload_and_marks_delivery(client, app):
@@ -115,7 +139,7 @@ def test_worker_success_sends_safe_payload_and_marks_delivery(client, app):
         "title": "New gist published",
         "body": "Worker title",
         "path": f"/{gist_id}",
-        "tag": f"gist-published:{gist_id}:1",
+        "tag": f"gist:{gist_id}",
     }
     assert "Secret markdown body" not in sent["data"]
     stored = _delivery(app, delivery_id)

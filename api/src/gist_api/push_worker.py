@@ -109,6 +109,7 @@ def validate_worker_config(app):
 def build_payload(row):
     revision_number = row["revision_number"]
     external_id = row["external_id"]
+    tag = f"gist:{external_id}"
     body = " ".join(
         display_title(
             row["title"],
@@ -122,14 +123,14 @@ def build_payload(row):
             "title": "New gist published",
             "body": body,
             "path": f"/{external_id}",
-            "tag": f"gist-published:{external_id}:{revision_number}",
+            "tag": tag,
         }
     return {
         "type": row["event_type"],
         "title": "Gist edited",
         "body": body,
         "path": f"/{external_id}/revisions/{revision_number}",
-        "tag": f"gist-updated:{external_id}:{revision_number}",
+        "tag": tag,
     }
 
 
