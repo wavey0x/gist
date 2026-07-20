@@ -336,6 +336,7 @@ def list_gists_created_by_key(app, key_id, *, limit=100):
             ),
             "author_name": row["author_name"],
             "revision_number": row["latest_revision_number"],
+            "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
         if row["author_avatar_url"]:

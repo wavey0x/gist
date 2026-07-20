@@ -852,6 +852,44 @@ button {
   color: var(--muted-fg);
 }
 
+.gist-sort-control {
+  grid-column: 1;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted-fg);
+}
+
+.gist-sort-button {
+  border: 0;
+  background: transparent;
+  color: var(--subtle-fg);
+  padding: 0;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.gist-sort-button:hover,
+.gist-sort-button:focus-visible,
+.gist-sort-button[aria-pressed="true"] {
+  color: var(--page-fg);
+}
+
+.gist-sort-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.gist-sort-separator {
+  color: var(--border);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .me-tab-button {
   border: 0;
   background: transparent;
@@ -1996,6 +2034,12 @@ button {
 
   .home-gist-history {
     margin-top: 0;
+  }
+
+  .gist-sort-control {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-top: 8px;
   }
 
   .account-actions {

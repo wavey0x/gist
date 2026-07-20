@@ -20,6 +20,7 @@ export type MyGistItem = {
   author_name: string;
   author_avatar_url?: string;
   revision_number: number;
+  created_at: string;
   updated_at: string;
 };
 
@@ -83,6 +84,7 @@ function isMyGistItem(value: unknown): value is MyGistItem {
     typeof item.revision_number === "number" &&
     Number.isInteger(item.revision_number) &&
     item.revision_number > 0 &&
+    typeof item.created_at === "string" &&
     typeof item.updated_at === "string"
   );
 }

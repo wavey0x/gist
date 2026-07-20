@@ -18,6 +18,7 @@ const GITHUB_LOGIN_RE =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 
 type TabId = "recent" | "mine";
+type MyGistSort = "updated" | "created";
 
 type GistHistoryTabsProps = {
   myGists: MyGistItem[];
@@ -38,7 +39,7 @@ type ListItem = {
   authorAvatarUrl?: string;
   revisionNumber: number;
   dateTime: string;
-  dateLabel: "viewed" | "updated";
+  dateLabel: "viewed" | "updated" | "created";
   action?: ReactNode;
 };
 
@@ -109,7 +110,7 @@ function GistListAuthor({
   );
 }
 
-function myGistToListItem(gist: MyGistItem): ListItem {
+function myGistToListItem(gist: MyGistItem, sort: MyGistSort): ListItem {
   const title = displayTitle(gist.display_title, gist.title, gist.id);
   return {
     id: gist.id,
@@ -120,10 +121,24 @@ function myGistToListItem(gist: MyGistItem): ListItem {
     authorName: gist.author_name,
     authorAvatarUrl: gist.author_avatar_url,
     revisionNumber: gist.revision_number,
-    dateTime: gist.updated_at,
-    dateLabel: "updated",
+    dateTime: sort === "created" ? gist.created_at : gist.updated_at,
+    dateLabel: sort,
     action: <DeleteGistButton gistId={gist.id} gistTitle={title} />
   };
+}
+
+function timestampValue(value: string) {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function sortMyGists(gists: MyGistItem[], sort: MyGistSort) {
+  const field = sort === "created" ? "created_at" : "updated_at";
+  return [...gists].sort((left, right) => {
+    const dateOrder =
+      timestampValue(right[field]) - timestampValue(left[field]);
+    return dateOrder || right.id.localeCompare(left.id);
+  });
 }
 
 function recentGistToListItem(gist: RecentGistItem): ListItem {
@@ -236,6 +251,7 @@ export function GistHistoryTabs({
   const router = useRouter();
   const [isRefreshing, startRefresh] = useTransition();
   const [activeTab, setActiveTab] = useState<TabId>("recent");
+  const [myGistSort, setMyGistSort] = useState<MyGistSort>("updated");
   const [recentGists, setRecentGists] = useState<RecentGistItem[] | null>(null);
   const [pages, setPages] = useState<Record<TabId, number>>({
     recent: 0,
@@ -280,8 +296,10 @@ export function GistHistoryTabs({
     [recentGists]
   );
   const myItems = useMemo(
-    () => myGists.map(myGistToListItem),
-    [myGists]
+    () => sortMyGists(myGists, myGistSort).map((gist) =>
+      myGistToListItem(gist, myGistSort)
+    ),
+    [myGists, myGistSort]
   );
 
   const activeItems = activeTab === "recent" ? recentItems : myItems;
@@ -295,6 +313,11 @@ export function GistHistoryTabs({
       ...current,
       [activeTab]: Math.max(0, Math.min(page, getPageCount(activeItems) - 1))
     }));
+  }
+
+  function selectMyGistSort(sort: MyGistSort) {
+    setMyGistSort(sort);
+    setPages((current) => ({ ...current, mine: 0 }));
   }
 
   function selectTabFromKeyboard(
@@ -322,6 +345,33 @@ export function GistHistoryTabs({
   return (
     <section className="me-tabs-section" aria-label="Gists">
       <div className="me-tabs-header">
+        {activeTab === "mine" && myGists.length > 1 ? (
+          <div
+            className="gist-sort-control"
+            role="group"
+            aria-label="Sort my gists"
+          >
+            <button
+              type="button"
+              className="gist-sort-button"
+              aria-pressed={myGistSort === "updated"}
+              onClick={() => selectMyGistSort("updated")}
+            >
+              UPDATED
+            </button>
+            <span className="gist-sort-separator" aria-hidden="true">
+              |
+            </span>
+            <button
+              type="button"
+              className="gist-sort-button"
+              aria-pressed={myGistSort === "created"}
+              onClick={() => selectMyGistSort("created")}
+            >
+              CREATED
+            </button>
+          </div>
+        ) : null}
         <div className="me-tabs" role="tablist" aria-label="Gist views">
           <button
             id="gist-recent-tab"
@@ -417,7 +467,7 @@ export function GistHistoryTabs({
 export function OwnedGistList({ myGists }: OwnedGistListProps) {
   const [page, setPage] = useState(0);
   const items = useMemo(
-    () => myGists.map(myGistToListItem),
+    () => myGists.map((gist) => myGistToListItem(gist, "updated")),
     [myGists]
   );
 

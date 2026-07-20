@@ -367,6 +367,7 @@ def test_me_gists_lists_only_gists_created_by_session_key(client, app):
         "display_title": "Edited by owner",
         "author_name": "owner",
         "revision_number": 2,
+        "created_at": owner_body["created_at"],
         "updated_at": body["gists"][0]["updated_at"],
     }
     assert "markdown" not in body["gists"][0]
