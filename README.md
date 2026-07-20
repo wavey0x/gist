@@ -70,7 +70,9 @@ Run the frontend:
 
 ```sh
 cd ui
-GIST_API_BASE_URL=http://localhost:3001 npm run dev
+GIST_API_BASE_URL=http://localhost:3001 \
+GIST_SITE_BASE_URL=http://localhost:3000 \
+npm run dev
 ```
 
 Open `http://localhost:3000`.
@@ -186,6 +188,7 @@ Frontend environment variables:
 | Name | Default | Description |
 | --- | --- | --- |
 | `GIST_API_BASE_URL` | `http://localhost:3001` | Backend base URL used by server-rendered pages. Set this explicitly in production. |
+| `GIST_SITE_BASE_URL` | `https://gist.wavey.info` in production; `http://localhost:3000` otherwise | Public frontend base URL used for absolute social-preview metadata. Set this for self-hosted production deployments. |
 | `GIST_BRAND_NAME` | `wavey` | Brand name shown before `gist` in the compact gist-page brand mark. |
 | `GIST_SHOW_BRANDING` | `false` | Show the compact gist-page brand mark. Use `true`, `1`, `yes`, or `on` to enable it. |
 

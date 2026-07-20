@@ -8,7 +8,7 @@ import {
   fetchPublicGistPayload,
   fetchPublicGistWithPrevious
 } from "../../../../../lib/gists";
-import { getGistDocumentTitle } from "../../../../../lib/gist-title";
+import { buildGistMetadata } from "../../../../../lib/gist-metadata";
 import { getSiteChromeConfig } from "../../../../../lib/site-config";
 
 export const dynamic = "force-dynamic";
@@ -31,10 +31,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   try {
     const gist = await fetchPublicGistPayload(gistId, revisionNumber);
-    return {
-      title: `${getGistDocumentTitle(gist)} diff`,
-      robots
-    };
+    return buildGistMetadata(gist, { diff: true, robots });
   } catch (error) {
     if (error instanceof PublicGistNotFoundError) {
       return {

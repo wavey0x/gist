@@ -46,8 +46,12 @@ export function getTopLevelHeading(gist: PublicGistPayload) {
   return match ? normalizeHeadingText(match[1]) : null;
 }
 
+export function getGistShareTitle(gist: PublicGistPayload) {
+  return getTopLevelHeading(gist) ?? gist.title;
+}
+
 export function getGistDocumentTitle(gist: PublicGistPayload) {
-  const title = getTopLevelHeading(gist) ?? gist.title ?? "untitled";
+  const title = getGistShareTitle(gist) ?? "untitled";
   return `gist: ${title}`;
 }
 
