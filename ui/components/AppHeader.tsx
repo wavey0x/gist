@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { fetchCurrentSession } from "../lib/auth";
+import { StandaloneAppControls } from "./StandaloneAppControls";
 
 async function getHeaderSession() {
   try {
@@ -42,6 +43,7 @@ export async function AppHeader() {
               Log in
             </Link>
           )}
+          <StandaloneAppControls />
         </nav>
       </div>
     </header>
