@@ -20,7 +20,7 @@ export function buildGistMetadata(
       type: "article"
     },
     twitter: {
-      card: "summary_large_image",
+      card: "summary",
       title
     },
     robots
