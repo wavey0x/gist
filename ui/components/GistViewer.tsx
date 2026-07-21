@@ -23,6 +23,7 @@ type GistViewerProps = {
   chrome: SiteChromeConfig;
   gist: PublicGistPayload;
   customContent?: ReactNode;
+  customDiffFromRevisionNumber?: number;
   customView?: "diff";
 };
 
@@ -84,6 +85,7 @@ export function GistViewer({
   chrome,
   gist,
   customContent = null,
+  customDiffFromRevisionNumber,
   customView
 }: GistViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>(
@@ -304,7 +306,11 @@ export function GistViewer({
   const customDiffIsCurrent = viewMode === "custom" && customView === "diff";
 
   function historyDiffUrl(item: RevisionHistoryItem) {
-    return `${item.url.replace(/\/$/, "")}/diff`;
+    const gistUrl = item.url
+      .replace(/\/revisions\/[1-9][0-9]*\/?$/, "")
+      .replace(/\/$/, "");
+    const revisionNumber = item.revision_number;
+    return `${gistUrl}/diff/${revisionNumber - 1}..${revisionNumber}`;
   }
 
   return (
@@ -409,7 +415,8 @@ export function GistViewer({
                     item.revision_number === gist.revision_number;
                   const diffIsCurrent =
                     customDiffIsCurrent &&
-                    item.revision_number === gist.revision_number;
+                    item.revision_number === gist.revision_number &&
+                    customDiffFromRevisionNumber === item.revision_number - 1;
 
                   return (
                     <div

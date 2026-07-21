@@ -4,11 +4,16 @@ import { diffLines, diffWordsWithSpace } from "diff";
 import type { Change } from "diff";
 import { useMemo } from "react";
 import type { ReactNode } from "react";
-import type { PublicGistPayload, RevisionDiffBase } from "../lib/gists";
+import type { PublicGistPayload } from "../lib/gists";
+
+type DiffRevision = Pick<
+  PublicGistPayload,
+  "revision_number" | "markdown"
+>;
 
 export type RevisionDiffViewerProps = {
-  gist: PublicGistPayload;
-  previousRevision: RevisionDiffBase;
+  fromRevision: DiffRevision;
+  toRevision: DiffRevision;
 };
 
 type DiffLineKind = "context" | "removed" | "added";
@@ -265,13 +270,13 @@ function lineNumber(value: number | null) {
 }
 
 export function RevisionDiffViewer({
-  gist,
-  previousRevision
+  fromRevision,
+  toRevision
 }: RevisionDiffViewerProps) {
-  const summary = `Revision ${previousRevision.revision_number} to ${gist.revision_number}`;
+  const summary = `Revision ${fromRevision.revision_number} to ${toRevision.revision_number}`;
   const diff = useMemo(
-    () => buildDiff(previousRevision.markdown, gist.markdown),
-    [gist.markdown, previousRevision.markdown]
+    () => buildDiff(fromRevision.markdown, toRevision.markdown),
+    [fromRevision.markdown, toRevision.markdown]
   );
 
   return (

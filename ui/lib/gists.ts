@@ -35,16 +35,6 @@ export type PublicGistPayload = {
   history: RevisionHistoryItem[];
 };
 
-export type RevisionDiffBase = Pick<
-  PublicGistPayload,
-  "revision_number" | "created_at" | "author_name" | "markdown"
->;
-
-export type PublicGistWithPrevious = {
-  gist: PublicGistPayload;
-  previousRevision: RevisionDiffBase | null;
-};
-
 function validateGistId(value: string) {
   return GIST_ID_RE.test(value);
 }
@@ -156,50 +146,6 @@ export async function fetchPublicGist(
 ): Promise<PublicGistPayload> {
   try {
     return await fetchPublicGistPayload(gistId, revisionNumber);
-  } catch (error) {
-    if (error instanceof PublicGistNotFoundError) {
-      notFound();
-    }
-    throw error;
-  }
-}
-
-function revisionCreatedAt(gist: PublicGistPayload) {
-  return (
-    gist.history.find((item) => item.revision_number === gist.revision_number)
-      ?.created_at ?? gist.updated_at
-  );
-}
-
-function toRevisionDiffBase(gist: PublicGistPayload): RevisionDiffBase {
-  return {
-    revision_number: gist.revision_number,
-    created_at: revisionCreatedAt(gist),
-    author_name: gist.author_name,
-    markdown: gist.markdown
-  };
-}
-
-export async function fetchPublicGistWithPrevious(
-  gistId: string,
-  revisionNumber?: string
-): Promise<PublicGistWithPrevious> {
-  try {
-    const gist = await fetchPublicGistPayload(gistId, revisionNumber);
-    const previousRevision =
-      gist.revision_number > 1
-        ? toRevisionDiffBase(
-            await fetchPublicGistPayload(
-              gistId,
-              String(gist.revision_number - 1)
-            )
-          )
-        : null;
-
-    return {
-      gist,
-      previousRevision
-    };
   } catch (error) {
     if (error instanceof PublicGistNotFoundError) {
       notFound();

@@ -78,6 +78,12 @@ button {
   width: min(100%, 1280px);
 }
 
+.page-shell-wide .page-header {
+  width: min(100%, calc(980px - 64px));
+  margin-right: auto;
+  margin-left: auto;
+}
+
 .auth-shell {
   width: min(100%, 760px);
   margin: 0 auto;
