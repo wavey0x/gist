@@ -44,9 +44,12 @@ export default async function GistPage({ params }: PageProps) {
   const { gistId } = await params;
   const gist = await fetchPublicGist(gistId);
   const chrome = getSiteChromeConfig();
+  const hasMultipleFiles = Object.keys(gist.files).length > 1;
 
   return (
-    <main className="page-shell">
+    <main
+      className={hasMultipleFiles ? "page-shell page-shell-gist" : "page-shell"}
+    >
       <GistViewer chrome={chrome} gist={gist} />
       <MermaidRenderer gistId={gist.id} revisionNumber={gist.revision_number} />
     </main>

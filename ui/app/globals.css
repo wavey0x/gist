@@ -36,12 +36,14 @@
 
 html {
   min-height: 100%;
+  overflow-x: clip;
   background: var(--page-bg);
 }
 
 body {
   min-height: 100vh;
   margin: 0;
+  overflow-x: clip;
   background: var(--page-bg);
   color: var(--page-fg);
   font-family:
@@ -78,7 +80,24 @@ button {
   width: min(100%, 1280px);
 }
 
+.page-shell-gist {
+  width: min(100%, 1040px);
+}
+
+.page-shell-gist .page-header,
 .page-shell-wide .page-header {
+  width: min(100%, calc(980px - 64px));
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.page-shell-wide .gist-files {
+  width: min(100%, 976px);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.page-shell-wide .gist-single-file {
   width: min(100%, calc(980px - 64px));
   margin-right: auto;
   margin-left: auto;
@@ -1744,11 +1763,15 @@ button {
 
 .gist-files {
   display: grid;
-  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  gap: 12px;
   min-width: 0;
 }
 
 .gist-file-panel {
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -1757,14 +1780,55 @@ button {
 }
 
 .gist-file-header {
-  min-height: 40px;
+  min-height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 6px;
   border-bottom: 1px solid var(--border);
+  background: transparent;
+  padding: 3px 6px 3px 7px;
+}
+
+.gist-file-panel[data-collapsed="true"] .gist-file-header {
+  border-bottom-color: transparent;
+}
+
+.gist-file-disclosure {
+  min-width: 0;
+  min-height: 28px;
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  padding: 3px 5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gist-file-disclosure:hover,
+.gist-file-disclosure:focus-visible {
   background: var(--button-bg-active);
-  padding: 7px 10px 7px 12px;
+}
+
+.gist-file-disclosure:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.gist-file-chevron {
+  flex: 0 0 auto;
+  color: var(--muted-fg);
+  transition: transform 120ms ease;
+}
+
+.gist-file-panel[data-collapsed="true"] .gist-file-chevron {
+  transform: rotate(-90deg);
 }
 
 .gist-file-identity {
@@ -1800,7 +1864,7 @@ button {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
 }
 
 .gist-file-action {
@@ -1808,11 +1872,11 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--button-bg);
-  color: var(--button-fg);
-  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-fg);
+  padding: 4px 6px;
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
@@ -1825,7 +1889,9 @@ button.gist-file-action {
 
 .gist-file-action:hover,
 .gist-file-action:focus-visible {
+  border-color: var(--border);
   background: var(--button-bg-active);
+  color: var(--page-fg);
 }
 
 .gist-file-action:focus-visible {
@@ -1833,8 +1899,13 @@ button.gist-file-action {
   outline-offset: 1px;
 }
 
+.gist-file-body {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .gist-file-markdown {
-  padding: 24px 28px;
+  padding: 20px 24px 24px;
 }
 
 .gist-file-markdown > :first-child {
@@ -1846,11 +1917,14 @@ button.gist-file-action {
 }
 
 .gist-code-view {
+  width: 100%;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   min-width: 0;
   max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  contain: inline-size;
   background: var(--page-bg);
 }
 
@@ -2233,6 +2307,7 @@ button.gist-file-action {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .gist-file-chevron,
   .pull-refresh-indicator,
   .standalone-action-notice {
     transition: none;
@@ -2265,6 +2340,37 @@ button.gist-file-action {
 
   .page-shell {
     padding: 10px 16px 20px;
+  }
+
+  :is(.page-shell-gist, .page-shell-wide) .gist-files {
+    width: auto;
+    max-width: none;
+    margin-right: -16px;
+    margin-left: -16px;
+  }
+
+  .gist-file-panel {
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .gist-file-header {
+    min-height: 38px;
+    padding: 4px 8px;
+  }
+
+  .gist-file-markdown {
+    padding: 18px 16px 22px;
+  }
+
+  .gist-line-numbers {
+    min-width: 44px;
+    padding: 10px 7px;
+  }
+
+  .gist-code-content {
+    padding: 10px 12px;
   }
 
   .auth-shell {
@@ -2327,5 +2433,22 @@ button.gist-file-action {
   .page-header-no-brand .gist-heading {
     grid-column: 1;
     grid-row: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .gist-file-meta {
+    display: none;
+  }
+
+  .gist-file-copy {
+    width: 28px;
+    justify-content: center;
+    padding-right: 4px;
+    padding-left: 4px;
+  }
+
+  .gist-file-copy span {
+    display: none;
   }
 }

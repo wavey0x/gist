@@ -1,6 +1,14 @@
 "use client";
 
-import { Check, Copy, FileCode, FileDiff, History } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  FileCode,
+  FileDiff,
+  History,
+  TextSearch
+} from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { getGistHeaderTitle } from "../lib/gist-title";
@@ -15,7 +23,7 @@ import { LocalTimestamp } from "./LocalTimestamp";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
 import { ThemeToggle } from "./ThemeToggle";
 
-type ViewMode = "files" | "custom";
+type ViewMode = "files" | "raw" | "custom";
 
 type GistViewerProps = {
   chrome: SiteChromeConfig;
@@ -102,14 +110,19 @@ function sourceLineNumbers(content: string) {
 
 function GistFilePanel({
   file,
+  collapsed,
   copied,
+  onCollapseToggle,
   onCopy
 }: {
   file: PublicGistFile;
+  collapsed: boolean;
   copied: boolean;
+  onCollapseToggle: () => void;
   onCopy: () => void;
 }) {
   const headingId = useId();
+  const bodyId = useId();
   const metadata = [file.language, formatByteSize(file.byte_size)]
     .filter(Boolean)
     .join(" · ");
@@ -118,15 +131,31 @@ function GistFilePanel({
     <section
       className="gist-file-panel"
       data-gist-filename={file.filename}
+      data-collapsed={collapsed ? "true" : "false"}
       aria-labelledby={headingId}
     >
       <header className="gist-file-header">
-        <div className="gist-file-identity">
-          <h2 className="gist-file-name" id={headingId}>
-            {file.filename}
-          </h2>
-          <span className="gist-file-meta">{metadata}</span>
-        </div>
+        <button
+          type="button"
+          className="gist-file-disclosure"
+          aria-expanded={!collapsed}
+          aria-controls={bodyId}
+          aria-label={`${collapsed ? "Expand" : "Collapse"} ${file.filename}`}
+          onClick={onCollapseToggle}
+        >
+          <ChevronDown
+            className="gist-file-chevron"
+            aria-hidden="true"
+            size={15}
+            strokeWidth={1.9}
+          />
+          <span className="gist-file-identity">
+            <span className="gist-file-name" id={headingId}>
+              {file.filename}
+            </span>
+            <span className="gist-file-meta">{metadata}</span>
+          </span>
+        </button>
         <div className="gist-file-actions">
           <a className="gist-file-action" href={file.raw_url}>
             Raw
@@ -146,22 +175,25 @@ function GistFilePanel({
           </button>
         </div>
       </header>
-      {file.kind === "markdown" ? (
-        <article
-          className="markdown-body gist-file-markdown"
-          dangerouslySetInnerHTML={{ __html: file.rendered_html }}
-        />
-      ) : (
-        <div className="gist-code-view">
-          <pre className="gist-line-numbers" aria-hidden="true">
-            {sourceLineNumbers(file.content)}
-          </pre>
-          <div
-            className="markdown-body gist-code-content"
+      <div className="gist-file-body" id={bodyId} hidden={collapsed}>
+        {!collapsed && file.kind === "markdown" ? (
+          <article
+            className="markdown-body gist-file-markdown"
             dangerouslySetInnerHTML={{ __html: file.rendered_html }}
           />
-        </div>
-      )}
+        ) : null}
+        {!collapsed && file.kind !== "markdown" ? (
+          <div className="gist-code-view">
+            <pre className="gist-line-numbers" aria-hidden="true">
+              {sourceLineNumbers(file.content)}
+            </pre>
+            <div
+              className="markdown-body gist-code-content"
+              dangerouslySetInnerHTML={{ __html: file.rendered_html }}
+            />
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -176,12 +208,17 @@ export function GistViewer({
   const [viewMode, setViewMode] = useState<ViewMode>(
     customContent ? "custom" : "files"
   );
+  const [collapsedFilenames, setCollapsedFilenames] = useState<Set<string>>(
+    () => new Set()
+  );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [copiedFilename, setCopiedFilename] = useState<string | null>(null);
   const [relativeDateNow, setRelativeDateNow] = useState(() => Date.now());
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const historyControlRef = useRef<HTMLDivElement | null>(null);
-  const filesRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const files = orderedGistFiles(gist);
+  const singleFile = files.length === 1 ? files[0] : null;
 
   useEffect(() => {
     if (!copiedFilename) {
@@ -239,15 +276,21 @@ export function GistViewer({
   }, [customContent, viewMode]);
 
   useEffect(() => {
+    setCollapsedFilenames((current) =>
+      current.size === 0 ? current : new Set()
+    );
+  }, [gist.id, gist.revision_number]);
+
+  useEffect(() => {
     if (viewMode !== "files") {
       return undefined;
     }
 
-    const filesRoot = filesRef.current;
-    if (!filesRoot) {
+    const contentRoot = contentRef.current;
+    if (!contentRoot) {
       return undefined;
     }
-    const root: HTMLDivElement = filesRoot;
+    const root: HTMLDivElement = contentRoot;
 
     let activeEntityId: string | null = null;
 
@@ -349,6 +392,23 @@ export function GistViewer({
     }
   }
 
+  function toggleRawMode() {
+    setViewMode((current) => (current === "raw" ? "files" : "raw"));
+    setCopiedFilename(null);
+  }
+
+  function toggleFile(filename: string) {
+    setCollapsedFilenames((current) => {
+      const next = new Set(current);
+      if (next.has(filename)) {
+        next.delete(filename);
+      } else {
+        next.add(filename);
+      }
+      return next;
+    });
+  }
+
   const headerTitle = getGistHeaderTitle(gist);
   const avatarUrl =
     gist.author_avatar_url ?? fallbackAuthorAvatarUrl(gist.author_name);
@@ -372,6 +432,7 @@ export function GistViewer({
     </span>
   );
   const customDiffIsCurrent = viewMode === "custom" && customView === "diff";
+  const rawIsVisible = viewMode === "raw" && Boolean(singleFile);
 
   function historyDiffUrl(item: RevisionHistoryItem) {
     const gistUrl = item.url
@@ -449,6 +510,20 @@ export function GistViewer({
                 <FileCode aria-hidden="true" size={18} strokeWidth={1.8} />
               ) : (
                 <FileDiff aria-hidden="true" size={18} strokeWidth={1.8} />
+              )}
+            </button>
+          ) : singleFile ? (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={rawIsVisible ? "View rendered file" : "View raw file"}
+              title={rawIsVisible ? "Rendered" : "Raw"}
+              onClick={toggleRawMode}
+            >
+              {rawIsVisible ? (
+                <TextSearch aria-hidden="true" size={18} strokeWidth={1.8} />
+              ) : (
+                <FileCode aria-hidden="true" size={18} strokeWidth={1.8} />
               )}
             </button>
           ) : null}
@@ -536,13 +611,57 @@ export function GistViewer({
 
       {viewMode === "custom" && customContent ? (
         customContent
+      ) : rawIsVisible && singleFile ? (
+        <div className="raw-viewer gist-single-file">
+          <button
+            type="button"
+            className="icon-button raw-copy-button"
+            aria-label={
+              copiedFilename === singleFile.filename
+                ? `${singleFile.filename} copied`
+                : `Copy ${singleFile.filename}`
+            }
+            title={copiedFilename === singleFile.filename ? "Copied" : "Copy"}
+            onClick={() => void copyFile(singleFile)}
+          >
+            {copiedFilename === singleFile.filename ? (
+              <Check aria-hidden="true" size={17} strokeWidth={1.8} />
+            ) : (
+              <Copy aria-hidden="true" size={17} strokeWidth={1.8} />
+            )}
+          </button>
+          <pre className="raw-markdown" aria-label="Raw file">
+            <code>{singleFile.content}</code>
+          </pre>
+        </div>
+      ) : singleFile?.kind === "markdown" ? (
+        <div ref={contentRef} className="gist-single-file">
+          <article
+            className="markdown-body"
+            dangerouslySetInnerHTML={{ __html: singleFile.rendered_html }}
+          />
+        </div>
+      ) : singleFile ? (
+        <div ref={contentRef} className="gist-single-file">
+          <div className="gist-code-view">
+            <pre className="gist-line-numbers" aria-hidden="true">
+              {sourceLineNumbers(singleFile.content)}
+            </pre>
+            <div
+              className="markdown-body gist-code-content"
+              dangerouslySetInnerHTML={{ __html: singleFile.rendered_html }}
+            />
+          </div>
+        </div>
       ) : (
-        <div className="gist-files" ref={filesRef}>
-          {orderedGistFiles(gist).map((file) => (
+        <div className="gist-files" ref={contentRef}>
+          {files.map((file) => (
             <GistFilePanel
               key={file.filename}
               file={file}
+              collapsed={collapsedFilenames.has(file.filename)}
               copied={copiedFilename === file.filename}
+              onCollapseToggle={() => toggleFile(file.filename)}
               onCopy={() => void copyFile(file)}
             />
           ))}
