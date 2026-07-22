@@ -1947,11 +1947,11 @@ button.gist-file-action {
   position: sticky;
   z-index: 1;
   left: 0;
-  min-width: 52px;
+  min-width: 38px;
   border-right: 1px solid var(--border);
   background: var(--button-bg-active);
   color: var(--subtle-fg);
-  padding: 12px 9px;
+  padding: 12px 6px;
   text-align: right;
   user-select: none;
 }
@@ -1960,7 +1960,7 @@ button.gist-file-action {
   width: max-content;
   min-width: 100%;
   overflow: visible;
-  padding: 12px 16px;
+  padding: 12px 10px;
   color: var(--page-fg);
 }
 
@@ -2365,12 +2365,12 @@ button.gist-file-action {
   }
 
   .gist-line-numbers {
-    min-width: 44px;
-    padding: 10px 7px;
+    min-width: 34px;
+    padding: 10px 5px;
   }
 
   .gist-code-content {
-    padding: 10px 12px;
+    padding: 10px;
   }
 
   .auth-shell {
