@@ -71,7 +71,7 @@ button {
 }
 
 .page-shell {
-  width: min(100%, 980px);
+  width: min(100%, 1040px);
   margin: 0 auto;
   padding: 14px 32px 32px;
 }
@@ -80,13 +80,8 @@ button {
   width: min(100%, 1280px);
 }
 
-.page-shell-gist {
-  width: min(100%, 1040px);
-}
-
-.page-shell-gist .page-header,
 .page-shell-wide .page-header {
-  width: min(100%, calc(980px - 64px));
+  width: min(100%, 976px);
   margin-right: auto;
   margin-left: auto;
 }
@@ -98,7 +93,7 @@ button {
 }
 
 .page-shell-wide .gist-single-file {
-  width: min(100%, calc(980px - 64px));
+  width: min(100%, 976px);
   margin-right: auto;
   margin-left: auto;
 }
@@ -169,7 +164,7 @@ button {
 }
 
 .app-header-inner {
-  width: min(100%, 980px);
+  width: min(100%, 1040px);
   min-height: 44px;
   margin: 0 auto;
   padding: 0 32px;
@@ -1904,7 +1899,7 @@ button.gist-file-action {
   font-family:
     ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono,
     monospace;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.55;
   white-space: pre;
 }
@@ -2347,6 +2342,7 @@ button.gist-file-action {
   .gist-code-content {
     grid-column: 1;
     padding: 10px;
+    font-size: 14px;
   }
 
   .auth-shell {
