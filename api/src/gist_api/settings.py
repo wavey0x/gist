@@ -25,7 +25,7 @@ def _csv_env(name, default):
 
 
 def load_settings():
-    max_markdown_bytes = _int_env("MAX_MARKDOWN_BYTES", 1048576)
+    max_text_bytes = _int_env("MAX_GIST_TEXT_BYTES", 1048576)
     image_max_bytes = _int_env("GIST_IMAGE_MAX_BYTES", 20 * 1024 * 1024)
     image_max_per_request = _int_env("GIST_IMAGE_MAX_PER_REQUEST", 10)
     return {
@@ -49,9 +49,10 @@ def load_settings():
         "IMAGE_MAX_PER_REQUEST": image_max_per_request,
         "MAX_MULTIPART_REQUEST_BYTES": _int_env(
             "MAX_MULTIPART_REQUEST_BYTES",
-            max_markdown_bytes + (image_max_bytes * image_max_per_request) + 8192,
+            max_text_bytes + (image_max_bytes * image_max_per_request) + 65536,
         ),
-        "MAX_MARKDOWN_BYTES": max_markdown_bytes,
+        "MAX_GIST_TEXT_BYTES": max_text_bytes,
+        "MAX_GIST_FILES": _int_env("MAX_GIST_FILES", 32),
         "MAX_REQUEST_BYTES": _int_env("MAX_REQUEST_BYTES", None),
         "SQLITE_BUSY_TIMEOUT_MS": _int_env("SQLITE_BUSY_TIMEOUT_MS", 5000),
         "API_WRITE_LIMIT_PER_24H": _int_env("API_WRITE_LIMIT_PER_24H", 150),

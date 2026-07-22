@@ -32,6 +32,7 @@ from .notifications import (
     validate_push_endpoint,
 )
 from .service import display_title
+from .gist_files import file_kind
 
 
 logger = logging.getLogger(__name__)
@@ -113,7 +114,12 @@ def build_payload(row):
     body = " ".join(
         display_title(
             row["title"],
-            row["rendered_html"],
+            (
+                row["lead_rendered_html"]
+                if file_kind(row["lead_filename"]) == "markdown"
+                else None
+            ),
+            row["lead_filename"],
             external_id,
         ).split()
     )[:160]
@@ -129,7 +135,7 @@ def build_payload(row):
         "type": row["event_type"],
         "title": "Gist edited",
         "body": body,
-        "path": f"/{external_id}/revisions/{revision_number}",
+        "path": f"/{external_id}",
         "tag": tag,
     }
 

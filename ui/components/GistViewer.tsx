@@ -1,23 +1,21 @@
 "use client";
 
-import {
-  Check,
-  Copy,
-  FileCode,
-  FileDiff,
-  History,
-  TextSearch
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Copy, FileCode, FileDiff, History } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { getGistHeaderTitle } from "../lib/gist-title";
-import type { PublicGistPayload, RevisionHistoryItem } from "../lib/gists";
+import {
+  orderedGistFiles,
+  type PublicGistFile,
+  type PublicGistPayload,
+  type RevisionHistoryItem
+} from "../lib/gists";
 import type { SiteChromeConfig } from "../lib/site-config";
 import { LocalTimestamp } from "./LocalTimestamp";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
 import { ThemeToggle } from "./ThemeToggle";
 
-type ViewMode = "rendered" | "raw" | "custom";
+type ViewMode = "files" | "custom";
 
 type GistViewerProps = {
   chrome: SiteChromeConfig;
@@ -36,7 +34,6 @@ const GITHUB_LOGIN_RE =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 const ETH_ENTITY_ID_CLASS_RE = /^eth-id-[a-f0-9]{12}$/;
 const ETH_ENTITY_GROUP_HOVER_CLASS = "eth-entity-group-hover";
-const MARKDOWN_BODY_SELECTOR = "article.markdown-body";
 
 function fallbackAuthorAvatarUrl(authorName: string) {
   return GITHUB_LOGIN_RE.test(authorName)
@@ -81,6 +78,94 @@ function formatRelativeDate(value: string, now: number) {
   return pluralize(Math.floor(elapsed / YEAR_MS), "year");
 }
 
+function formatByteSize(byteSize: number) {
+  if (byteSize < 1024) {
+    return `${byteSize} B`;
+  }
+  return `${(byteSize / 1024).toFixed(byteSize < 10 * 1024 ? 1 : 0)} KB`;
+}
+
+function sourceLineCount(content: string) {
+  if (!content) {
+    return 1;
+  }
+  const count = content.split("\n").length;
+  return content.endsWith("\n") ? Math.max(1, count - 1) : count;
+}
+
+function sourceLineNumbers(content: string) {
+  return Array.from(
+    { length: sourceLineCount(content) },
+    (_, index) => index + 1
+  ).join("\n");
+}
+
+function GistFilePanel({
+  file,
+  copied,
+  onCopy
+}: {
+  file: PublicGistFile;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  const headingId = useId();
+  const metadata = [file.language, formatByteSize(file.byte_size)]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <section
+      className="gist-file-panel"
+      data-gist-filename={file.filename}
+      aria-labelledby={headingId}
+    >
+      <header className="gist-file-header">
+        <div className="gist-file-identity">
+          <h2 className="gist-file-name" id={headingId}>
+            {file.filename}
+          </h2>
+          <span className="gist-file-meta">{metadata}</span>
+        </div>
+        <div className="gist-file-actions">
+          <a className="gist-file-action" href={file.raw_url}>
+            Raw
+          </a>
+          <button
+            type="button"
+            className="gist-file-action gist-file-copy"
+            aria-label={copied ? `${file.filename} copied` : `Copy ${file.filename}`}
+            onClick={onCopy}
+          >
+            {copied ? (
+              <Check aria-hidden="true" size={14} strokeWidth={1.9} />
+            ) : (
+              <Copy aria-hidden="true" size={14} strokeWidth={1.9} />
+            )}
+            <span>{copied ? "Copied" : "Copy"}</span>
+          </button>
+        </div>
+      </header>
+      {file.kind === "markdown" ? (
+        <article
+          className="markdown-body gist-file-markdown"
+          dangerouslySetInnerHTML={{ __html: file.rendered_html }}
+        />
+      ) : (
+        <div className="gist-code-view">
+          <pre className="gist-line-numbers" aria-hidden="true">
+            {sourceLineNumbers(file.content)}
+          </pre>
+          <div
+            className="markdown-body gist-code-content"
+            dangerouslySetInnerHTML={{ __html: file.rendered_html }}
+          />
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function GistViewer({
   chrome,
   gist,
@@ -89,26 +174,22 @@ export function GistViewer({
   customView
 }: GistViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>(
-    customContent ? "custom" : "rendered"
+    customContent ? "custom" : "files"
   );
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [rawCopied, setRawCopied] = useState(false);
+  const [copiedFilename, setCopiedFilename] = useState<string | null>(null);
   const [relativeDateNow, setRelativeDateNow] = useState(() => Date.now());
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const historyControlRef = useRef<HTMLDivElement | null>(null);
-  const markdownRef = useRef<HTMLElement | null>(null);
-  const renderedHtml = useMemo(
-    () => ({ __html: gist.rendered_html }),
-    [gist.rendered_html]
-  );
+  const filesRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!rawCopied) {
+    if (!copiedFilename) {
       return undefined;
     }
-    const timeout = window.setTimeout(() => setRawCopied(false), 1500);
+    const timeout = window.setTimeout(() => setCopiedFilename(null), 1500);
     return () => window.clearTimeout(timeout);
-  }, [rawCopied]);
+  }, [copiedFilename]);
 
   useEffect(() => {
     if (!historyOpen) {
@@ -153,22 +234,20 @@ export function GistViewer({
 
   useEffect(() => {
     if (viewMode === "custom" && !customContent) {
-      setViewMode("rendered");
+      setViewMode("files");
     }
   }, [customContent, viewMode]);
 
   useEffect(() => {
-    if (viewMode !== "rendered") {
+    if (viewMode !== "files") {
       return undefined;
     }
 
-    const markdownRoot =
-      markdownRef.current ??
-      document.querySelector<HTMLElement>(MARKDOWN_BODY_SELECTOR);
-    if (!markdownRoot) {
+    const filesRoot = filesRef.current;
+    if (!filesRoot) {
       return undefined;
     }
-    const root: HTMLElement = markdownRoot;
+    const root: HTMLDivElement = filesRoot;
 
     let activeEntityId: string | null = null;
 
@@ -180,9 +259,11 @@ export function GistViewer({
       if (!entity || !root.contains(entity)) {
         return null;
       }
-      return Array.from(entity.classList).find((className) =>
-        ETH_ENTITY_ID_CLASS_RE.test(className)
-      ) ?? null;
+      return (
+        Array.from(entity.classList).find((className) =>
+          ETH_ENTITY_ID_CLASS_RE.test(className)
+        ) ?? null
+      );
     }
 
     function clearGroupHover() {
@@ -257,30 +338,17 @@ export function GistViewer({
       root.removeEventListener("focusin", handleFocusIn);
       root.removeEventListener("focusout", handleFocusOut);
     };
-  }, [gist.rendered_html, viewMode]);
+  }, [gist.snapshot_sha256, viewMode]);
 
-  function applyViewMode(nextViewMode: ViewMode) {
-    if (nextViewMode === "custom" && !customContent) {
-      return;
-    }
-    setViewMode(nextViewMode);
-    setRawCopied(false);
-  }
-
-  function toggleRawMode() {
-    applyViewMode(viewMode === "raw" ? "rendered" : "raw");
-  }
-
-  async function copyRawMarkdown() {
+  async function copyFile(file: PublicGistFile) {
     try {
-      await navigator.clipboard.writeText(gist.markdown);
-      setRawCopied(true);
+      await navigator.clipboard.writeText(file.content);
+      setCopiedFilename(file.filename);
     } catch {
-      setRawCopied(false);
+      setCopiedFilename(null);
     }
   }
 
-  const nextRawViewMode = viewMode === "raw" ? "rendered" : "raw";
   const headerTitle = getGistHeaderTitle(gist);
   const avatarUrl =
     gist.author_avatar_url ?? fallbackAuthorAvatarUrl(gist.author_name);
@@ -331,19 +399,13 @@ export function GistViewer({
           {headerTitle ? <h1 className="gist-title">{headerTitle}</h1> : null}
           <div className="gist-meta">
             <div className="gist-date-row">
-              {lastEditedAt ? (
-                <span className="gist-date-line gist-date-line-with-tooltip">
-                  <span className="gist-date-label">edited:</span>{" "}
-                  <LocalTimestamp value={lastEditedAt} />
-                  {dateTooltip}
-                </span>
-              ) : (
-                <span className="gist-date-line gist-date-line-with-tooltip">
-                  <span className="gist-date-label">created:</span>{" "}
-                  <LocalTimestamp value={gist.created_at} />
-                  {dateTooltip}
-                </span>
-              )}
+              <span className="gist-date-line gist-date-line-with-tooltip">
+                <span className="gist-date-label">
+                  {lastEditedAt ? "edited:" : "created:"}
+                </span>{" "}
+                <LocalTimestamp value={lastEditedAt ?? gist.created_at} />
+                {dateTooltip}
+              </span>
             </div>
             <div className="gist-author-row">
               <span className="gist-author-line">
@@ -373,23 +435,23 @@ export function GistViewer({
           </div>
         </div>
         <div className="toolbar" aria-label="Display controls">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={
-              nextRawViewMode === "raw"
-                ? "View raw Markdown"
-                : "View rendered Markdown"
-            }
-            title={nextRawViewMode === "raw" ? "Raw" : "Rendered"}
-            onClick={toggleRawMode}
-          >
-            {nextRawViewMode === "raw" ? (
-              <FileCode aria-hidden="true" size={18} strokeWidth={1.8} />
-            ) : (
-              <TextSearch aria-hidden="true" size={18} strokeWidth={1.8} />
-            )}
-          </button>
+          {customContent ? (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={viewMode === "custom" ? "View files" : "View diff"}
+              title={viewMode === "custom" ? "Files" : "Diff"}
+              onClick={() =>
+                setViewMode((current) => (current === "custom" ? "files" : "custom"))
+              }
+            >
+              {viewMode === "custom" ? (
+                <FileCode aria-hidden="true" size={18} strokeWidth={1.8} />
+              ) : (
+                <FileDiff aria-hidden="true" size={18} strokeWidth={1.8} />
+              )}
+            </button>
+          ) : null}
           <div className="history-control" ref={historyControlRef}>
             <button
               type="button"
@@ -436,13 +498,9 @@ export function GistViewer({
                         <span className="history-item-meta">
                           {item.author_name}
                           <span className="history-item-date">
-                            {" "}
-                            ·{" "}
+                            {" "}·{" "}
                             <time dateTime={item.created_at}>
-                              {formatRelativeDate(
-                                item.created_at,
-                                relativeDateNow
-                              )}
+                              {formatRelativeDate(item.created_at, relativeDateNow)}
                             </time>
                           </span>
                           {item.is_latest ? (
@@ -476,32 +534,18 @@ export function GistViewer({
         </div>
       </header>
 
-      {viewMode === "rendered" ? (
-        <article
-          ref={markdownRef}
-          className="markdown-body"
-          dangerouslySetInnerHTML={renderedHtml}
-        />
-      ) : viewMode === "custom" && customContent ? (
+      {viewMode === "custom" && customContent ? (
         customContent
       ) : (
-        <div className="raw-viewer">
-          <button
-            type="button"
-            className="icon-button raw-copy-button"
-            aria-label={rawCopied ? "Raw Markdown copied" : "Copy raw Markdown"}
-            title={rawCopied ? "Copied" : "Copy"}
-            onClick={copyRawMarkdown}
-          >
-            {rawCopied ? (
-              <Check aria-hidden="true" size={17} strokeWidth={1.8} />
-            ) : (
-              <Copy aria-hidden="true" size={17} strokeWidth={1.8} />
-            )}
-          </button>
-          <pre className="raw-markdown" aria-label="Raw Markdown">
-            <code>{gist.markdown}</code>
-          </pre>
+        <div className="gist-files" ref={filesRef}>
+          {orderedGistFiles(gist).map((file) => (
+            <GistFilePanel
+              key={file.filename}
+              file={file}
+              copied={copiedFilename === file.filename}
+              onCopy={() => void copyFile(file)}
+            />
+          ))}
         </div>
       )}
     </>

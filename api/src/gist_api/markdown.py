@@ -154,6 +154,25 @@ class RenderedMarkdown:
     version: str
 
 
+@dataclass
+class HighlightBudget:
+    blocks_remaining: int | None = None
+    bytes_remaining: int | None = None
+
+    def __post_init__(self):
+        if self.blocks_remaining is None:
+            self.blocks_remaining = MAX_HIGHLIGHT_BLOCKS
+        if self.bytes_remaining is None:
+            self.bytes_remaining = MAX_HIGHLIGHT_TOTAL_BYTES
+
+    def reserve(self, byte_count):
+        if self.blocks_remaining <= 0 or byte_count > self.bytes_remaining:
+            return False
+        self.blocks_remaining -= 1
+        self.bytes_remaining -= byte_count
+        return True
+
+
 @dataclass(frozen=True)
 class EthereumEntity:
     kind: str
@@ -825,10 +844,14 @@ def _highlight_payload(blocks):
     return highlighted, False
 
 
-def _highlight_blocks(root, mermaid_placeholder_languages=frozenset()):
+def _highlight_blocks(
+    root,
+    mermaid_placeholder_languages=frozenset(),
+    highlight_budget=None,
+):
     stats = HighlightStats()
+    budget = highlight_budget or HighlightBudget()
     candidates = []
-    total_candidate_bytes = 0
     pre_elements = [
         pre
         for pre in root.xpath(".//pre[@lang]")
@@ -850,19 +873,7 @@ def _highlight_blocks(root, mermaid_placeholder_languages=frozenset()):
                 },
             )
             continue
-        if len(candidates) >= MAX_HIGHLIGHT_BLOCKS:
-            stats.fallbacks += 1
-            stats.degraded = True
-            logger.info(
-                "Skipping gist code highlighting",
-                extra={
-                    "language": language,
-                    "byte_count": byte_count,
-                    "reason": "too_many_blocks",
-                },
-            )
-            continue
-        if total_candidate_bytes + byte_count > MAX_HIGHLIGHT_TOTAL_BYTES:
+        if not budget.reserve(byte_count):
             stats.fallbacks += 1
             stats.degraded = True
             logger.info(
@@ -875,7 +886,6 @@ def _highlight_blocks(root, mermaid_placeholder_languages=frozenset()):
             )
             continue
         candidates.append({"index": index, "language": language, "code": code})
-        total_candidate_bytes += byte_count
     stats.candidates = len(candidates)
 
     highlighted = {}
@@ -1039,6 +1049,7 @@ def render_markdown_result(
     markdown,
     *,
     allowed_image_src_prefixes=(),
+    highlight_budget=None,
 ):
     protected_markdown, mermaid_placeholder_languages = _protect_mermaid_fences(
         markdown
@@ -1047,7 +1058,11 @@ def render_markdown_result(
     root = _parse_fragment(raw_html)
     _drop_scriptable_content(root)
     _drop_unsafe_images(root, tuple(allowed_image_src_prefixes))
-    highlight_stats = _highlight_blocks(root, mermaid_placeholder_languages)
+    highlight_stats = _highlight_blocks(
+        root,
+        mermaid_placeholder_languages,
+        highlight_budget,
+    )
     _post_process_links(root)
     _post_process_ethereum_entities(root)
     processed_html = _serialize_fragment(root)
@@ -1069,6 +1084,70 @@ def render_markdown_result(
     return RenderedMarkdown(
         html=enriched_html,
         version=render_version(highlight_stats.status),
+    )
+
+
+def render_source_result(content, language, *, highlight_budget=None):
+    budget = highlight_budget or HighlightBudget()
+    byte_count = len(content.encode("utf-8"))
+    item = None
+    degraded = False
+    if byte_count <= MAX_HIGHLIGHT_BLOCK_BYTES and budget.reserve(byte_count):
+        try:
+            highlighted, degraded = _highlight_payload(
+                [{"index": 0, "language": language, "code": content}]
+            )
+            item = highlighted.get(0)
+        except (
+            OSError,
+            subprocess.SubprocessError,
+            subprocess.TimeoutExpired,
+            ValueError,
+        ):
+            degraded = True
+    else:
+        degraded = True
+
+    root = etree.Element("div")
+    if item:
+        wrapper = etree.SubElement(root, "div")
+        highlight_class = item.get("class_name") or _scope_to_highlight_class(
+            item["scope"]
+        )
+        wrapper.attrib["class"] = f"highlight {highlight_class}"
+        wrapper.attrib["dir"] = "auto"
+        highlighted_pre = etree.SubElement(wrapper, "pre")
+        for fragment in html.fragments_fromstring(item["html"]):
+            if isinstance(fragment, str):
+                if len(highlighted_pre):
+                    last = highlighted_pre[-1]
+                    last.tail = (last.tail or "") + fragment
+                else:
+                    highlighted_pre.text = (highlighted_pre.text or "") + fragment
+            else:
+                highlighted_pre.append(fragment)
+    else:
+        root.append(_plain_code_block(language, content))
+
+    processed_html = _serialize_fragment(root)
+    cleaned_html = bleach.clean(
+        processed_html,
+        tags=ALLOWED_TAGS,
+        attributes=_allow_attribute_factory((), frozenset()),
+        protocols=["http", "https", "mailto"],
+        strip=True,
+        strip_comments=True,
+    )
+    status = "ok" if item and not degraded else "degraded"
+    return RenderedMarkdown(html=cleaned_html, version=render_version(status))
+
+
+def render_plain_text_result(content):
+    root = etree.Element("div")
+    root.append(_plain_code_block("text", content))
+    return RenderedMarkdown(
+        html=_serialize_fragment(root),
+        version=render_version("none"),
     )
 
 

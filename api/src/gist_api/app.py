@@ -49,12 +49,24 @@ def create_app(config_overrides=None):
     )
     if app.config.get("MAX_REQUEST_BYTES") is None:
         app.config["MAX_REQUEST_BYTES"] = (
-            app.config.get("MAX_MARKDOWN_BYTES", 1048576) + 2048
+            app.config.get("MAX_GIST_TEXT_BYTES", 1048576) + 65536
         )
+    app.config["MAX_FORM_MEMORY_SIZE"] = app.config["MAX_REQUEST_BYTES"]
+    app.config["MAX_FORM_PARTS"] = (
+        app.config.get("IMAGE_MAX_PER_REQUEST", 10) + 1
+    )
     app.config["MAX_CONTENT_LENGTH"] = max(
         app.config.get("MAX_REQUEST_BYTES"),
         app.config.get("MAX_MULTIPART_REQUEST_BYTES"),
     )
+
+    @app.before_request
+    def apply_request_body_limit():
+        request.max_content_length = (
+            app.config["MAX_MULTIPART_REQUEST_BYTES"]
+            if request.mimetype == "multipart/form-data"
+            else app.config["MAX_REQUEST_BYTES"]
+        )
 
     init_gist_database(app)
     app.register_blueprint(gists_api)

@@ -8,7 +8,7 @@ import type { PublicGistPayload } from "../lib/gists";
 
 type DiffRevision = Pick<
   PublicGistPayload,
-  "revision_number" | "markdown"
+  "revision_number" | "title" | "primary_file" | "files"
 >;
 
 export type RevisionDiffViewerProps = {
@@ -40,6 +40,12 @@ type BuiltDiff = {
   addedCount: number;
   removedCount: number;
   rows: DiffDisplayRow[];
+};
+
+type FileDiff = {
+  filename: string;
+  status: "added" | "deleted" | "modified";
+  diff: BuiltDiff;
 };
 
 const CONTEXT_LINES = 4;
@@ -274,10 +280,43 @@ export function RevisionDiffViewer({
   toRevision
 }: RevisionDiffViewerProps) {
   const summary = `Revision ${fromRevision.revision_number} to ${toRevision.revision_number}`;
-  const diff = useMemo(
-    () => buildDiff(fromRevision.markdown, toRevision.markdown),
-    [fromRevision.markdown, toRevision.markdown]
+  const titleChanged = fromRevision.title !== toRevision.title;
+  const fileDiffs = useMemo(() => {
+    const filenames = new Set([
+      ...Object.keys(fromRevision.files),
+      ...Object.keys(toRevision.files)
+    ]);
+    const orderedFilenames = [
+      toRevision.primary_file,
+      ...Array.from(filenames)
+        .filter((filename) => filename !== toRevision.primary_file)
+        .sort((left, right) => left.localeCompare(right))
+    ];
+
+    return orderedFilenames.flatMap<FileDiff>((filename) => {
+      const oldFile = fromRevision.files[filename];
+      const newFile = toRevision.files[filename];
+      if (oldFile?.content === newFile?.content) {
+        return [];
+      }
+      return [
+        {
+          filename,
+          status: oldFile ? (newFile ? "modified" : "deleted") : "added",
+          diff: buildDiff(oldFile?.content ?? "", newFile?.content ?? "")
+        }
+      ];
+    });
+  }, [fromRevision.files, toRevision.files, toRevision.primary_file]);
+  const addedCount = fileDiffs.reduce(
+    (total, fileDiff) => total + fileDiff.diff.addedCount,
+    0
   );
+  const removedCount = fileDiffs.reduce(
+    (total, fileDiff) => total + fileDiff.diff.removedCount,
+    0
+  );
+  const noChanges = !titleChanged && fileDiffs.length === 0;
 
   return (
     <section className="diff-viewer" aria-label={`${summary} diff`}>
@@ -285,59 +324,77 @@ export function RevisionDiffViewer({
         <h2 className="diff-viewer-title">{summary}</h2>
         <div
           className="diff-viewer-stats"
-          aria-label={`${diff.addedCount} additions and ${diff.removedCount} deletions`}
+          aria-label={`${addedCount} additions and ${removedCount} deletions`}
         >
-          <span className="diff-stat diff-stat-added">+{diff.addedCount}</span>
+          <span className="diff-stat diff-stat-added">+{addedCount}</span>
           <span className="diff-stat diff-stat-removed">
-            -{diff.removedCount}
+            -{removedCount}
           </span>
         </div>
       </div>
-      <div className="diff-table-scroll">
-        <table className="diff-table" aria-label={`${summary} Markdown changes`}>
-          <thead className="sr-only">
-            <tr>
-              <th scope="col">Old line</th>
-              <th scope="col">New line</th>
-              <th scope="col">Change</th>
-              <th scope="col">Content</th>
-            </tr>
-          </thead>
-          <tbody>
-            {diff.rows.length === 0 ? (
-              <tr className="diff-row diff-row-context">
-                <td className="diff-line-number" />
-                <td className="diff-line-number" />
-                <td className="diff-marker" />
-                <td className="diff-code">No changes</td>
-              </tr>
-            ) : (
-              diff.rows.map((row) =>
-                row.kind === "hunk" ? (
-                  <tr className="diff-hunk-row" key={row.key}>
-                    <td className="diff-hunk" colSpan={4}>
-                      {row.hiddenCount} unchanged lines
-                    </td>
-                  </tr>
-                ) : (
-                  <tr className={`diff-row diff-row-${row.kind}`} key={row.key}>
-                    <td className="diff-line-number">
-                      {lineNumber(row.oldNumber)}
-                    </td>
-                    <td className="diff-line-number">
-                      {lineNumber(row.newNumber)}
-                    </td>
-                    <td className="diff-marker" aria-hidden="true">
-                      {row.marker}
-                    </td>
-                    <td className="diff-code">{renderWordDiff(row)}</td>
-                  </tr>
-                )
-              )
-            )}
-          </tbody>
-        </table>
-      </div>
+      {titleChanged ? (
+        <div className="diff-metadata-change" aria-label="Title changed">
+          <span className="diff-metadata-label">Title</span>
+          <del>{fromRevision.title || "Untitled"}</del>
+          <ins>{toRevision.title || "Untitled"}</ins>
+        </div>
+      ) : null}
+      {noChanges ? <div className="diff-empty">No changes</div> : null}
+      {fileDiffs.map((fileDiff) => (
+        <section className="diff-file" key={fileDiff.filename}>
+          <header className="diff-file-header">
+            <h3>{fileDiff.filename}</h3>
+            <div className="diff-file-summary">
+              <span>{fileDiff.status}</span>
+              <span className="diff-stat diff-stat-added">
+                +{fileDiff.diff.addedCount}
+              </span>
+              <span className="diff-stat diff-stat-removed">
+                -{fileDiff.diff.removedCount}
+              </span>
+            </div>
+          </header>
+          <div className="diff-table-scroll">
+            <table
+              className="diff-table"
+              aria-label={`${fileDiff.filename} changes`}
+            >
+              <thead className="sr-only">
+                <tr>
+                  <th scope="col">Old line</th>
+                  <th scope="col">New line</th>
+                  <th scope="col">Change</th>
+                  <th scope="col">Content</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fileDiff.diff.rows.map((row) =>
+                  row.kind === "hunk" ? (
+                    <tr className="diff-hunk-row" key={row.key}>
+                      <td className="diff-hunk" colSpan={4}>
+                        {row.hiddenCount} unchanged lines
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr className={`diff-row diff-row-${row.kind}`} key={row.key}>
+                      <td className="diff-line-number">
+                        {lineNumber(row.oldNumber)}
+                      </td>
+                      <td className="diff-line-number">
+                        {lineNumber(row.newNumber)}
+                      </td>
+                      <td className="diff-marker" aria-hidden="true">
+                        {row.marker}
+                      </td>
+                      <td className="diff-code">{renderWordDiff(row)}</td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ))}
     </section>
   );
 }

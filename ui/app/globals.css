@@ -1742,6 +1742,165 @@ button {
   white-space: nowrap;
 }
 
+.gist-files {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.gist-file-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--page-bg);
+}
+
+.gist-file-header {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--button-bg-active);
+  padding: 7px 10px 7px 12px;
+}
+
+.gist-file-identity {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.gist-file-name {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--page-fg);
+  font-family:
+    ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono,
+    monospace;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gist-file-meta {
+  flex: 0 0 auto;
+  color: var(--subtle-fg);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.gist-file-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.gist-file-action {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--button-bg);
+  color: var(--button-fg);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+}
+
+button.gist-file-action {
+  cursor: pointer;
+}
+
+.gist-file-action:hover,
+.gist-file-action:focus-visible {
+  background: var(--button-bg-active);
+}
+
+.gist-file-action:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.gist-file-markdown {
+  padding: 24px 28px;
+}
+
+.gist-file-markdown > :first-child {
+  margin-top: 0;
+}
+
+.gist-file-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.gist-code-view {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  background: var(--page-bg);
+}
+
+.gist-line-numbers,
+.gist-code-content,
+.gist-code-content pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family:
+    ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono,
+    monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.gist-line-numbers {
+  position: sticky;
+  z-index: 1;
+  left: 0;
+  min-width: 52px;
+  border-right: 1px solid var(--border);
+  background: var(--button-bg-active);
+  color: var(--subtle-fg);
+  padding: 12px 9px;
+  text-align: right;
+  user-select: none;
+}
+
+.gist-code-content {
+  width: max-content;
+  min-width: 100%;
+  overflow: visible;
+  padding: 12px 16px;
+  color: var(--page-fg);
+}
+
+.gist-code-content .highlight,
+.gist-code-content .highlight pre {
+  max-width: none;
+  overflow: visible;
+}
+
+.gist-code-content .highlight pre {
+  margin-bottom: 0;
+  padding: 0;
+}
+
 .raw-viewer {
   position: relative;
 }
@@ -1816,6 +1975,89 @@ button {
     monospace;
   font-size: 12px;
   line-height: 1.2;
+}
+
+.diff-metadata-change {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  border-bottom: 1px solid var(--border);
+  padding: 9px 12px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.diff-metadata-label {
+  color: var(--muted-fg);
+  font-weight: 600;
+}
+
+.diff-metadata-change del,
+.diff-metadata-change ins {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.diff-metadata-change del {
+  color: #82071e;
+}
+
+.diff-metadata-change ins {
+  color: #116329;
+}
+
+:root[data-theme="dark"] .diff-metadata-change del {
+  color: #ffa198;
+}
+
+:root[data-theme="dark"] .diff-metadata-change ins {
+  color: #7ee787;
+}
+
+.diff-empty {
+  padding: 18px 12px;
+  color: var(--muted-fg);
+  font-size: 13px;
+}
+
+.diff-file + .diff-file {
+  border-top: 1px solid var(--border);
+}
+
+.diff-file-header {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--button-bg-active);
+  padding: 6px 10px 6px 12px;
+}
+
+.diff-file-header h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family:
+    ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono,
+    monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-file-summary {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-fg);
+  font-size: 11px;
 }
 
 .diff-stat {

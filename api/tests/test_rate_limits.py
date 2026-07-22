@@ -13,7 +13,8 @@ def _limited_app(db_path, *, write_limit=2, auth_failure_limit=2):
             "SQLITE_DB_PATH": str(db_path),
             "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
             "PUBLIC_API_BASE_URL": "https://api.example.com",
-            "MAX_MARKDOWN_BYTES": 1024 * 1024,
+            "MAX_GIST_TEXT_BYTES": 1024 * 1024,
+            "MAX_GIST_FILES": 32,
             "SQLITE_BUSY_TIMEOUT_MS": 5000,
             "API_WRITE_LIMIT_PER_24H": write_limit,
             "API_AUTH_FAILURE_LIMIT_PER_MINUTE": auth_failure_limit,
@@ -31,7 +32,7 @@ def test_write_rate_limits_persist_by_key_after_restart(tmp_path):
         response = client.post(
             "/api/v1/gists",
             headers=auth_header(key),
-            json={"markdown": f"# {index}"},
+            json={"files": {"README.md": {"content": f"# {index}"}}},
         )
         assert response.status_code == 201
 
@@ -39,7 +40,7 @@ def test_write_rate_limits_persist_by_key_after_restart(tmp_path):
     response = restarted.test_client().post(
         "/api/v1/gists",
         headers=auth_header(key),
-        json={"markdown": "# limited"},
+        json={"files": {"README.md": {"content": "# limited"}}},
     )
     assert response.status_code == 429
     assert response.get_json()["error"]["code"] == "rate_limited"
@@ -57,19 +58,19 @@ def test_write_rate_limits_persist_by_source_ip_after_restart(tmp_path):
     assert client.post(
         "/api/v1/gists",
         headers={**auth_header(first_key), **headers},
-        json={"markdown": "# one"},
+        json={"files": {"README.md": {"content": "# one"}}},
     ).status_code == 201
     assert client.post(
         "/api/v1/gists",
         headers={**auth_header(second_key), **headers},
-        json={"markdown": "# two"},
+        json={"files": {"README.md": {"content": "# two"}}},
     ).status_code == 201
 
     restarted = _limited_app(db_path, write_limit=2)
     response = restarted.test_client().post(
         "/api/v1/gists",
         headers={**auth_header(third_key), **headers},
-        json={"markdown": "# limited"},
+        json={"files": {"README.md": {"content": "# limited"}}},
     )
     assert response.status_code == 429
 
@@ -87,7 +88,7 @@ def test_write_rate_limit_uses_rightmost_forwarded_ip_from_trusted_proxy(tmp_pat
             **auth_header(first_key),
             "X-Forwarded-For": "192.0.2.1, 203.0.113.44",
         },
-        json={"markdown": "# one"},
+        json={"files": {"README.md": {"content": "# one"}}},
     )
     assert first.status_code == 201
 
@@ -97,7 +98,7 @@ def test_write_rate_limit_uses_rightmost_forwarded_ip_from_trusted_proxy(tmp_pat
             **auth_header(second_key),
             "X-Forwarded-For": "192.0.2.2, 203.0.113.44",
         },
-        json={"markdown": "# limited"},
+        json={"files": {"README.md": {"content": "# limited"}}},
     )
     assert response.status_code == 429
 

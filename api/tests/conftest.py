@@ -13,7 +13,8 @@ def app(tmp_path):
             "SQLITE_DB_PATH": str(tmp_path / "gists.sqlite3"),
             "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
             "PUBLIC_API_BASE_URL": "https://api.example.com",
-            "MAX_MARKDOWN_BYTES": 1024 * 1024,
+            "MAX_GIST_TEXT_BYTES": 1024 * 1024,
+            "MAX_GIST_FILES": 32,
             "SQLITE_BUSY_TIMEOUT_MS": 5000,
             "API_WRITE_LIMIT_PER_24H": 1000,
             "API_AUTH_FAILURE_LIMIT_PER_MINUTE": 1000,
@@ -50,5 +51,5 @@ def create_gist(client, key, markdown="# Hello", title="Title"):
     return client.post(
         "/api/v1/gists",
         headers=auth_header(key),
-        json={"title": title, "markdown": markdown},
+        json={"title": title, "files": {"README.md": {"content": markdown}}},
     )

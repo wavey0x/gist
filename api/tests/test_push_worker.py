@@ -75,7 +75,8 @@ def test_build_payload_uses_immutable_revision_without_markdown():
             "external_id": "AbCdEf0123456789",
             "revision_number": 4,
             "title": None,
-            "rendered_html": "<h1>  A useful title </h1><p>hidden</p>",
+            "lead_filename": "README.md",
+            "lead_rendered_html": "<h1>  A useful title </h1><p>hidden</p>",
         }
     )
 
@@ -83,7 +84,7 @@ def test_build_payload_uses_immutable_revision_without_markdown():
         "type": "gist.updated",
         "title": "Gist edited",
         "body": "A useful title",
-        "path": "/AbCdEf0123456789/revisions/4",
+        "path": "/AbCdEf0123456789",
         "tag": "gist:AbCdEf0123456789",
     }
     assert "markdown" not in payload
@@ -96,7 +97,8 @@ def test_build_payload_reuses_tag_for_newer_gist_event():
             "external_id": "AbCdEf0123456789",
             "revision_number": 1,
             "title": "First",
-            "rendered_html": "<h1>First</h1>",
+            "lead_filename": "README.md",
+            "lead_rendered_html": "<h1>First</h1>",
         }
     )
     updated = build_payload(
@@ -105,12 +107,13 @@ def test_build_payload_reuses_tag_for_newer_gist_event():
             "external_id": "AbCdEf0123456789",
             "revision_number": 2,
             "title": "Second",
-            "rendered_html": "<h1>Second</h1>",
+            "lead_filename": "README.md",
+            "lead_rendered_html": "<h1>Second</h1>",
         }
     )
 
     assert published["tag"] == updated["tag"] == "gist:AbCdEf0123456789"
-    assert updated["path"] == "/AbCdEf0123456789/revisions/2"
+    assert updated["path"] == "/AbCdEf0123456789"
 
 
 def test_worker_success_sends_safe_payload_and_marks_delivery(client, app):

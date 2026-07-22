@@ -698,17 +698,13 @@ def test_rerender_gists_updates_current_rows_and_revisions(client, app):
         with conn:
             conn.execute(
                 """
-                update gists
+                update gist_revision_files
                 set rendered_html = 'old', render_version = 'old'
-                where external_id = ?
-                """,
-                (gist_id,),
-            )
-            conn.execute(
-                """
-                update gist_revisions
-                set rendered_html = 'old', render_version = 'old'
-                where gist_id = (select id from gists where external_id = ?)
+                where gist_revision_id in (
+                    select r.id from gist_revisions r
+                    join gists g on g.id = r.gist_id
+                    where g.external_id = ?
+                )
                 """,
                 (gist_id,),
             )
@@ -720,7 +716,13 @@ def test_rerender_gists_updates_current_rows_and_revisions(client, app):
 
     with gist_connection(app) as conn:
         row = conn.execute(
-            "select rendered_html, render_version from gists where external_id = ?",
+            """
+            select f.rendered_html, f.render_version
+            from gist_revision_files f
+            join gist_revisions r on r.id = f.gist_revision_id
+            join gists g on g.id = r.gist_id
+            where g.external_id = ?
+            """,
             (gist_id,),
         ).fetchone()
         assert dict(row) == {"rendered_html": "old", "render_version": "old"}
@@ -732,14 +734,12 @@ def test_rerender_gists_updates_current_rows_and_revisions(client, app):
 
     with gist_connection(app) as conn:
         row = conn.execute(
-            "select rendered_html, render_version from gists where external_id = ?",
-            (gist_id,),
-        ).fetchone()
-        revision = conn.execute(
             """
-            select rendered_html, render_version
-            from gist_revisions
-            where gist_id = (select id from gists where external_id = ?)
+            select f.rendered_html, f.render_version
+            from gist_revision_files f
+            join gist_revisions r on r.id = f.gist_revision_id
+            join gists g on g.id = r.gist_id
+            where g.external_id = ?
             """,
             (gist_id,),
         ).fetchone()
@@ -747,9 +747,6 @@ def test_rerender_gists_updates_current_rows_and_revisions(client, app):
     assert "highlight highlight-source-python" in row["rendered_html"]
     assert "cmarkgfm/" in row["render_version"]
     assert "highlight/ok" in row["render_version"]
-    assert "highlight highlight-source-python" in revision["rendered_html"]
-    assert "cmarkgfm/" in revision["render_version"]
-    assert "highlight/ok" in revision["render_version"]
 
 
 def test_rerender_gists_uses_current_ethereum_rendering(client, app):
@@ -760,19 +757,25 @@ def test_rerender_gists_uses_current_ethereum_rendering(client, app):
 
     with gist_connection(app) as conn:
         assert "eth-address" in conn.execute(
-            "select rendered_html from gists where external_id = ?",
+            """
+            select f.rendered_html
+            from gist_revision_files f
+            join gist_revisions r on r.id = f.gist_revision_id
+            join gists g on g.id = r.gist_id
+            where g.external_id = ?
+            """,
             (gist_id,),
         ).fetchone()["rendered_html"]
         with conn:
             conn.execute(
-                "update gists set rendered_html = 'old' where external_id = ?",
-                (gist_id,),
-            )
-            conn.execute(
                 """
-                update gist_revisions
+                update gist_revision_files
                 set rendered_html = 'old'
-                where gist_id = (select id from gists where external_id = ?)
+                where gist_revision_id in (
+                    select r.id from gist_revisions r
+                    join gists g on g.id = r.gist_id
+                    where g.external_id = ?
+                )
                 """,
                 (gist_id,),
             )
@@ -782,19 +785,15 @@ def test_rerender_gists_uses_current_ethereum_rendering(client, app):
 
     with gist_connection(app) as conn:
         row = conn.execute(
-            "select rendered_html, render_version from gists where external_id = ?",
-            (gist_id,),
-        ).fetchone()
-        revision = conn.execute(
             """
-            select rendered_html, render_version
-            from gist_revisions
-            where gist_id = (select id from gists where external_id = ?)
+            select f.rendered_html, f.render_version
+            from gist_revision_files f
+            join gist_revisions r on r.id = f.gist_revision_id
+            join gists g on g.id = r.gist_id
+            where g.external_id = ?
             """,
             (gist_id,),
         ).fetchone()
 
     assert "eth-address" in row["rendered_html"]
     assert "ethereum-entities/on@" in row["render_version"]
-    assert "eth-address" in revision["rendered_html"]
-    assert "ethereum-entities/on@" in revision["render_version"]

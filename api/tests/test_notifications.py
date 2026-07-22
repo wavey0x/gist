@@ -233,11 +233,15 @@ def test_gist_writes_enqueue_enabled_events_transactionally(client, app):
     created = create_gist(client, key, markdown="# First")
     assert created.status_code == 201
     gist_id = created.get_json()["id"]
+    snapshot = created.get_json()["snapshot_sha256"]
 
     first_edit = client.patch(
         f"/api/v1/gists/{gist_id}",
         headers=auth_header(key),
-        json={"markdown": "# Second"},
+        json={
+            "files": {"README.md": {"content": "# Second"}},
+            "expected_snapshot_sha256": snapshot,
+        },
     )
     assert first_edit.status_code == 200
 
@@ -261,7 +265,10 @@ def test_gist_writes_enqueue_enabled_events_transactionally(client, app):
     second_edit = client.patch(
         f"/api/v1/gists/{gist_id}",
         headers=auth_header(key),
-        json={"title": "Changed"},
+        json={
+            "title": "Changed",
+            "expected_snapshot_sha256": first_edit.get_json()["snapshot_sha256"],
+        },
     )
     assert second_edit.status_code == 200
 

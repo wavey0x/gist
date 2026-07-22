@@ -23,8 +23,8 @@ export function RecentlyViewedRecorder({ gist }: RecentlyViewedRecorderProps) {
     gist.author_name,
     gist.author_avatar_url,
     gist.id,
-    gist.rendered_html,
     gist.revision_number,
+    gist.snapshot_sha256,
     gist.title
   ]);
 

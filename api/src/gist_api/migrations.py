@@ -1,4 +1,6 @@
+import importlib.util
 import re
+from dataclasses import dataclass
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -11,7 +13,27 @@ except ImportError:  # pragma: no cover - fcntl is unavailable on Windows.
 
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
-MIGRATION_RE = re.compile(r"^(\d{3})_[A-Za-z0-9_]+\.sql$")
+MIGRATION_RE = re.compile(r"^(\d{3})_[A-Za-z0-9_]+\.(sql|py)$")
+
+
+@dataclass(frozen=True)
+class Migration:
+    version: int
+    path: Path
+    kind: str
+
+
+def _load_python_migration(migration):
+    module_name = f"gist_api_migration_{migration.version}_{migration.path.stem}"
+    spec = importlib.util.spec_from_file_location(module_name, migration.path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"could not load migration {migration.path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    upgrade = getattr(module, "upgrade", None)
+    if not callable(upgrade):
+        raise RuntimeError(f"Python migration has no upgrade(conn): {migration.path}")
+    return upgrade
 
 
 @contextmanager
@@ -31,14 +53,47 @@ def _init_lock(db_path):
 
 def _read_migrations():
     migrations = []
-    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+    versions = set()
+    for path in sorted(MIGRATIONS_DIR.iterdir()):
+        if not path.is_file():
+            continue
         match = MIGRATION_RE.fullmatch(path.name)
         if not match:
             continue
-        migrations.append((int(match.group(1)), path, path.read_text("utf-8")))
+        version = int(match.group(1))
+        if version in versions:
+            raise RuntimeError(f"duplicate migration version: {version}")
+        versions.add(version)
+        migrations.append(Migration(version, path, match.group(2)))
     if not migrations:
         raise RuntimeError(f"no migrations found in {MIGRATIONS_DIR}")
-    return migrations
+    return sorted(migrations, key=lambda migration: migration.version)
+
+
+def _apply_sql_migration(conn, migration):
+    sql = migration.path.read_text("utf-8")
+    with conn:
+        conn.executescript(sql)
+        conn.execute(
+            "insert into gist_schema_migrations(version) values (?)",
+            (migration.version,),
+        )
+
+
+def _apply_python_migration(conn, migration):
+    upgrade = _load_python_migration(migration)
+    conn.commit()
+    conn.execute("begin immediate")
+    try:
+        upgrade(conn)
+        conn.execute(
+            "insert into gist_schema_migrations(version) values (?)",
+            (migration.version,),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def init_gist_database(app):
@@ -62,12 +117,10 @@ def init_gist_database(app):
                 for row in conn.execute("select version from gist_schema_migrations")
             }
 
-            for version, _path, sql in migrations:
-                if version in applied:
+            for migration in migrations:
+                if migration.version in applied:
                     continue
-                with conn:
-                    conn.executescript(sql)
-                    conn.execute(
-                        "insert into gist_schema_migrations(version) values (?)",
-                        (version,),
-                    )
+                if migration.kind == "sql":
+                    _apply_sql_migration(conn, migration)
+                else:
+                    _apply_python_migration(conn, migration)

@@ -26,14 +26,18 @@ def test_llms_text_teaches_current_agent_safe_workflow():
     text = _generated_llms_text()
 
     assert "publish-gist --read --gist <url-or-id> --json" in text
-    assert "--expected-content-sha256 <sha-from-read>" in text
+    assert "--file README.md --file example.py" in text
+    assert "--delete-file <filename>" in text
+    assert "--output-dir <empty-dir>" in text
     assert "--verify" in text
     assert "already-created revision" in text
     assert "WAVEY_GIST_API_KEY" in text
-    assert "content_sha256" in text
+    assert "snapshot_sha256" in text
+    assert "expected_snapshot_sha256" in text
+    assert "complete replacement snapshot" in text
     assert "repeated `images[]`" in text
     assert "base62 strings containing 16–64 ASCII letters or digits" in text
-    assert "https://gist.wavey.info/{gist_id}/raw" in text
+    assert "https://gist.wavey.info/{gist_id}/raw/{filename}" in text
 
 
 def test_llms_text_omits_removed_helper_and_environment_aliases():
@@ -45,6 +49,8 @@ def test_llms_text_omits_removed_helper_and_environment_aliases():
         "--filename",
         "--old-filename",
         "--input-file",
+        "--expected-content-sha256",
+        "expected_content_sha256",
         "--public",
         "SITE_BASE_URL",
         "ALLOW_EMPTY_MARKDOWN",

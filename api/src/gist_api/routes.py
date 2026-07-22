@@ -1,3 +1,4 @@
+import json
 import re
 from ipaddress import ip_address
 
@@ -36,9 +37,9 @@ from .service import (
 
 gists_api = Blueprint("gists_api", __name__)
 AVATAR_ROUTE_RE = re.compile(f"^{AVATAR_FILE_RE}$")
-CREATE_GIST_FIELDS = frozenset({"title", "markdown"})
+CREATE_GIST_FIELDS = frozenset({"title", "files"})
 UPDATE_GIST_FIELDS = frozenset(
-    {"title", "markdown", "expected_content_sha256"}
+    {"title", "files", "expected_snapshot_sha256"}
 )
 TRUSTED_PROXY_REMOTES = {
     str(ip_address(value))
@@ -112,16 +113,24 @@ def parse_multipart_gist_body(allowed_fields):
     if not request.mimetype == "multipart/form-data":
         raise GistError("invalid_request", "multipart form required", 400)
 
-    _validate_fields(request.form, allowed_fields)
+    _validate_fields(request.form, {"payload"})
     _validate_fields(request.files, {"images[]"})
-
-    payload = {}
-    for field in allowed_fields:
-        values = request.form.getlist(field)
-        if len(values) > 1:
-            raise GistError("invalid_request", f"duplicate field: {field}", 400)
-        if values:
-            payload[field] = values[0]
+    payload_values = request.form.getlist("payload")
+    if len(payload_values) != 1:
+        raise GistError(
+            "invalid_request", "exactly one payload field is required", 400
+        )
+    if len(payload_values[0].encode("utf-8")) > current_app.config.get(
+        "MAX_REQUEST_BYTES"
+    ):
+        raise GistError("payload_too_large", "Payload too large", 413)
+    try:
+        payload = json.loads(payload_values[0])
+    except json.JSONDecodeError as exc:
+        raise GistError("invalid_request", "payload must be valid JSON", 400) from exc
+    if not isinstance(payload, dict):
+        raise GistError("invalid_request", "payload must be a JSON object", 400)
+    _validate_fields(payload, allowed_fields)
     image_uploads = request.files.getlist("images[]")
     return payload, image_uploads
 
@@ -418,7 +427,7 @@ def read_gist(gist_id):
         return response
 
     try:
-        return jsonify(get_gist(current_app, gist_id, include_markdown=True))
+        return jsonify(get_gist(current_app, gist_id, include_files=True))
     except GistError as error:
         return error_response(error.code, error.message, error.status)
 

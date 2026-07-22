@@ -492,7 +492,8 @@ def load_pending_delivery(app, delivery_id):
                 gists.deleted_at,
                 gist_revisions.revision_number,
                 gist_revisions.title,
-                gist_revisions.rendered_html
+                lead_file.filename as lead_filename,
+                lead_file.rendered_html as lead_rendered_html
             from push_deliveries
             join push_subscriptions
               on push_subscriptions.id = push_deliveries.subscription_id
@@ -504,6 +505,21 @@ def load_pending_delivery(app, delivery_id):
               on gist_revisions.id = push_deliveries.gist_revision_id
             join gists
               on gists.id = gist_revisions.gist_id
+            join gist_revision_files as lead_file
+              on lead_file.id = (
+                  select candidate.id
+                  from gist_revision_files as candidate
+                  where candidate.gist_revision_id = gist_revisions.id
+                  order by
+                      case
+                          when candidate.filename = 'README.md' then 0
+                          when lower(candidate.filename) like '%.md'
+                            or lower(candidate.filename) like '%.markdown' then 1
+                          else 2
+                      end,
+                      candidate.filename
+                  limit 1
+              )
             where push_deliveries.id = ?
               and push_deliveries.status = 'pending'
             """,

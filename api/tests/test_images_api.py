@@ -1,5 +1,6 @@
 import errno
 import io
+import json
 
 from gist_api.db import gist_connection
 
@@ -24,6 +25,15 @@ WEBP_1X1 = (
 
 def _upload_tuple(data=PNG_1X1, filename="chart.png"):
     return io.BytesIO(data), filename
+
+
+def _gist_payload(markdown, *, title=None, expected_snapshot_sha256=None):
+    payload = {"files": {"README.md": {"content": markdown}}}
+    if title is not None:
+        payload["title"] = title
+    if expected_snapshot_sha256 is not None:
+        payload["expected_snapshot_sha256"] = expected_snapshot_sha256
+    return json.dumps(payload)
 
 
 def test_image_upload_and_public_serving(client, app):
@@ -186,7 +196,7 @@ def test_multipart_size_error_is_image_actionable(client, app):
         "/api/v1/gists",
         headers=auth_header(key),
         data={
-            "markdown": "# Too large",
+            "payload": _gist_payload("# Too large"),
             "images[]": [_upload_tuple(PNG_1X1, "large.png")],
         },
     )
@@ -204,8 +214,9 @@ def test_multipart_gist_replaces_attachment_references(client, app):
         "/api/v1/gists",
         headers=auth_header(key),
         data={
-            "title": "Chart",
-            "markdown": "# Chart\n\n![Revenue](attachment:chart.png)",
+            "payload": _gist_payload(
+                "# Chart\n\n![Revenue](attachment:chart.png)", title="Chart"
+            ),
             "images[]": [_upload_tuple(PNG_1X1, "chart.png")],
         },
     )
@@ -213,15 +224,16 @@ def test_multipart_gist_replaces_attachment_references(client, app):
     assert created.status_code == 201
     body = created.get_json()
     image = body["images"][0]
-    assert body["markdown"] == f"# Chart\n\n![Revenue]({image['url']})"
-    assert "attachment:chart.png" not in body["markdown"]
+    content = body["files"]["README.md"]["content"]
+    assert content == f"# Chart\n\n![Revenue]({image['url']})"
+    assert "attachment:chart.png" not in content
     assert body["id"]
 
     public = client.get(f"/api/v1/gists/{body['id']}/render")
     assert public.status_code == 200
     public_body = public.get_json()
-    assert public_body["markdown"] == body["markdown"]
-    assert f'<img src="{image["url"]}" alt="Revenue">' in public_body["rendered_html"]
+    assert public_body["files"]["README.md"]["content"] == content
+    assert f'<img src="{image["url"]}" alt="Revenue">' in public_body["files"]["README.md"]["rendered_html"]
 
 
 def test_multipart_gist_appends_unreferenced_images(client, app):
@@ -231,7 +243,7 @@ def test_multipart_gist_appends_unreferenced_images(client, app):
         "/api/v1/gists",
         headers=auth_header(key),
         data={
-            "markdown": "# With image",
+            "payload": _gist_payload("# With image"),
             "images[]": [_upload_tuple(PNG_1X1, "chart.png")],
         },
     )
@@ -239,7 +251,7 @@ def test_multipart_gist_appends_unreferenced_images(client, app):
     assert created.status_code == 201
     body = created.get_json()
     image = body["images"][0]
-    assert body["markdown"] == f"# With image\n\n![chart.png]({image['url']})"
+    assert body["files"]["README.md"]["content"] == f"# With image\n\n![chart.png]({image['url']})"
 
 
 def test_multipart_gist_can_be_image_only(client, app):
@@ -249,7 +261,7 @@ def test_multipart_gist_can_be_image_only(client, app):
         "/api/v1/gists",
         headers=auth_header(key),
         data={
-            "title": "Image only",
+            "payload": _gist_payload("", title="Image only"),
             "images[]": [_upload_tuple(PNG_1X1, "chart.png")],
         },
     )
@@ -257,12 +269,12 @@ def test_multipart_gist_can_be_image_only(client, app):
     assert created.status_code == 201
     body = created.get_json()
     image = body["images"][0]
-    assert body["markdown"] == f"![chart.png]({image['url']})"
+    assert body["files"]["README.md"]["content"] == f"![chart.png]({image['url']})"
 
     public = client.get(f"/api/v1/gists/{body['id']}/render")
     assert public.status_code == 200
     public_body = public.get_json()
-    assert f'<img src="{image["url"]}" alt="chart.png">' in public_body["rendered_html"]
+    assert f'<img src="{image["url"]}" alt="chart.png">' in public_body["files"]["README.md"]["rendered_html"]
 
 
 def test_multipart_gist_rejects_duplicate_attachment_filenames(client, app):
@@ -272,7 +284,7 @@ def test_multipart_gist_rejects_duplicate_attachment_filenames(client, app):
         "/api/v1/gists",
         headers=auth_header(key),
         data={
-            "markdown": "# Duplicate",
+            "payload": _gist_payload("# Duplicate"),
             "images[]": [
                 _upload_tuple(PNG_1X1, "same.png"),
                 _upload_tuple(JPEG_1X1, "same.png"),
@@ -292,15 +304,21 @@ def test_multipart_patch_can_append_image_to_existing_gist(client, app):
     created = create_gist(client, key, "# Start")
     assert created.status_code == 201
     gist_id = created.get_json()["id"]
+    snapshot = created.get_json()["snapshot_sha256"]
 
     patched = client.patch(
         f"/api/v1/gists/{gist_id}",
         headers=auth_header(key),
-        data={"images[]": [_upload_tuple(PNG_1X1, "patch.png")]},
+        data={
+            "payload": _gist_payload(
+                "# Start", expected_snapshot_sha256=snapshot
+            ),
+            "images[]": [_upload_tuple(PNG_1X1, "patch.png")],
+        },
     )
 
     assert patched.status_code == 200
     body = patched.get_json()
     image = body["images"][0]
     assert body["revision_number"] == 2
-    assert body["markdown"] == f"# Start\n\n![patch.png]({image['url']})"
+    assert body["files"]["README.md"]["content"] == f"# Start\n\n![patch.png]({image['url']})"

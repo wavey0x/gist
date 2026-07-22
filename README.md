@@ -2,14 +2,15 @@
 
 [![CI](https://github.com/wavey0x/gist/actions/workflows/ci.yml/badge.svg)](https://github.com/wavey0x/gist/actions/workflows/ci.yml)
 
-A small self-hosted Markdown gist renderer. API keys create and update gists;
-anyone with a random gist URL can read the rendered page and raw source.
+A small self-hosted text gist renderer. API keys create and update multi-file
+gists; anyone with a random gist URL can read the rendered files and raw text.
 
 ![Wavey Gist Markdown demo](docs/hello-markdown-demo.png)
 
 ## Features
 
 - Server-rendered public gist pages.
+- GitHub-like multi-file presentation for Markdown, source code, and plain text.
 - GitHub-flavored Markdown rendering.
 - GitHub-style Mermaid diagram rendering for Markdown fences.
 - Sanitized stored HTML.
@@ -29,8 +30,8 @@ This repository has two deployable apps:
   gist API routes.
 
 The frontend fetches rendered gist payloads from the backend. The backend stores
-Markdown, sanitized rendered HTML, revision snapshots, API keys, web sessions,
-and rate-limit events in a dedicated SQLite database.
+complete immutable file snapshots, sanitized rendered HTML, API keys, web
+sessions, and rate-limit events in a dedicated SQLite database.
 
 ## Local Development
 
@@ -93,44 +94,48 @@ from the account page.
 
 ## Create A Gist
 
-The repository helper is the recommended interface for text-only publishing.
-It uses `WAVEY_GIST_API_KEY`, reads from `--file` or stdin, and has no
+The repository helper is the recommended interface for text publishing. It uses
+`WAVEY_GIST_API_KEY`, reads from repeated `--file` options or stdin, and has no
 third-party Python dependencies:
 
 ```sh
 export WAVEY_GIST_API_KEY=<api_key>
-scripts/publish-gist --file plan.md --verify --json
+scripts/publish-gist --file README.md --file example.py --verify --json
 ```
 
-Read a public gist before editing it:
+Read a public gist as JSON, or materialize all its files:
 
 ```sh
 scripts/publish-gist --read --gist <url-or-id> --json
+scripts/publish-gist --read --gist <url-or-id> --output-dir <empty-dir>
 ```
 
-Safely update it with the digest returned by that read:
+Safely update it. The helper reads the latest snapshot, overlays the named
+files, and sends one conflict-safe full snapshot:
 
 ```sh
 scripts/publish-gist \
   --gist <url-or-id> \
-  --file plan.md \
-  --expected-content-sha256 <current_sha256> \
+  --file README.md \
+  --file example.py \
   --verify \
   --json
 ```
 
-`--json` reports the public URL, revision number, and content SHA. `--verify`
-checks the exact new raw revision, public render payload, and rendered page. If
-verification fails after the API accepted the write, the command exits
-nonzero and identifies the already-created revision; inspect it before taking
-further action.
+Use repeated `--delete-file <filename>` options to remove files. `--json`
+returns the complete API representation. `--verify` checks every exact raw
+file, the snapshot digest, public render payload, and rendered page. If
+verification fails after the API accepted the write, the command exits nonzero
+and identifies the already-created revision; inspect it before taking further
+action.
 
-Supported helper options are `--file`, `--title`, `--gist`, `--read`,
-`--expected-content-sha256`, `--verify`, `--json`, `--api-base-url`, and
-`--check-key`. It uses `WAVEY_GIST_API_BASE_URL` to override the default API
-origin. Credential lookup checks `WAVEY_GIST_API_KEY`, then the file named by
-`WAVEY_GIST_ENV_FILE` (default `~/.config/wavey/gist.env`), then the existing
-macOS Keychain service. Read mode never discovers credentials.
+Supported helper options include `--file`, `--stdin-name`, `--delete-file`,
+`--title`, `--clear-title`, `--gist`, `--read`, `--output-dir`, `--verify`,
+`--json`, `--api-base-url`, and `--check-key`. It uses
+`WAVEY_GIST_API_BASE_URL` to override the default API origin. Credential lookup
+checks `WAVEY_GIST_API_KEY`, then the file named by `WAVEY_GIST_ENV_FILE`
+(default `~/.config/wavey/gist.env`), then the existing macOS Keychain service.
+Read mode never discovers credentials.
 
 The underlying API remains available for direct integrations:
 
@@ -138,7 +143,7 @@ The underlying API remains available for direct integrations:
 curl -sS http://localhost:3001/api/v1/gists \
   -H "Authorization: Bearer $WAVEY_GIST_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"title":"Hello","markdown":"# Hello\n\nThis is a gist."}'
+  -d '{"title":"Hello","files":{"README.md":{"content":"# Hello\n\nThis is a gist."},"example.py":{"content":"print(42)\n"}}}'
 ```
 
 Open the returned `url` in the browser.
@@ -166,9 +171,10 @@ Backend environment variables:
 | `GIST_IMAGE_MAX_BYTES` | `20971520` | Maximum size for one uploaded image. |
 | `GIST_IMAGE_MAX_DIMENSION` | `4096` | Maximum image width or height. |
 | `GIST_IMAGE_MAX_PER_REQUEST` | `10` | Maximum images accepted in one multipart request. |
-| `MAX_MULTIPART_REQUEST_BYTES` | markdown plus image upload limits | Maximum multipart request body size accepted by Flask. |
-| `MAX_MARKDOWN_BYTES` | `1048576` | Maximum Markdown payload size. |
-| `MAX_REQUEST_BYTES` | `MAX_MARKDOWN_BYTES + 2048` | Maximum JSON request body size accepted by Flask. |
+| `MAX_MULTIPART_REQUEST_BYTES` | text plus image upload limits | Maximum multipart request body size accepted by Flask. |
+| `MAX_GIST_TEXT_BYTES` | `1048576` | Maximum aggregate UTF-8 bytes across a gist snapshot. |
+| `MAX_GIST_FILES` | `32` | Maximum files in one gist snapshot. |
+| `MAX_REQUEST_BYTES` | `MAX_GIST_TEXT_BYTES + 65536` | Maximum JSON body or multipart `payload` field accepted by Flask. |
 | `GIST_EXTERNAL_ID_LENGTH` | `16` | Length for newly generated random gist IDs. Must be between 16 and 64. |
 | `SQLITE_BUSY_TIMEOUT_MS` | `5000` | SQLite busy timeout. |
 | `API_WRITE_LIMIT_PER_24H` | `150` | Write limit per key and source IP. |
@@ -248,30 +254,33 @@ Authorization: Bearer <api_key>
 `POST /api/v1/images` accepts multipart form field `image` and returns an
 `img_...` URL plus ready-to-paste Markdown.
 
-`POST /api/v1/gists` and `PATCH /api/v1/gists/{gist_id}` also accept
-`multipart/form-data` with optional `title`, optional `markdown`, and repeated
-`images[]` file fields. Markdown references like `attachment:chart.png` are
-replaced with the stored image URL. Uploaded images that are not referenced are
-appended to the saved Markdown as image blocks, so image-only gist creation is
-valid.
+`POST /api/v1/gists` and `PATCH /api/v1/gists/{gist_id}` accept JSON with a
+`files` object keyed by flat filename. Each value is an object containing
+`content`. PATCH treats a supplied `files` object as the complete replacement
+snapshot and requires the current `expected_snapshot_sha256`.
+
+For image uploads, send `multipart/form-data` with exactly one `payload` field
+containing that JSON object plus repeated `images[]` file fields. Markdown
+references like `attachment:chart.png` are replaced with the stored image URL.
+Unreferenced images are appended to the Markdown lead file.
 
 Requests reject unknown fields. The accepted fields are:
 
 - auth session create: JSON `api_key`;
-- gist create: `title`, `markdown`, and multipart `images[]`;
-- gist update: `title`, `markdown`, `expected_content_sha256`, and multipart
-  `images[]`;
+- gist create: JSON `title` and `files`, or multipart `payload` plus `images[]`;
+- gist update: JSON `title`, `files`, and required
+  `expected_snapshot_sha256`, or multipart `payload` plus `images[]`;
 - standalone image upload: multipart `image`.
 
 The web-session routes use the `wg_session` HttpOnly cookie minted from a gist
 API key.
 
-Update and delete routes only mutate gists whose first revision was created by
-the authenticated key. A non-owned gist returns `404`.
+Update and delete routes only mutate gists owned by the authenticated key. A
+non-owned gist returns `404`.
 
 Public render routes do not require auth because anyone with the random gist
-URL can view the rendered page and raw Markdown source. Their JSON payloads
-include the exact revision's `content_sha256`.
+URL can view every rendered and raw file. Their JSON payloads include the exact
+revision's `snapshot_sha256` plus per-file content digests.
 
 ## Deployment
 

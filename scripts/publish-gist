@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Create, read, update, and verify Wavey Markdown gists."""
+"""Create, read, update, and verify Wavey text gists."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import json
 import os
 import re
 import shlex
 import subprocess
 import sys
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -28,9 +30,26 @@ GIST_PATH_RE = re.compile(
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 PLACEHOLDER_PREFIXES = ("your_", "your-", "changeme", "xxx", "todo")
 USER_AGENT = "wavey-gist-publish-cli"
+MAX_FILE_COUNT = 32
+MAX_TEXT_BYTES = 1024 * 1024
+MAX_FILENAME_BYTES = 255
+MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 
 
 class CliError(RuntimeError):
+    pass
+
+
+class ApiError(CliError):
+    def __init__(self, status: int, code: str | None, message: str):
+        self.status = status
+        self.code = code
+        self.message = message
+        detail = f"{code}: {message}" if code else message
+        super().__init__(f"Wavey API error {status}: {detail}")
+
+
+class AmbiguousWriteError(CliError):
     pass
 
 
@@ -125,18 +144,119 @@ def parse_gist_target(value: str) -> tuple[str, int | None]:
     return match.group("gist_id"), int(revision) if revision else None
 
 
-def read_content(path: str | None) -> str:
-    if path:
-        return Path(path).read_text(encoding="utf-8")
-    return sys.stdin.read()
+def normalize_filename(value: str) -> str:
+    if not isinstance(value, str):
+        raise CliError("Filename must be a string.")
+    filename = unicodedata.normalize("NFC", value)
+    try:
+        byte_size = len(filename.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise CliError("Filename must be valid UTF-8.") from exc
+    if not filename:
+        raise CliError("Filename is required.")
+    if byte_size > MAX_FILENAME_BYTES:
+        raise CliError(f"Filename is too long: {filename}")
+    if filename in {".", ".."}:
+        raise CliError(f"Filename is not allowed: {filename}")
+    if filename != filename.strip():
+        raise CliError(f"Filename cannot start or end with whitespace: {filename}")
+    if "/" in filename or "\\" in filename:
+        raise CliError(f"Filename must be one flat path segment: {filename}")
+    if any(unicodedata.category(char) in {"Cc", "Cf"} for char in filename):
+        raise CliError(f"Filename contains unsupported control characters: {filename}")
+    return filename
 
 
-def normalize_markdown(text: str) -> str:
-    return text.replace("\r\n", "\n").replace("\r", "\n")
+def normalize_content(text: str) -> str:
+    if "\x00" in text:
+        raise CliError("File content must not contain NUL.")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    try:
+        normalized.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise CliError("File content must be valid UTF-8.") from exc
+    return normalized
 
 
 def content_sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def validate_files(files: dict[str, str]) -> dict[str, str]:
+    if not files:
+        raise CliError("At least one file is required.")
+    if len(files) > MAX_FILE_COUNT:
+        raise CliError(f"A gist may contain at most {MAX_FILE_COUNT} files.")
+
+    normalized: dict[str, str] = {}
+    collision_keys: set[str] = set()
+    for raw_filename, raw_content in files.items():
+        filename = normalize_filename(raw_filename)
+        collision_key = unicodedata.normalize("NFC", filename.casefold())
+        if filename in normalized or collision_key in collision_keys:
+            raise CliError(f"Duplicate or case-colliding filename: {filename}")
+        if not isinstance(raw_content, str):
+            raise CliError(f"File content must be text: {filename}")
+        normalized[filename] = normalize_content(raw_content)
+        collision_keys.add(collision_key)
+
+    byte_size = sum(len(content.encode("utf-8")) for content in normalized.values())
+    if byte_size > MAX_TEXT_BYTES:
+        raise CliError("Gist text exceeds the 1 MiB aggregate limit.")
+    if not any(content.strip() for content in normalized.values()):
+        raise CliError("Gist content is required.")
+    return normalized
+
+
+def validate_received_files(files: dict[str, str]) -> dict[str, str]:
+    if not files or len(files) > MAX_FILE_COUNT:
+        raise CliError("Wavey API returned an invalid gist response.")
+    collision_keys: set[str] = set()
+    total_bytes = 0
+    for filename, content in files.items():
+        if normalize_filename(filename) != filename or "\x00" in content:
+            raise CliError("Wavey API returned an invalid gist response.")
+        collision_key = unicodedata.normalize("NFC", filename.casefold())
+        if collision_key in collision_keys:
+            raise CliError("Wavey API returned an invalid gist response.")
+        collision_keys.add(collision_key)
+        try:
+            total_bytes += len(content.encode("utf-8"))
+        except UnicodeEncodeError as exc:
+            raise CliError("Wavey API returned an invalid gist response.") from exc
+    if total_bytes > MAX_TEXT_BYTES or not any(content.strip() for content in files.values()):
+        raise CliError("Wavey API returned an invalid gist response.")
+    return files
+
+
+def ordered_filenames(files: dict[str, object]) -> list[str]:
+    names = sorted(files)
+    if "README.md" in names:
+        lead = "README.md"
+    else:
+        markdown = [
+            name for name in names if Path(name).suffix.lower() in MARKDOWN_EXTENSIONS
+        ]
+        lead = markdown[0] if markdown else names[0]
+    return [lead, *(name for name in names if name != lead)]
+
+
+def snapshot_sha256(title: str | None, files: dict[str, str]) -> str:
+    manifest = {
+        "version": 1,
+        "title": title,
+        "files": [
+            {"filename": filename, "content_sha256": content_sha256(files[filename])}
+            for filename in sorted(files)
+        ],
+    }
+    encoded = json.dumps(
+        manifest,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def has_top_level_markdown_title(text: str) -> bool:
@@ -146,6 +266,15 @@ def has_top_level_markdown_title(text: str) -> bool:
         stripped = line.lstrip()
         return stripped.startswith("# ") and bool(stripped[2:].strip())
     return False
+
+
+def validate_publication_quality(files: dict[str, str], title: str | None) -> None:
+    lead = ordered_filenames(files)[0]
+    if Path(lead).suffix.lower() in MARKDOWN_EXTENSIONS:
+        if not has_top_level_markdown_title(files[lead]):
+            raise CliError(f"Lead Markdown file must start with '# Title': {lead}")
+    elif not title:
+        raise CliError("A code/plain-text lead gist requires --title.")
 
 
 def _request(
@@ -184,10 +313,14 @@ def _request(
                 message = error.get("message") or response_body
         except json.JSONDecodeError:
             pass
-        detail = f"{code}: {message}" if code else message
-        raise CliError(f"Wavey API error {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise CliError(f"Wavey API connection error: {exc.reason}") from exc
+        raise ApiError(exc.code, code, message) from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        if method in {"POST", "PATCH"}:
+            raise AmbiguousWriteError(
+                "The write outcome is unknown after a network failure; it was not retried."
+            ) from exc
+        reason = getattr(exc, "reason", exc)
+        raise CliError(f"Wavey API connection error: {reason}") from exc
 
 
 def request_json(
@@ -212,17 +345,31 @@ def request_json(
     return parsed
 
 
-def validate_read_response(
+def validate_gist_response(
     data: dict,
     gist_id: str,
-    requested_revision: int | None,
+    requested_revision: int | None = None,
 ) -> dict:
     revision_number = data.get("revision_number")
     latest_revision_number = data.get("latest_revision_number")
-    digest = data.get("content_sha256")
-    markdown = data.get("markdown")
+    digest = data.get("snapshot_sha256")
+    title = data.get("title")
+    raw_files = data.get("files")
+    primary_file = data.get("primary_file")
+    public_url = data.get("url")
+    if not isinstance(public_url, str):
+        raise CliError("Wavey API returned an invalid gist response.")
+    try:
+        public_id, public_revision = parse_gist_target(public_url)
+        public_parts = urllib.parse.urlparse(public_url)
+    except CliError as exc:
+        raise CliError("Wavey API returned an invalid gist response.") from exc
     if (
         data.get("id") != gist_id
+        or public_id != gist_id
+        or public_revision is not None
+        or public_parts.username is not None
+        or public_parts.password is not None
         or not isinstance(revision_number, int)
         or isinstance(revision_number, bool)
         or revision_number < 1
@@ -231,39 +378,74 @@ def validate_read_response(
         or latest_revision_number < revision_number
         or not isinstance(digest, str)
         or not SHA256_RE.fullmatch(digest)
-        or not isinstance(markdown, str)
-        or content_sha256(markdown) != digest
-        or (
-            requested_revision is not None
-            and revision_number != requested_revision
-        )
+        or not (title is None or isinstance(title, str))
+        or not isinstance(raw_files, dict)
+        or not raw_files
+        or len(raw_files) > MAX_FILE_COUNT
+        or not isinstance(primary_file, str)
+        or primary_file not in raw_files
+        or (requested_revision is not None and revision_number != requested_revision)
     ):
-        raise CliError("Wavey API returned an invalid gist read response.")
-    return {
-        "id": gist_id,
-        "revision_number": revision_number,
-        "latest_revision_number": latest_revision_number,
-        "content_sha256": digest,
-        "markdown": markdown,
-    }
+        raise CliError("Wavey API returned an invalid gist response.")
+
+    files: dict[str, str] = {}
+    for raw_filename, file_data in raw_files.items():
+        if not isinstance(file_data, dict):
+            raise CliError("Wavey API returned an invalid gist response.")
+        filename = normalize_filename(raw_filename)
+        content = file_data.get("content")
+        file_digest = file_data.get("content_sha256")
+        byte_size = file_data.get("byte_size")
+        if (
+            file_data.get("filename") != filename
+            or not isinstance(content, str)
+            or not isinstance(file_digest, str)
+            or not SHA256_RE.fullmatch(file_digest)
+            or content_sha256(content) != file_digest
+            or not isinstance(byte_size, int)
+            or isinstance(byte_size, bool)
+            or byte_size != len(content.encode("utf-8"))
+        ):
+            raise CliError("Wavey API returned an invalid gist response.")
+        raw_url = file_data.get("raw_url")
+        if not isinstance(raw_url, str):
+            raise CliError("Wavey API returned an invalid gist response.")
+        raw_parts = urllib.parse.urlparse(raw_url)
+        raw_revision = (
+            f"/revisions/{requested_revision}" if requested_revision is not None else ""
+        )
+        expected_raw_path = (
+            f"/{gist_id}{raw_revision}/raw/"
+            f"{urllib.parse.quote(filename, safe='')}"
+        )
+        if (
+            raw_parts.scheme != public_parts.scheme
+            or raw_parts.netloc != public_parts.netloc
+            or raw_parts.username is not None
+            or raw_parts.password is not None
+            or raw_parts.path != expected_raw_path
+            or raw_parts.params
+            or raw_parts.query
+            or raw_parts.fragment
+        ):
+            raise CliError("Wavey API returned an invalid gist response.")
+        files[filename] = content
+
+    files = validate_received_files(files)
+    if primary_file != ordered_filenames(files)[0] or snapshot_sha256(title, files) != digest:
+        raise CliError("Wavey API returned an invalid gist response.")
+    return data
 
 
 def validate_write_response(data: dict, expected_id: str | None) -> dict:
     gist_id = data.get("id")
     url = data.get("url")
-    revision_number = data.get("revision_number")
-    digest = data.get("content_sha256")
     if (
         not isinstance(gist_id, str)
         or not GIST_ID_RE.fullmatch(gist_id)
         or (expected_id is not None and gist_id != expected_id)
         or not isinstance(url, str)
         or not url
-        or not isinstance(revision_number, int)
-        or isinstance(revision_number, bool)
-        or revision_number < 1
-        or not isinstance(digest, str)
-        or not SHA256_RE.fullmatch(digest)
     ):
         raise CliError("Wavey API returned an invalid publish response.")
     try:
@@ -272,12 +454,10 @@ def validate_write_response(data: dict, expected_id: str | None) -> dict:
         raise CliError("Wavey API returned an invalid publish URL.") from exc
     if url_id != gist_id or url_revision is not None:
         raise CliError("Wavey API returned an invalid publish URL.")
-    return {
-        "id": gist_id,
-        "url": url.rstrip("/"),
-        "revision_number": revision_number,
-        "content_sha256": digest,
-    }
+    try:
+        return validate_gist_response(data, gist_id)
+    except CliError as exc:
+        raise CliError("Wavey API returned an invalid publish response.") from exc
 
 
 def read_gist(api_base_url: str, gist_id: str, revision_number: int | None) -> dict:
@@ -286,44 +466,130 @@ def read_gist(api_base_url: str, gist_id: str, revision_number: int | None) -> d
     else:
         path = f"/api/v1/gists/{gist_id}/revisions/{revision_number}/render"
     data = request_json(f"{api_base_url}{path}")
-    return validate_read_response(data, gist_id, revision_number)
+    return validate_gist_response(data, gist_id, revision_number)
+
+
+def response_files(data: dict) -> dict[str, str]:
+    return {
+        filename: file_data["content"]
+        for filename, file_data in data["files"].items()
+    }
+
+
+def materialize_files(data: dict, output_dir: str) -> None:
+    directory = Path(output_dir)
+    if directory.exists():
+        if not directory.is_dir() or any(directory.iterdir()):
+            raise CliError("--output-dir must be nonexistent or empty.")
+    else:
+        directory.mkdir(parents=True)
+    try:
+        for filename, content in response_files(data).items():
+            safe_name = normalize_filename(filename)
+            destination = directory / safe_name
+            if destination.parent != directory:
+                raise CliError(f"Unsafe output filename: {safe_name}")
+            destination.write_text(content, encoding="utf-8", newline="")
+    except Exception:
+        if directory.exists() and not any(directory.iterdir()):
+            directory.rmdir()
+        raise
+
+
+def read_input_files(
+    paths: list[str] | None,
+    stdin_name: str,
+    *,
+    allow_empty_stdin: bool = False,
+) -> dict[str, str]:
+    if not paths:
+        content = sys.stdin.read()
+        if allow_empty_stdin and not content:
+            return {}
+        return validate_files({normalize_filename(stdin_name): content})
+    files: dict[str, str] = {}
+    for value in paths:
+        path = Path(value)
+        filename = normalize_filename(path.name)
+        if filename in files:
+            raise CliError(f"Duplicate published basename: {filename}")
+        files[filename] = path.read_text(encoding="utf-8")
+    return validate_files(files)
 
 
 def verify_publish(
     api_base_url: str,
     published: dict,
-    normalized_markdown: str,
+    expected_files: dict[str, str],
+    expected_title: str | None,
 ) -> None:
     gist_id = published["id"]
     revision_number = published["revision_number"]
-    digest = published["content_sha256"]
-    expected_bytes = normalized_markdown.encode("utf-8")
-    if content_sha256(normalized_markdown) != digest:
-        raise CliError("Write response content SHA does not match submitted Markdown.")
+    expected_digest = snapshot_sha256(expected_title, expected_files)
+    if published["snapshot_sha256"] != expected_digest:
+        raise CliError("Write response snapshot SHA does not match submitted files.")
+
+    rendered = read_gist(api_base_url, gist_id, revision_number)
+    if (
+        response_files(rendered) != expected_files
+        or rendered["title"] != expected_title
+        or rendered["snapshot_sha256"] != expected_digest
+        or rendered["primary_file"] != ordered_filenames(expected_files)[0]
+    ):
+        raise CliError("Rendered revision does not match submitted snapshot.")
+
+    if set(rendered["files"]) != set(expected_files):
+        raise CliError("Rendered revision has an unexpected filename set.")
+    for filename, content in expected_files.items():
+        file_data = rendered["files"][filename]
+        raw_url = file_data.get("raw_url")
+        if not isinstance(raw_url, str):
+            raise CliError(f"Rendered revision has no raw URL for {filename}.")
+        raw_body, raw_type = _request(raw_url, accept="text/plain")
+        expected_bytes = content.encode("utf-8")
+        if (
+            not raw_type.lower().startswith("text/plain")
+            or raw_body != expected_bytes
+            or hashlib.sha256(raw_body).hexdigest() != file_data["content_sha256"]
+        ):
+            raise CliError(f"Raw revision does not match submitted file: {filename}")
 
     revision_url = f"{published['url']}/revisions/{revision_number}"
-    raw_body, _raw_type = _request(f"{revision_url}/raw", accept="text/plain")
-    if raw_body != expected_bytes or hashlib.sha256(raw_body).hexdigest() != digest:
-        raise CliError("Raw revision does not match submitted Markdown.")
-
-    render = read_gist(api_base_url, gist_id, revision_number)
-    if (
-        render["markdown"] != normalized_markdown
-        or render["content_sha256"] != digest
-    ):
-        raise CliError("Rendered revision does not match submitted Markdown.")
-
-    _page_body, content_type = _request(revision_url, accept="text/html")
+    page_body, content_type = _request(revision_url, accept="text/html")
     if not content_type.lower().startswith("text/html"):
         raise CliError("Rendered revision page did not return HTML.")
+    page_text = html.unescape(page_body.decode("utf-8", errors="replace"))
+    for filename in expected_files:
+        if filename not in page_text:
+            raise CliError(f"Rendered revision page is missing filename: {filename}")
+    display_title = rendered.get("display_title")
+    if isinstance(display_title, str) and display_title not in page_text:
+        raise CliError("Rendered revision page is missing its resolved title.")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--title", help="optional gist title")
+    parser.add_argument("--title", help="set the explicit gist title")
+    parser.add_argument(
+        "--clear-title",
+        action="store_true",
+        help="clear the explicit title on update",
+    )
     parser.add_argument(
         "--file",
-        help="read Markdown from this file instead of stdin",
+        action="append",
+        help="publish this UTF-8 text file; repeat for multiple files",
+    )
+    parser.add_argument(
+        "--stdin-name",
+        default="README.md",
+        help="published filename for stdin (default: README.md)",
+    )
+    parser.add_argument(
+        "--delete-file",
+        action="append",
+        default=[],
+        help="remove this filename from an existing gist; repeat as needed",
     )
     parser.add_argument(
         "--gist",
@@ -331,10 +597,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--api-base-url",
-        default=os.environ.get(
-            "WAVEY_GIST_API_BASE_URL",
-            DEFAULT_API_BASE_URL,
-        ),
+        default=os.environ.get("WAVEY_GIST_API_BASE_URL", DEFAULT_API_BASE_URL),
         help="Wavey Gist API base URL",
     )
     parser.add_argument(
@@ -348,23 +611,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="read an existing public gist instead of publishing",
     )
     parser.add_argument(
-        "--expected-content-sha256",
-        help="require this current content SHA before updating",
+        "--output-dir",
+        help="with --read, write every file to a new or empty directory",
     )
     parser.add_argument(
         "--verify",
         action="store_true",
-        help="verify the exact raw, rendered, and public revision after publishing",
+        help="verify every raw file, digest, render, and public revision page",
     )
     parser.add_argument(
         "--json",
         action="store_true",
-        help="print machine-readable success output",
+        help="print the complete API representation as JSON",
     )
     return parser
 
 
 def _validate_args(args: argparse.Namespace) -> None:
+    if args.title is not None and args.clear_title:
+        raise CliError("--title and --clear-title cannot be combined.")
+    if args.file and args.stdin_name != "README.md":
+        raise CliError("--stdin-name is valid only when reading from stdin.")
+
     if args.check_key:
         if any(
             (
@@ -372,7 +640,9 @@ def _validate_args(args: argparse.Namespace) -> None:
                 args.file,
                 args.gist,
                 args.title is not None,
-                args.expected_content_sha256,
+                args.clear_title,
+                args.delete_file,
+                args.output_dir,
                 args.verify,
                 args.json,
             )
@@ -387,24 +657,44 @@ def _validate_args(args: argparse.Namespace) -> None:
             (
                 args.file,
                 args.title is not None,
-                args.expected_content_sha256,
+                args.clear_title,
+                args.delete_file,
                 args.verify,
             )
         ):
             raise CliError("--read cannot be combined with publish options.")
         return
 
-    if args.expected_content_sha256 is not None:
-        if not args.gist:
-            raise CliError("--expected-content-sha256 is valid only for updates.")
-        if not SHA256_RE.fullmatch(args.expected_content_sha256):
-            raise CliError(
-                "--expected-content-sha256 must be 64 lowercase hexadecimal characters."
-            )
+    if args.output_dir:
+        raise CliError("--output-dir requires --read.")
+    if args.delete_file and not args.gist:
+        raise CliError("--delete-file is valid only for updates.")
+    if args.clear_title and not args.gist:
+        raise CliError("--clear-title is valid only for updates.")
 
 
 def _redact(text: str, token: str | None) -> str:
     return text.replace(token, "[REDACTED]") if token else text
+
+
+def _resolved_update(
+    current: dict,
+    overlays: dict[str, str],
+    delete_files: list[str],
+    title: str | None,
+    title_is_present: bool,
+) -> tuple[dict[str, str], str | None]:
+    files = response_files(current)
+    files.update(overlays)
+    for raw_filename in delete_files:
+        filename = normalize_filename(raw_filename)
+        if filename not in files:
+            raise CliError(f"Cannot delete missing file: {filename}")
+        del files[filename]
+    files = validate_files(files)
+    next_title = title if title_is_present else current["title"]
+    validate_publication_quality(files, next_title)
+    return files, next_title
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -437,13 +727,15 @@ def main(argv: list[str] | None = None) -> int:
         try:
             gist_id, revision_number = parse_gist_target(args.gist)
             data = read_gist(api_base_url, gist_id, revision_number)
-        except CliError as exc:
+            if args.output_dir:
+                materialize_files(data, args.output_dir)
+        except (CliError, OSError) as exc:
             print(str(exc), file=sys.stderr)
             return 1
         if args.json:
-            print(json.dumps(data, sort_keys=True))
-        else:
-            sys.stdout.write(data["markdown"])
+            print(json.dumps(data, ensure_ascii=False, sort_keys=True))
+        elif not args.output_dir:
+            sys.stdout.write(data["files"][data["primary_file"]]["content"])
         return 0
 
     token = wavey_token()
@@ -456,76 +748,106 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        content = read_content(args.file)
-    except OSError as exc:
-        print(f"Could not read gist content: {exc}", file=sys.stderr)
-        return 2
-    if not content:
-        print("No gist content provided on stdin or with --file.", file=sys.stderr)
-        return 2
-    if not has_top_level_markdown_title(content):
-        print(
-            "Gist Markdown must start with a top-level '# Title' heading.",
-            file=sys.stderr,
+        overlays = read_input_files(
+            args.file,
+            args.stdin_name,
+            allow_empty_stdin=bool(
+                args.gist
+                and (args.title is not None or args.clear_title or args.delete_file)
+            ),
         )
-        return 2
+        gist_id = None
+        current = None
+        title_is_present = args.title is not None or args.clear_title
+        requested_title = None if args.clear_title else args.title
 
-    payload = {"markdown": content}
-    if args.title is not None:
-        payload["title"] = args.title
+        if args.gist:
+            gist_id, _ignored_revision = parse_gist_target(args.gist)
+            current = read_gist(api_base_url, gist_id, None)
+            desired_files, desired_title = _resolved_update(
+                current,
+                overlays,
+                args.delete_file,
+                requested_title,
+                title_is_present,
+            )
+            payload: dict[str, object] = {
+                "files": {
+                    filename: {"content": content}
+                    for filename, content in desired_files.items()
+                },
+                "expected_snapshot_sha256": current["snapshot_sha256"],
+            }
+            if title_is_present:
+                payload["title"] = requested_title
+            method = "PATCH"
+            url = f"{api_base_url}/api/v1/gists/{gist_id}"
+        else:
+            desired_files = overlays
+            desired_title = requested_title
+            validate_publication_quality(desired_files, desired_title)
+            payload = {
+                "files": {
+                    filename: {"content": content}
+                    for filename, content in desired_files.items()
+                }
+            }
+            if title_is_present:
+                payload["title"] = requested_title
+            method = "POST"
+            url = f"{api_base_url}/api/v1/gists"
 
-    gist_id = None
-    method = "POST"
-    url = f"{api_base_url}/api/v1/gists"
-    if args.gist:
         try:
-            gist_id, _revision_number = parse_gist_target(args.gist)
-        except CliError as exc:
-            print(str(exc), file=sys.stderr)
-            return 2
-        method = "PATCH"
-        url = f"{api_base_url}/api/v1/gists/{gist_id}"
-        if args.expected_content_sha256 is not None:
-            payload["expected_content_sha256"] = args.expected_content_sha256
+            response = request_json(
+                url,
+                method=method,
+                token=token,
+                payload=payload,
+            )
+            published = validate_write_response(response, gist_id)
+        except AmbiguousWriteError:
+            if not gist_id:
+                raise
+            reconciled = read_gist(api_base_url, gist_id, None)
+            if (
+                response_files(reconciled) != desired_files
+                or reconciled["title"] != desired_title
+                or reconciled["snapshot_sha256"]
+                != snapshot_sha256(desired_title, desired_files)
+            ):
+                raise
+            published = reconciled
+        except ApiError as exc:
+            if exc.status == 409 and gist_id:
+                latest = read_gist(api_base_url, gist_id, None)
+                raise CliError(
+                    "Update conflict; current snapshot SHA-256 is "
+                    f"{latest['snapshot_sha256']}."
+                ) from exc
+            raise
 
-    try:
-        response = request_json(
-            url,
-            method=method,
-            token=token,
-            payload=payload,
-        )
-        published = validate_write_response(response, gist_id)
         if args.verify:
             try:
                 verify_publish(
                     api_base_url,
                     published,
-                    normalize_markdown(content),
+                    desired_files,
+                    desired_title,
                 )
             except CliError as exc:
                 print(
                     "Published revision was already created: "
                     f"{published['url']} revision {published['revision_number']} "
-                    f"sha256 {published['content_sha256']}",
+                    f"snapshot {published['snapshot_sha256']}",
                     file=sys.stderr,
                 )
                 raise exc
-    except CliError as exc:
+    except (CliError, OSError, UnicodeError) as exc:
         print(_redact(str(exc), token), file=sys.stderr)
         return 1
 
     if args.json:
-        print(
-            json.dumps(
-                {
-                    "url": published["url"],
-                    "revision_number": published["revision_number"],
-                    "content_sha256": published["content_sha256"],
-                },
-                sort_keys=True,
-            )
-        )
+        print(json.dumps(published, ensure_ascii=False, sort_keys=True))
     else:
         print(published["url"])
     return 0

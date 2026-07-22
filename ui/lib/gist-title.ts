@@ -27,32 +27,33 @@ function decodeHtmlEntity(entity: string) {
       ? String.fromCodePoint(codePoint)
       : `&${entity};`;
   }
-
   return NAMED_ENTITIES[normalized] ?? `&${entity};`;
 }
 
-function normalizeHeadingText(html: string) {
-  const text = html
+function normalizeHeadingText(value: string) {
+  const text = value
     .replace(TAG_RE, "")
     .replace(ENTITY_RE, (_, entity: string) => decodeHtmlEntity(entity))
     .replace(/\s+/g, " ")
     .trim();
-
   return text || null;
 }
 
 export function getTopLevelHeading(gist: PublicGistPayload) {
-  const match = FIRST_H1_RE.exec(gist.rendered_html);
+  const primary = gist.files[gist.primary_file];
+  if (primary.kind !== "markdown") {
+    return null;
+  }
+  const match = FIRST_H1_RE.exec(primary.rendered_html);
   return match ? normalizeHeadingText(match[1]) : null;
 }
 
 export function getGistShareTitle(gist: PublicGistPayload) {
-  return getTopLevelHeading(gist) ?? gist.title;
+  return gist.display_title;
 }
 
 export function getGistDocumentTitle(gist: PublicGistPayload) {
-  const title = getGistShareTitle(gist) ?? "untitled";
-  return `gist: ${title}`;
+  return `gist: ${getGistShareTitle(gist) || "untitled"}`;
 }
 
 export function getGistHeaderTitle(gist: PublicGistPayload) {

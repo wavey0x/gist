@@ -98,9 +98,20 @@ function cspNonce() {
   );
 }
 
-function mermaidRenderId(gistId: string, revisionNumber: number, index: number) {
+function filenameIdentifier(filename: string) {
+  return Array.from(new TextEncoder().encode(filename), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("-");
+}
+
+function mermaidRenderId(
+  gistId: string,
+  revisionNumber: number,
+  filename: string,
+  diagramIndex: number
+) {
   const safeGistId = gistId.replace(/[^A-Za-z0-9_-]/g, "-");
-  return `wg-mermaid-${safeGistId}-${revisionNumber}-${index}`;
+  return `wg-mermaid-${safeGistId}-${revisionNumber}-${filenameIdentifier(filename)}-${diagramIndex}`;
 }
 
 function configureMermaid(mermaid: MermaidApi, theme: string) {
@@ -845,16 +856,21 @@ async function renderMermaidContainer(
 }
 
 function mermaidContainersNeedingRender(theme: string) {
-  const markdownRoot =
-    document.querySelector<HTMLElement>(MARKDOWN_BODY_SELECTOR);
-  if (!markdownRoot) {
-    return [];
-  }
-
   return Array.from(
-    markdownRoot.querySelectorAll<HTMLElement>(MERMAID_RENDER_SELECTOR)
+    document.querySelectorAll<HTMLElement>(MARKDOWN_BODY_SELECTOR)
   )
-    .map((container, index) => ({ container, index }))
+    .flatMap((markdownRoot, rootIndex) => {
+      const filename =
+        markdownRoot.closest<HTMLElement>("[data-gist-filename]")?.dataset
+          .gistFilename ?? `document-${rootIndex}`;
+      return Array.from(
+        markdownRoot.querySelectorAll<HTMLElement>(MERMAID_RENDER_SELECTOR)
+      ).map((container, diagramIndex) => ({
+        container,
+        diagramIndex,
+        filename
+      }));
+    })
     .filter(
       ({ container }) =>
         container.getAttribute("data-mermaid-state") !== "loading" &&
@@ -876,13 +892,10 @@ function nodeContainsMermaidRenderSurface(node: Node) {
 }
 
 function mutationsTouchMermaidRenderSurface(mutations: MutationRecord[]) {
-  const markdownRoot =
-    document.querySelector<HTMLElement>(MARKDOWN_BODY_SELECTOR);
-
   return mutations.some((mutation) => {
     if (
-      markdownRoot &&
-      (mutation.target === markdownRoot || markdownRoot.contains(mutation.target))
+      mutation.target instanceof Element &&
+      mutation.target.closest(MARKDOWN_BODY_SELECTOR)
     ) {
       return true;
     }
@@ -927,14 +940,19 @@ export function MermaidRenderer({
 
       configureMermaid(mermaid, theme);
       const nonce = cspNonce();
-      for (const { container, index } of renderableContainers) {
+      for (const { container, diagramIndex, filename } of renderableContainers) {
         if (cancelled) {
           return;
         }
         await renderMermaidContainer(
           mermaid,
           container,
-          mermaidRenderId(gistId, revisionNumber, index),
+          mermaidRenderId(
+            gistId,
+            revisionNumber,
+            filename,
+            diagramIndex
+          ),
           nonce,
           theme,
           () => cancelled

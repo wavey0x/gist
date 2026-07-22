@@ -296,7 +296,10 @@ def test_rotation_reactivates_same_identity_and_preserves_gist_ownership(
     updated = client.patch(
         f"/api/v1/gists/{gist_id}",
         headers=auth_header(rotated["key"]),
-        json={"markdown": "# After rotation"},
+        json={
+            "files": {"README.md": {"content": "# After rotation"}},
+            "expected_snapshot_sha256": gist.get_json()["snapshot_sha256"],
+        },
     )
     deleted = client.delete(
         f"/api/v1/gists/{gist_id}",

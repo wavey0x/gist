@@ -1,23 +1,42 @@
-import hashlib
 import html
 import io
 import json
 import re
 import sqlite3
 import zipfile
+from dataclasses import dataclass
+from urllib.parse import quote
 
 from .auth import utc_now
 from .db import gist_connection
 from .errors import GistError
 from .external_ids import generate_external_id, validate_external_id
+from .gist_files import (
+    NormalizedFile,
+    content_sha256,
+    file_kind,
+    file_language,
+    lead_filename,
+    normalize_filename,
+    normalize_files,
+    normalized_file,
+    ordered_filenames,
+    snapshot_sha256,
+    validate_file_contents,
+)
 from .images import (
     cleanup_staged_images,
     insert_image_assets,
     plan_image_assets,
-    rewrite_attachment_markdown,
     stage_images,
 )
-from .markdown import render_markdown_result, render_version
+from .markdown import (
+    HighlightBudget,
+    render_markdown_result,
+    render_plain_text_result,
+    render_source_result,
+    render_version,
+)
 from .notifications import (
     EVENT_GIST_PUBLISHED,
     EVENT_GIST_UPDATED,
@@ -32,6 +51,13 @@ FIRST_H1_RE = re.compile(r"<h1(?:\s[^>]*)?>([\s\S]*?)</h1>", re.IGNORECASE)
 TAG_RE = re.compile(r"<[^>]*>")
 
 
+@dataclass(frozen=True)
+class PreparedFile:
+    normalized: NormalizedFile
+    rendered_html: str
+    render_version: str
+
+
 def public_url(app, external_id):
     base_url = app.config["PUBLIC_GIST_BASE_URL"].rstrip("/")
     return f"{base_url}/{external_id}"
@@ -41,10 +67,14 @@ def revision_url(app, external_id, revision_number):
     return f"{public_url(app, external_id)}/revisions/{revision_number}"
 
 
-def normalize_markdown(value):
-    if not isinstance(value, str):
-        raise GistError("invalid_request", "markdown must be a string", 400)
-    return value.replace("\r\n", "\n").replace("\r", "\n")
+def raw_file_url(app, external_id, filename, *, revision_number=None):
+    encoded_filename = quote(filename, safe="")
+    if revision_number is None:
+        return f"{public_url(app, external_id)}/raw/{encoded_filename}"
+    return (
+        f"{revision_url(app, external_id, revision_number)}"
+        f"/raw/{encoded_filename}"
+    )
 
 
 def normalize_title(value, *, present=True):
@@ -60,6 +90,13 @@ def normalize_title(value, *, present=True):
     return title
 
 
+def normalize_author_name(value):
+    author_name = (value or "").strip()
+    if not author_name:
+        raise GistError("invalid_request", "API key name is required", 400)
+    return author_name
+
+
 def _top_level_heading(rendered_html):
     match = FIRST_H1_RE.search(rendered_html or "")
     if not match:
@@ -69,42 +106,8 @@ def _top_level_heading(rendered_html):
     return title or None
 
 
-def display_title(title, rendered_html, external_id):
-    return title or _top_level_heading(rendered_html) or external_id
-
-
-def normalize_author_name(value):
-    author_name = (value or "").strip()
-    if not author_name:
-        raise GistError("invalid_request", "API key name is required", 400)
-    return author_name
-
-
-def validate_markdown(app, markdown):
-    max_bytes = app.config.get("MAX_MARKDOWN_BYTES", 1048576)
-    if len(markdown.encode("utf-8")) > max_bytes:
-        raise GistError("payload_too_large", "Payload too large", 413)
-    if not markdown.strip():
-        raise GistError("invalid_request", "markdown is required", 400)
-
-
-def content_sha256(markdown):
-    return hashlib.sha256(markdown.encode("utf-8")).hexdigest()
-
-
-def render_markdown_for_app(app, markdown):
-    image_prefix = (
-        f"{app.config.get('PUBLIC_API_BASE_URL', 'http://localhost:3001').rstrip('/')}"
-        "/api/v1/images/"
-    )
-    return render_markdown_result(
-        markdown,
-        allowed_image_src_prefixes=(image_prefix,),
-    )
-
-
-def render_version_for_app(app):
-    return render_version()
+def display_title(title, lead_rendered_html, lead_name, external_id):
+    return title or _top_level_heading(lead_rendered_html) or lead_name or external_id
 
 
 def parse_revision_number(revision_number):
@@ -112,87 +115,369 @@ def parse_revision_number(revision_number):
         if revision_number > 0:
             return revision_number
         raise GistError("not_found", "Not found", 404)
-    if not isinstance(revision_number, str) or not REVISION_RE.fullmatch(revision_number):
+    if not isinstance(revision_number, str) or not REVISION_RE.fullmatch(
+        revision_number
+    ):
         raise GistError("not_found", "Not found", 404)
     return int(revision_number)
 
 
-def _row_to_api(app, row, *, include_markdown=False):
-    latest_revision_number = row["latest_revision_number"]
-    body = {
-        "id": row["external_id"],
-        "url": public_url(app, row["external_id"]),
-        "title": row["title"],
-        "author_name": row["author_name"],
-        "content_sha256": row["content_sha256"],
-        "revision_number": latest_revision_number,
-        "latest_revision_number": latest_revision_number,
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
-    }
-    if "author_avatar_url" in row.keys() and row["author_avatar_url"]:
-        body["author_avatar_url"] = row["author_avatar_url"]
-    if include_markdown:
-        body["markdown"] = row["markdown"]
-    return body
+def _max_file_count(app):
+    return int(app.config.get("MAX_GIST_FILES", 32))
+
+
+def _max_text_bytes(app):
+    return int(app.config.get("MAX_GIST_TEXT_BYTES", 1024 * 1024))
+
+
+def _normalize_payload_files(app, value):
+    files = normalize_files(value, max_file_count=_max_file_count(app))
+    validate_file_contents(
+        files,
+        max_text_bytes=_max_text_bytes(app),
+        require_non_whitespace=False,
+    )
+    return files
+
+
+def _image_prefix(app):
+    return (
+        f"{app.config.get('PUBLIC_API_BASE_URL', 'http://localhost:3001').rstrip('/')}"
+        "/api/v1/images/"
+    )
+
+
+def _rewrite_image_attachments(files, assets):
+    if not assets:
+        return files
+
+    rewritten = dict(files)
+    referenced_ids = set()
+    for filename in ordered_filenames(files):
+        if file_kind(filename) != "markdown":
+            continue
+        content = files[filename].content
+        for asset in assets:
+            token = f"attachment:{asset['original_filename']}"
+            if token in content:
+                content = content.replace(token, asset["url"])
+                referenced_ids.add(asset["id"])
+        rewritten[filename] = normalized_file(filename, content)
+
+    unreferenced = [
+        asset["markdown"] for asset in assets if asset["id"] not in referenced_ids
+    ]
+    if unreferenced:
+        lead = lead_filename(rewritten)
+        if file_kind(lead) != "markdown":
+            raise GistError(
+                "invalid_request",
+                "unreferenced images require a Markdown lead file",
+                400,
+            )
+        content = rewritten[lead].content
+        suffix = "\n".join(unreferenced)
+        content = f"{content.rstrip()}\n\n{suffix}" if content.strip() else suffix
+        rewritten[lead] = normalized_file(lead, content)
+    return rewritten
+
+
+def _render_files(app, files):
+    highlight_budget = HighlightBudget()
+    image_prefix = _image_prefix(app)
+    prepared = {}
+    for filename in ordered_filenames(files):
+        normalized = files[filename]
+        kind = file_kind(filename)
+        if kind == "markdown":
+            rendered = render_markdown_result(
+                normalized.content,
+                allowed_image_src_prefixes=(image_prefix,),
+                highlight_budget=highlight_budget,
+            )
+        elif kind == "source":
+            rendered = render_source_result(
+                normalized.content,
+                file_language(filename) or "text",
+                highlight_budget=highlight_budget,
+            )
+        else:
+            rendered = render_plain_text_result(normalized.content)
+        prepared[filename] = PreparedFile(
+            normalized=normalized,
+            rendered_html=rendered.html,
+            render_version=rendered.version,
+        )
+    return prepared
+
+
+def _prepared_normalized_files(prepared_files):
+    return {name: prepared.normalized for name, prepared in prepared_files.items()}
 
 
 def _insert_revision(
     conn,
+    *,
     gist_id,
     revision_number,
     title,
     author_name,
-    markdown,
-    rendered_html,
-    version,
     digest,
     key_id,
     created_at,
+    prepared_files,
 ):
     cursor = conn.execute(
         """
         insert into gist_revisions(
-            gist_id, revision_number, title, author_name, markdown,
-            rendered_html, render_version,
-            content_sha256, created_at, created_by_key_id
-        )
-        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            gist_id, revision_number, title, author_name, snapshot_sha256,
+            created_at, created_by_key_id
+        ) values (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             gist_id,
             revision_number,
             title,
             author_name,
-            markdown,
-            rendered_html,
-            version,
             digest,
             created_at,
             key_id,
         ),
     )
-    return cursor.lastrowid
+    revision_id = cursor.lastrowid
+    conn.executemany(
+        """
+        insert into gist_revision_files(
+            gist_revision_id, filename, content, rendered_html,
+            render_version, content_sha256, byte_size
+        ) values (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                revision_id,
+                filename,
+                prepared.normalized.content,
+                prepared.rendered_html,
+                prepared.render_version,
+                prepared.normalized.content_sha256,
+                prepared.normalized.byte_size,
+            )
+            for filename, prepared in prepared_files.items()
+        ],
+    )
+    return revision_id
+
+
+def _select_revision(conn, external_id, revision_number=None, *, owner_key_id=None):
+    clauses = ["g.external_id = ?", "g.deleted_at is null"]
+    values = [external_id]
+    if revision_number is None:
+        clauses.append("r.revision_number = g.latest_revision_number")
+    else:
+        clauses.append("r.revision_number = ?")
+        values.append(revision_number)
+    if owner_key_id is not None:
+        clauses.append("g.owner_key_id = ?")
+        values.append(owner_key_id)
+    return conn.execute(
+        f"""
+        select
+            g.id as gist_id,
+            g.external_id,
+            g.owner_key_id,
+            g.latest_revision_number,
+            g.created_at as gist_created_at,
+            g.updated_at as gist_updated_at,
+            r.id as revision_id,
+            r.revision_number,
+            r.title,
+            r.author_name,
+            r.snapshot_sha256,
+            r.created_at as revision_created_at,
+            r.created_by_key_id,
+            author_key.avatar_url as author_avatar_url
+        from gists g
+        join gist_revisions r on r.gist_id = g.id
+        left join api_keys author_key on author_key.id = r.created_by_key_id
+        where {' and '.join(clauses)}
+        """,
+        tuple(values),
+    ).fetchone()
+
+
+def _load_revision_files(conn, revision_id):
+    rows = conn.execute(
+        """
+        select
+            id, filename, content, rendered_html, render_version,
+            content_sha256, byte_size
+        from gist_revision_files
+        where gist_revision_id = ?
+        order by filename
+        """,
+        (revision_id,),
+    ).fetchall()
+    if not rows:
+        raise GistError("internal_error", "Gist revision has no files", 500)
+    return {row["filename"]: row for row in rows}
+
+
+def _normalized_from_rows(file_rows):
+    return {
+        filename: NormalizedFile(
+            filename=filename,
+            content=row["content"],
+            content_sha256=row["content_sha256"],
+            byte_size=row["byte_size"],
+        )
+        for filename, row in file_rows.items()
+    }
+
+
+def _prepared_from_rows(file_rows):
+    return {
+        filename: PreparedFile(
+            normalized=NormalizedFile(
+                filename=filename,
+                content=row["content"],
+                content_sha256=row["content_sha256"],
+                byte_size=row["byte_size"],
+            ),
+            rendered_html=row["rendered_html"],
+            render_version=row["render_version"],
+        )
+        for filename, row in file_rows.items()
+    }
+
+
+def _history_payload(app, conn, external_id, gist_id, latest_revision_number):
+    rows = conn.execute(
+        """
+        select
+            r.revision_number,
+            r.created_at,
+            r.author_name,
+            r.snapshot_sha256,
+            count(f.id) as file_count,
+            author_key.avatar_url as author_avatar_url
+        from gist_revisions r
+        join gist_revision_files f on f.gist_revision_id = r.id
+        left join api_keys author_key on author_key.id = r.created_by_key_id
+        where r.gist_id = ?
+        group by r.id
+        order by r.revision_number desc
+        limit 50
+        """,
+        (gist_id,),
+    ).fetchall()
+    history = []
+    for row in rows:
+        is_latest = row["revision_number"] == latest_revision_number
+        item = {
+            "revision_number": row["revision_number"],
+            "created_at": row["created_at"],
+            "author_name": row["author_name"],
+            "snapshot_sha256": row["snapshot_sha256"],
+            "file_count": row["file_count"],
+            "is_latest": is_latest,
+            "url": (
+                public_url(app, external_id)
+                if is_latest
+                else revision_url(app, external_id, row["revision_number"])
+            ),
+        }
+        if row["author_avatar_url"]:
+            item["author_avatar_url"] = row["author_avatar_url"]
+        history.append(item)
+    return history
+
+
+def _revision_body(
+    app,
+    conn,
+    revision,
+    *,
+    include_content,
+    include_rendered,
+    include_history=False,
+    pin_raw_revision=False,
+):
+    file_rows = _load_revision_files(conn, revision["revision_id"])
+    ordered = ordered_filenames(file_rows)
+    lead = ordered[0]
+    lead_row = file_rows[lead]
+    lead_html = lead_row["rendered_html"] if file_kind(lead) == "markdown" else None
+    is_latest = revision["revision_number"] == revision["latest_revision_number"]
+    body = {
+        "id": revision["external_id"],
+        "url": public_url(app, revision["external_id"]),
+        "title": revision["title"],
+        "display_title": display_title(
+            revision["title"],
+            lead_html,
+            lead,
+            revision["external_id"],
+        ),
+        "author_name": revision["author_name"],
+        "primary_file": lead,
+        "snapshot_sha256": revision["snapshot_sha256"],
+        "revision_number": revision["revision_number"],
+        "latest_revision_number": revision["latest_revision_number"],
+        "created_at": revision["gist_created_at"],
+        "updated_at": (
+            revision["gist_updated_at"] if is_latest else revision["revision_created_at"]
+        ),
+        "files": {},
+    }
+    if revision["author_avatar_url"]:
+        body["author_avatar_url"] = revision["author_avatar_url"]
+    raw_revision = revision["revision_number"] if pin_raw_revision else None
+    for filename in ordered:
+        row = file_rows[filename]
+        item = {
+            "filename": filename,
+            "content_sha256": row["content_sha256"],
+            "byte_size": row["byte_size"],
+            "raw_url": raw_file_url(
+                app,
+                revision["external_id"],
+                filename,
+                revision_number=raw_revision,
+            ),
+        }
+        if include_content:
+            item["content"] = row["content"]
+        if include_rendered:
+            item.update(
+                {
+                    "kind": file_kind(filename),
+                    "language": file_language(filename),
+                    "rendered_html": row["rendered_html"],
+                }
+            )
+        body["files"][filename] = item
+    if include_history:
+        body["history"] = _history_payload(
+            app,
+            conn,
+            revision["external_id"],
+            revision["gist_id"],
+            revision["latest_revision_number"],
+        )
+    return body
 
 
 def create_gist(app, key_id, author_name, payload, image_uploads=None):
     author_name = normalize_author_name(author_name)
+    title = normalize_title(payload.get("title"), present="title" in payload)
+    files = _normalize_payload_files(app, payload.get("files"))
     staged_images = stage_images(app, image_uploads or [])
     try:
         image_assets = plan_image_assets(app, staged_images)
-        if "markdown" in payload:
-            markdown = normalize_markdown(payload["markdown"])
-        elif image_assets:
-            markdown = ""
-        else:
-            markdown = normalize_markdown(payload.get("markdown"))
-        markdown = rewrite_attachment_markdown(markdown, image_assets)
-        validate_markdown(app, markdown)
-        title = normalize_title(payload.get("title"), present="title" in payload)
-        rendered = render_markdown_for_app(app, markdown)
-        rendered_html = rendered.html
-        version = rendered.version
-        digest = content_sha256(markdown)
+        files = _rewrite_image_attachments(files, image_assets)
+        validate_file_contents(files, max_text_bytes=_max_text_bytes(app))
+        prepared_files = _render_files(app, files)
+        digest = snapshot_sha256(title, files)
         now = utc_now()
 
         with gist_connection(app) as conn:
@@ -203,38 +488,23 @@ def create_gist(app, key_id, author_name, payload, image_uploads=None):
                         cursor = conn.execute(
                             """
                             insert into gists(
-                                external_id, title, author_name, markdown, rendered_html,
-                                render_version, content_sha256, latest_revision_number,
+                                external_id, owner_key_id, latest_revision_number,
                                 created_at, updated_at
-                            )
-                            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ) values (?, ?, 1, ?, ?)
                             """,
-                            (
-                                external_id,
-                                title,
-                                author_name,
-                                markdown,
-                                rendered_html,
-                                version,
-                                digest,
-                                1,
-                                now,
-                                now,
-                            ),
+                            (external_id, key_id, now, now),
                         )
                         gist_id = cursor.lastrowid
                         revision_id = _insert_revision(
                             conn,
-                            gist_id,
-                            1,
-                            title,
-                            author_name,
-                            markdown,
-                            rendered_html,
-                            version,
-                            digest,
-                            key_id,
-                            now,
+                            gist_id=gist_id,
+                            revision_number=1,
+                            title=title,
+                            author_name=author_name,
+                            digest=digest,
+                            key_id=key_id,
+                            created_at=now,
+                            prepared_files=prepared_files,
                         )
                         insert_image_assets(
                             conn,
@@ -250,99 +520,168 @@ def create_gist(app, key_id, author_name, payload, image_uploads=None):
                             gist_revision_id=revision_id,
                             created_at=now,
                         )
-                    row = conn.execute(
-                        "select * from gists where id = ?",
-                        (gist_id,),
-                    ).fetchone()
-                    body = _row_to_api(app, row)
+                    revision = _select_revision(conn, external_id)
+                    body = _revision_body(
+                        app,
+                        conn,
+                        revision,
+                        include_content=True,
+                        include_rendered=False,
+                    )
                     if image_assets:
-                        body["markdown"] = markdown
                         body["images"] = image_assets
                     return body
-                except sqlite3.IntegrityError:
+                except sqlite3.IntegrityError as exc:
+                    if "gists.external_id" not in str(exc):
+                        raise
                     continue
     except Exception:
         cleanup_staged_images(staged_images)
         raise
-
     raise GistError("internal_error", "Internal error", 500)
 
 
-def get_gist(app, external_id, *, include_markdown=False):
+def get_gist(app, external_id, *, include_files=False):
     if not validate_external_id(external_id):
         raise GistError("not_found", "Not found", 404)
-
     with gist_connection(app) as conn:
-        row = conn.execute(
-            "select * from gists where external_id = ? and deleted_at is null",
-            (external_id,),
-        ).fetchone()
+        revision = _select_revision(conn, external_id)
+        if revision is None:
+            raise GistError("not_found", "Not found", 404)
+        return _revision_body(
+            app,
+            conn,
+            revision,
+            include_content=include_files,
+            include_rendered=False,
+        )
+
+
+def get_public_render(app, external_id, revision_number=None):
+    if not validate_external_id(external_id):
+        raise GistError("not_found", "Not found", 404)
+    parsed_revision = (
+        parse_revision_number(revision_number) if revision_number is not None else None
+    )
+    with gist_connection(app) as conn:
+        revision = _select_revision(conn, external_id, parsed_revision)
+        if revision is None:
+            raise GistError("not_found", "Not found", 404)
+        return _revision_body(
+            app,
+            conn,
+            revision,
+            include_content=True,
+            include_rendered=True,
+            include_history=True,
+            pin_raw_revision=parsed_revision is not None,
+        )
+
+
+def get_public_raw_file(app, external_id, *, revision_number=None, filename=None):
+    if not validate_external_id(external_id):
+        raise GistError("not_found", "Not found", 404)
+    parsed_revision = (
+        parse_revision_number(revision_number) if revision_number is not None else None
+    )
+    with gist_connection(app) as conn:
+        revision = _select_revision(conn, external_id, parsed_revision)
+        if revision is None:
+            raise GistError("not_found", "Not found", 404)
+        file_rows = _load_revision_files(conn, revision["revision_id"])
+        selected = filename or lead_filename(file_rows)
+        row = file_rows.get(selected)
         if row is None:
             raise GistError("not_found", "Not found", 404)
-        return _row_to_api(app, row, include_markdown=include_markdown)
+        return selected, row["content"]
+
+
+def _summary_rows(app, conn, key_id, limit):
+    rows = conn.execute(
+        """
+        select
+            g.id as gist_id,
+            g.external_id,
+            g.latest_revision_number,
+            g.created_at,
+            g.updated_at,
+            r.id as revision_id,
+            r.title,
+            r.author_name,
+            author_key.avatar_url as author_avatar_url,
+            count(f.id) as file_count
+        from gists g
+        join gist_revisions r
+          on r.gist_id = g.id and r.revision_number = g.latest_revision_number
+        join gist_revision_files f on f.gist_revision_id = r.id
+        left join api_keys author_key on author_key.id = r.created_by_key_id
+        where g.owner_key_id = ? and g.deleted_at is null
+        group by g.id, r.id
+        order by g.updated_at desc
+        limit ?
+        """,
+        (key_id, limit),
+    ).fetchall()
+    revision_ids = [row["revision_id"] for row in rows]
+    files_by_revision = {revision_id: {} for revision_id in revision_ids}
+    if revision_ids:
+        placeholders = ",".join("?" for _ in revision_ids)
+        for file_row in conn.execute(
+            f"""
+            select gist_revision_id, filename, rendered_html
+            from gist_revision_files
+            where gist_revision_id in ({placeholders})
+            order by filename
+            """,
+            tuple(revision_ids),
+        ):
+            files_by_revision[file_row["gist_revision_id"]][
+                file_row["filename"]
+            ] = file_row
+    return rows, files_by_revision
 
 
 def list_gists_created_by_key(app, key_id, *, limit=100):
     limit = max(1, min(int(limit), 100))
     with gist_connection(app) as conn:
-        rows = conn.execute(
-            """
-            select gists.external_id, gists.title, gists.author_name,
-                   gists.latest_revision_number, gists.created_at, gists.updated_at,
-                   latest_revision.rendered_html,
-                   author_key.avatar_url as author_avatar_url
-            from gists
-            join gist_revisions as first_revision
-              on first_revision.gist_id = gists.id
-             and first_revision.revision_number = 1
-            join gist_revisions as latest_revision
-              on latest_revision.gist_id = gists.id
-             and latest_revision.revision_number = gists.latest_revision_number
-            left join api_keys as author_key
-              on author_key.id = latest_revision.created_by_key_id
-            where first_revision.created_by_key_id = ?
-              and gists.deleted_at is null
-            order by gists.updated_at desc
-            limit ?
-            """,
-            (key_id, limit),
-        ).fetchall()
+        rows, files_by_revision = _summary_rows(app, conn, key_id, limit)
         stats_row = conn.execute(
             """
             select
                 count(*) as gist_count,
-                coalesce(sum(gists.latest_revision_number), 0) as revision_count,
-                max(gists.updated_at) as last_updated_at
+                coalesce(sum(latest_revision_number), 0) as revision_count,
+                max(updated_at) as last_updated_at
             from gists
-            join gist_revisions as first_revision
-              on first_revision.gist_id = gists.id
-             and first_revision.revision_number = 1
-            where first_revision.created_by_key_id = ?
-              and gists.deleted_at is null
+            where owner_key_id = ? and deleted_at is null
             """,
             (key_id,),
         ).fetchone()
 
     gists = []
     for row in rows:
+        file_rows = files_by_revision[row["revision_id"]]
+        lead = lead_filename(file_rows)
+        lead_html = (
+            file_rows[lead]["rendered_html"]
+            if file_kind(lead) == "markdown"
+            else None
+        )
         item = {
             "id": row["external_id"],
             "url": public_url(app, row["external_id"]),
             "title": row["title"],
             "display_title": display_title(
-                row["title"],
-                row["rendered_html"],
-                row["external_id"],
+                row["title"], lead_html, lead, row["external_id"]
             ),
             "author_name": row["author_name"],
             "revision_number": row["latest_revision_number"],
+            "file_count": row["file_count"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
         if row["author_avatar_url"]:
             item["author_avatar_url"] = row["author_avatar_url"]
         gists.append(item)
-
     return {
         "gists": gists,
         "stats": {
@@ -355,27 +694,36 @@ def list_gists_created_by_key(app, key_id, *, limit=100):
 
 def export_gists_created_by_key(app, key_id):
     with gist_connection(app) as conn:
-        rows = conn.execute(
+        complete_rows = conn.execute(
             """
             select
-                gists.external_id,
-                gists.title,
-                gists.author_name,
-                gists.markdown,
-                gists.rendered_html,
-                gists.latest_revision_number,
-                gists.created_at,
-                gists.updated_at
-            from gists
-            join gist_revisions as first_revision
-              on first_revision.gist_id = gists.id
-             and first_revision.revision_number = 1
-            where first_revision.created_by_key_id = ?
-              and gists.deleted_at is null
-            order by gists.created_at, gists.id
+                g.external_id, g.latest_revision_number, g.created_at, g.updated_at,
+                r.id as revision_id, r.title, r.author_name, r.snapshot_sha256
+            from gists g
+            join gist_revisions r
+              on r.gist_id = g.id and r.revision_number = g.latest_revision_number
+            where g.owner_key_id = ? and g.deleted_at is null
+            order by g.created_at, g.id
             """,
             (key_id,),
         ).fetchall()
+        revision_ids = [row["revision_id"] for row in complete_rows]
+        content_by_revision = {revision_id: {} for revision_id in revision_ids}
+        if revision_ids:
+            placeholders = ",".join("?" for _ in revision_ids)
+            for file_row in conn.execute(
+                f"""
+                select gist_revision_id, filename, content, rendered_html,
+                       content_sha256, byte_size
+                from gist_revision_files
+                where gist_revision_id in ({placeholders})
+                order by filename
+                """,
+                tuple(revision_ids),
+            ):
+                content_by_revision[file_row["gist_revision_id"]][
+                    file_row["filename"]
+                ] = file_row
 
     exported_at = utc_now()
     manifest_gists = []
@@ -386,239 +734,128 @@ def export_gists_created_by_key(app, key_id):
         compression=zipfile.ZIP_DEFLATED,
         compresslevel=6,
     ) as export_zip:
-        for row in rows:
+        for row in complete_rows:
             gist_id = row["external_id"]
-            file_path = f"gists/{gist_id}.md"
-            export_zip.writestr(file_path, row["markdown"])
+            file_rows = content_by_revision[row["revision_id"]]
+            ordered = ordered_filenames(file_rows)
+            lead = ordered[0]
+            lead_html = (
+                file_rows[lead]["rendered_html"]
+                if file_kind(lead) == "markdown"
+                else None
+            )
+            manifest_files = []
+            for filename in ordered:
+                try:
+                    safe_filename = normalize_filename(filename)
+                except GistError as exc:
+                    raise GistError(
+                        "internal_error", "Unsafe export filename", 500
+                    ) from exc
+                if safe_filename != filename:
+                    raise GistError("internal_error", "Unsafe export filename", 500)
+                file_path = f"gists/{gist_id}/{safe_filename}"
+                if not file_path.startswith(f"gists/{gist_id}/"):
+                    raise GistError("internal_error", "Unsafe export filename", 500)
+                file_row = file_rows[filename]
+                export_zip.writestr(file_path, file_row["content"])
+                manifest_files.append(
+                    {
+                        "filename": filename,
+                        "path": file_path,
+                        "content_sha256": file_row["content_sha256"],
+                        "byte_size": file_row["byte_size"],
+                    }
+                )
             manifest_gists.append(
                 {
                     "id": gist_id,
                     "url": public_url(app, gist_id),
                     "title": row["title"],
                     "display_title": display_title(
-                        row["title"],
-                        row["rendered_html"],
-                        gist_id,
+                        row["title"], lead_html, lead, gist_id
                     ),
                     "author_name": row["author_name"],
-                    "revision_count": row["latest_revision_number"],
+                    "primary_file": lead,
+                    "snapshot_sha256": row["snapshot_sha256"],
+                    "revision_number": row["latest_revision_number"],
                     "created_at": row["created_at"],
                     "updated_at": row["updated_at"],
-                    "file": file_path,
+                    "files": manifest_files,
                 }
             )
 
         manifest = {
             "format": "waveygist-export",
-            "version": 1,
+            "manifest_version": 2,
             "exported_at": exported_at,
             "gist_count": len(manifest_gists),
             "gists": manifest_gists,
         }
         export_zip.writestr(
-            "manifest.json",
+            "wavey-gist-export.json",
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         )
-
     archive.seek(0)
     return archive, f"waveygist-export-{exported_at[:10]}.zip"
-
-
-def _history_payload(app, conn, external_id, gist_id, latest_revision_number):
-    rows = conn.execute(
-        """
-        select
-            gist_revisions.revision_number,
-            gist_revisions.created_at,
-            gist_revisions.author_name,
-            author_key.avatar_url as author_avatar_url
-        from gist_revisions
-        left join api_keys as author_key
-          on author_key.id = gist_revisions.created_by_key_id
-        where gist_id = ?
-        order by revision_number desc
-        limit 50
-        """,
-        (gist_id,),
-    ).fetchall()
-
-    history = []
-    for row in rows:
-        item = {
-            "revision_number": row["revision_number"],
-            "created_at": row["created_at"],
-            "author_name": row["author_name"],
-            "is_latest": row["revision_number"] == latest_revision_number,
-            "url": (
-                public_url(app, external_id)
-                if row["revision_number"] == latest_revision_number
-                else revision_url(app, external_id, row["revision_number"])
-            ),
-        }
-        if row["author_avatar_url"]:
-            item["author_avatar_url"] = row["author_avatar_url"]
-        history.append(item)
-
-    return history
-
-
-def get_public_render(app, external_id, revision_number=None):
-    if not validate_external_id(external_id):
-        raise GistError("not_found", "Not found", 404)
-    parsed_revision_number = (
-        parse_revision_number(revision_number) if revision_number is not None else None
-    )
-
-    with gist_connection(app) as conn:
-        if parsed_revision_number is None:
-            row = conn.execute(
-                """
-                select
-                    gists.id,
-                    gists.external_id,
-                    gists.title,
-                    gists.author_name,
-                    gists.markdown,
-                    gists.rendered_html,
-                    gists.content_sha256,
-                    gists.latest_revision_number,
-                    gists.created_at,
-                    gists.updated_at,
-                    author_key.avatar_url as author_avatar_url
-                from gists
-                join gist_revisions as latest_revision
-                  on latest_revision.gist_id = gists.id
-                 and latest_revision.revision_number = gists.latest_revision_number
-                left join api_keys as author_key
-                  on author_key.id = latest_revision.created_by_key_id
-                where external_id = ? and deleted_at is null
-                """,
-                (external_id,),
-            ).fetchone()
-            if row is None:
-                raise GistError("not_found", "Not found", 404)
-            revision_number = row["latest_revision_number"]
-        else:
-            row = conn.execute(
-                """
-                select gists.id, gists.external_id, gists.latest_revision_number,
-                       gists.created_at,
-                       gist_revisions.title, gist_revisions.author_name,
-                       gist_revisions.markdown, gist_revisions.rendered_html,
-                       gist_revisions.content_sha256,
-                       gist_revisions.created_at as updated_at,
-                       gist_revisions.revision_number,
-                       author_key.avatar_url as author_avatar_url
-                from gists
-                join gist_revisions on gist_revisions.gist_id = gists.id
-                left join api_keys as author_key
-                  on author_key.id = gist_revisions.created_by_key_id
-                where gists.external_id = ?
-                  and gists.deleted_at is null
-                  and gist_revisions.revision_number = ?
-                """,
-                (external_id, parsed_revision_number),
-            ).fetchone()
-            if row is None:
-                raise GistError("not_found", "Not found", 404)
-            revision_number = row["revision_number"]
-
-        body = {
-            "id": row["external_id"],
-            "title": row["title"],
-            "author_name": row["author_name"],
-            "markdown": row["markdown"],
-            "rendered_html": row["rendered_html"],
-            "content_sha256": row["content_sha256"],
-            "revision_number": revision_number,
-            "latest_revision_number": row["latest_revision_number"],
-            "created_at": row["created_at"],
-            "updated_at": row["updated_at"],
-            "history": _history_payload(
-                app,
-                conn,
-                row["external_id"],
-                row["id"],
-                row["latest_revision_number"],
-            ),
-        }
-        if row["author_avatar_url"]:
-            body["author_avatar_url"] = row["author_avatar_url"]
-        return body
 
 
 def patch_gist(app, key_id, author_name, external_id, payload, image_uploads=None):
     if not validate_external_id(external_id):
         raise GistError("not_found", "Not found", 404)
+    if "files" not in payload and "title" not in payload and not image_uploads:
+        raise GistError("invalid_request", "files or title is required", 400)
+    expected_digest = payload.get("expected_snapshot_sha256")
+    if not isinstance(expected_digest, str) or not SHA_RE.fullmatch(expected_digest):
+        raise GistError(
+            "invalid_request", "expected_snapshot_sha256 is required", 400
+        )
+    author_name = normalize_author_name(author_name)
     staged_images = stage_images(app, image_uploads or [])
     try:
         image_assets = plan_image_assets(app, staged_images)
-        if "markdown" not in payload and "title" not in payload and not image_assets:
-            raise GistError("invalid_request", "markdown or title is required", 400)
-        author_name = normalize_author_name(author_name)
+        with gist_connection(app) as conn:
+            current = _select_revision(conn, external_id, owner_key_id=key_id)
+            if current is None:
+                raise GistError("not_found", "Not found", 404)
+            if expected_digest != current["snapshot_sha256"]:
+                raise GistError("conflict", "Conflict", 409)
+            current_rows = _load_revision_files(conn, current["revision_id"])
 
-        expected_digest = payload.get("expected_content_sha256")
-        if expected_digest is not None and not (
-            isinstance(expected_digest, str) and SHA_RE.fullmatch(expected_digest)
-        ):
-            raise GistError("invalid_request", "expected_content_sha256 is invalid", 400)
-
-        markdown = (
-            normalize_markdown(payload["markdown"]) if "markdown" in payload else None
-        )
-
-        title = (
+        if "files" in payload:
+            next_files = _normalize_payload_files(app, payload["files"])
+            files_changed = True
+        else:
+            next_files = _normalized_from_rows(current_rows)
+            files_changed = bool(image_assets)
+        next_files = _rewrite_image_attachments(next_files, image_assets)
+        validate_file_contents(next_files, max_text_bytes=_max_text_bytes(app))
+        next_title = (
             normalize_title(payload.get("title"), present=True)
             if "title" in payload
-            else None
+            else current["title"]
         )
+        next_digest = snapshot_sha256(next_title, next_files)
+        if files_changed:
+            prepared_files = _render_files(app, next_files)
+        else:
+            prepared_files = _prepared_from_rows(current_rows)
         now = utc_now()
 
         with gist_connection(app) as conn:
-            with conn:
-                current = conn.execute(
-                    """
-                    select *
-                    from gists
-                    where external_id = ?
-                      and deleted_at is null
-                      and exists (
-                          select 1
-                          from gist_revisions
-                          where gist_revisions.gist_id = gists.id
-                            and gist_revisions.revision_number = 1
-                            and gist_revisions.created_by_key_id = ?
-                      )
-                    """,
-                    (external_id, key_id),
-                ).fetchone()
-                if current is None:
+            conn.execute("begin immediate")
+            try:
+                locked = _select_revision(conn, external_id, owner_key_id=key_id)
+                if locked is None:
                     raise GistError("not_found", "Not found", 404)
-                if (
-                    expected_digest is not None
-                    and expected_digest != current["content_sha256"]
-                ):
+                if locked["snapshot_sha256"] != expected_digest:
                     raise GistError("conflict", "Conflict", 409)
+                if next_digest == locked["snapshot_sha256"]:
+                    conn.rollback()
+                    current_body = get_gist(app, external_id, include_files=True)
+                    return current_body
 
-                next_title = title if "title" in payload else current["title"]
-                base_markdown = markdown if markdown is not None else current["markdown"]
-                next_markdown = rewrite_attachment_markdown(
-                    base_markdown,
-                    image_assets,
-                )
-                markdown_changed = markdown is not None or bool(image_assets)
-                if markdown_changed:
-                    validate_markdown(app, next_markdown)
-                    rendered = render_markdown_for_app(app, next_markdown)
-                    next_rendered_html = rendered.html
-                    next_version = rendered.version
-                    next_digest = content_sha256(next_markdown)
-                else:
-                    next_rendered_html = current["rendered_html"]
-                    next_version = current["render_version"]
-                    next_digest = current["content_sha256"]
-                next_revision_number = current["latest_revision_number"] + 1
-
+                next_revision_number = locked["latest_revision_number"] + 1
                 insert_image_assets(
                     conn,
                     app,
@@ -626,38 +863,24 @@ def patch_gist(app, key_id, author_name, external_id, payload, image_uploads=Non
                     staged_images,
                     image_assets,
                 )
+                revision_id = _insert_revision(
+                    conn,
+                    gist_id=locked["gist_id"],
+                    revision_number=next_revision_number,
+                    title=next_title,
+                    author_name=author_name,
+                    digest=next_digest,
+                    key_id=key_id,
+                    created_at=now,
+                    prepared_files=prepared_files,
+                )
                 conn.execute(
                     """
                     update gists
-                    set title = ?, author_name = ?, markdown = ?, rendered_html = ?,
-                        render_version = ?, content_sha256 = ?,
-                        latest_revision_number = ?, updated_at = ?
+                    set latest_revision_number = ?, updated_at = ?
                     where id = ?
                     """,
-                    (
-                        next_title,
-                        author_name,
-                        next_markdown,
-                        next_rendered_html,
-                        next_version,
-                        next_digest,
-                        next_revision_number,
-                        now,
-                        current["id"],
-                    ),
-                )
-                revision_id = _insert_revision(
-                    conn,
-                    current["id"],
-                    next_revision_number,
-                    next_title,
-                    author_name,
-                    next_markdown,
-                    next_rendered_html,
-                    next_version,
-                    next_digest,
-                    key_id,
-                    now,
+                    (next_revision_number, now, locked["gist_id"]),
                 )
                 enqueue_push_deliveries(
                     conn,
@@ -666,14 +889,20 @@ def patch_gist(app, key_id, author_name, external_id, payload, image_uploads=Non
                     gist_revision_id=revision_id,
                     created_at=now,
                 )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
-            row = conn.execute(
-                "select * from gists where id = ?",
-                (current["id"],),
-            ).fetchone()
-            body = _row_to_api(app, row)
+            revision = _select_revision(conn, external_id)
+            body = _revision_body(
+                app,
+                conn,
+                revision,
+                include_content=True,
+                include_rendered=False,
+            )
             if image_assets:
-                body["markdown"] = next_markdown
                 body["images"] = image_assets
             return body
     except Exception:
@@ -684,34 +913,20 @@ def patch_gist(app, key_id, author_name, external_id, payload, image_uploads=Non
 def delete_gist_created_by_key(app, key_id, external_id):
     if not validate_external_id(external_id):
         raise GistError("not_found", "Not found", 404)
-
     now = utc_now()
     with gist_connection(app) as conn:
         with conn:
             current = conn.execute(
                 """
-                select gists.id
-                from gists
-                where external_id = ?
-                  and deleted_at is null
-                  and exists (
-                      select 1
-                      from gist_revisions
-                      where gist_revisions.gist_id = gists.id
-                        and gist_revisions.revision_number = 1
-                        and gist_revisions.created_by_key_id = ?
-                  )
+                select id from gists
+                where external_id = ? and owner_key_id = ? and deleted_at is null
                 """,
                 (external_id, key_id),
             ).fetchone()
             if current is None:
                 raise GistError("not_found", "Not found", 404)
             conn.execute(
-                """
-                update gists
-                set deleted_at = ?
-                where id = ?
-                """,
+                "update gists set deleted_at = ? where id = ?",
                 (now, current["id"]),
             )
             delete_pending_deliveries_for_gist(conn, current["id"])
@@ -720,68 +935,74 @@ def delete_gist_created_by_key(app, key_id, external_id):
 def rerender_gists(app, *, external_id=None, dry_run=False):
     if external_id is not None and not validate_external_id(external_id):
         raise GistError("not_found", "Not found", 404)
-
     with gist_connection(app) as conn:
-        if external_id is None:
-            gists = conn.execute("select id, markdown from gists").fetchall()
-            revisions = conn.execute(
-                "select id, markdown from gist_revisions"
-            ).fetchall()
-        else:
-            gists = conn.execute(
-                "select id, markdown from gists where external_id = ?",
-                (external_id,),
-            ).fetchall()
-            if not gists:
-                raise GistError("not_found", "Not found", 404)
-            revisions = conn.execute(
-                """
-                select gist_revisions.id, gist_revisions.markdown
-                from gist_revisions
-                join gists on gists.id = gist_revisions.gist_id
-                where gists.external_id = ?
-                """,
-                (external_id,),
-            ).fetchall()
+        values = ()
+        where = ""
+        if external_id is not None:
+            where = "where g.external_id = ?"
+            values = (external_id,)
+        rows = conn.execute(
+            f"""
+            select f.id, f.gist_revision_id, f.filename, f.content,
+                   f.content_sha256, f.byte_size, g.id as gist_id
+            from gist_revision_files f
+            join gist_revisions r on r.id = f.gist_revision_id
+            join gists g on g.id = r.gist_id
+            {where}
+            order by f.gist_revision_id, f.filename
+            """,
+            values,
+        ).fetchall()
+        if external_id is not None and not rows:
+            raise GistError("not_found", "Not found", 404)
 
-        rendered_gists = []
-        for row in gists:
-            rendered = render_markdown_for_app(app, row["markdown"])
-            rendered_gists.append((row["id"], rendered.html, rendered.version))
-
-        rendered_revisions = []
-        for row in revisions:
-            rendered = render_markdown_for_app(app, row["markdown"])
-            rendered_revisions.append((row["id"], rendered.html, rendered.version))
+        updates = []
+        gist_ids = set()
+        revision_count = 0
+        current_revision_id = None
+        budget = None
+        for row in rows:
+            gist_ids.add(row["gist_id"])
+            if row["gist_revision_id"] != current_revision_id:
+                current_revision_id = row["gist_revision_id"]
+                revision_count += 1
+                budget = HighlightBudget()
+            encoded = row["content"].encode("utf-8")
+            if len(encoded) != row["byte_size"] or content_sha256(
+                row["content"]
+            ) != row["content_sha256"]:
+                raise GistError("database_corrupt", "Stored file digest mismatch", 500)
+            kind = file_kind(row["filename"])
+            if kind == "markdown":
+                rendered = render_markdown_result(
+                    row["content"],
+                    allowed_image_src_prefixes=(_image_prefix(app),),
+                    highlight_budget=budget,
+                )
+            elif kind == "source":
+                rendered = render_source_result(
+                    row["content"],
+                    file_language(row["filename"]) or "text",
+                    highlight_budget=budget,
+                )
+            else:
+                rendered = render_plain_text_result(row["content"])
+            updates.append((rendered.html, rendered.version, row["id"]))
 
         if not dry_run:
             with conn:
                 conn.executemany(
                     """
-                    update gists
+                    update gist_revision_files
                     set rendered_html = ?, render_version = ?
                     where id = ?
                     """,
-                    [
-                        (rendered_html, version, row_id)
-                        for row_id, rendered_html, version in rendered_gists
-                    ],
+                    updates,
                 )
-                conn.executemany(
-                    """
-                    update gist_revisions
-                    set rendered_html = ?, render_version = ?
-                    where id = ?
-                    """,
-                    [
-                        (rendered_html, version, row_id)
-                        for row_id, rendered_html, version in rendered_revisions
-                    ],
-                )
-
     return {
         "dry_run": dry_run,
-        "gists": len(rendered_gists),
-        "revisions": len(rendered_revisions),
-        "render_version": render_version_for_app(app),
+        "gists": len(gist_ids),
+        "files": len(updates),
+        "revisions": revision_count,
+        "render_version": render_version(),
     }
