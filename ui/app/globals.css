@@ -1904,7 +1904,7 @@ button.gist-file-action {
   font-family:
     ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono,
     monospace;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
   white-space: pre;
 }
@@ -2336,13 +2336,21 @@ button.gist-file-action {
     padding: 18px 16px 22px;
   }
 
+  .gist-code-view {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .gist-line-numbers {
-    position: static;
-    min-width: 34px;
-    padding: 10px 5px;
+    display: none;
+  }
+
+  .gist-code-content,
+  .gist-code-content pre {
+    font-size: 14px;
   }
 
   .gist-code-content {
+    grid-column: 1;
     padding: 10px;
   }
 
