@@ -1904,7 +1904,7 @@ button.gist-file-action {
   font-family:
     ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono,
     monospace;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.55;
   white-space: pre;
 }
@@ -1913,11 +1913,10 @@ button.gist-file-action {
   position: sticky;
   z-index: 1;
   left: 0;
-  min-width: 38px;
-  border-right: 1px solid var(--border);
-  background: var(--button-bg-active);
+  min-width: calc(2ch + 6px);
+  background: var(--page-bg);
   color: var(--subtle-fg);
-  padding: 12px 6px;
+  padding: 12px 4px 12px 2px;
   text-align: right;
   user-select: none;
 }
@@ -1945,6 +1944,7 @@ button.gist-file-action {
   margin: 0;
   padding: 0;
   border-radius: 0;
+  font: inherit;
 }
 
 .raw-viewer {
@@ -2342,11 +2342,6 @@ button.gist-file-action {
 
   .gist-line-numbers {
     display: none;
-  }
-
-  .gist-code-content,
-  .gist-code-content pre {
-    font-size: 14px;
   }
 
   .gist-code-content {
