@@ -1,8 +1,7 @@
 "use client";
 
 import type { KeyboardEvent, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { MyGistItem } from "../lib/auth";
 import {
@@ -14,6 +13,7 @@ import { DeleteGistButton } from "./DeleteGistButton";
 import { LocalTimestamp } from "./LocalTimestamp";
 
 const ITEMS_PER_PAGE = 20;
+const ACTIVE_TAB_STORAGE_KEY = "waveygist:home-tab:v1";
 const GITHUB_LOGIN_RE =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 
@@ -42,6 +42,27 @@ type ListItem = {
   dateLabel: "viewed" | "updated" | "created";
   action?: ReactNode;
 };
+
+function readActiveTab(): TabId {
+  if (typeof window === "undefined") {
+    return "recent";
+  }
+  try {
+    return window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) === "mine"
+      ? "mine"
+      : "recent";
+  } catch {
+    return "recent";
+  }
+}
+
+function saveActiveTab(tab: TabId) {
+  try {
+    window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab);
+  } catch {
+    // Browsers can reject localStorage writes; this preference is best effort.
+  }
+}
 
 function displayTitle(
   preferredTitle: string | null | undefined,
@@ -249,7 +270,6 @@ export function GistHistoryTabs({
   isAuthenticated
 }: GistHistoryTabsProps) {
   const router = useRouter();
-  const [isRefreshing, startRefresh] = useTransition();
   const [activeTab, setActiveTab] = useState<TabId>("recent");
   const [myGistSort, setMyGistSort] = useState<MyGistSort>("updated");
   const [recentGists, setRecentGists] = useState<RecentGistItem[] | null>(null);
@@ -260,12 +280,11 @@ export function GistHistoryTabs({
 
   const refreshGists = useCallback(() => {
     setRecentGists(readRecentlyViewedGists());
-    startRefresh(() => {
-      router.refresh();
-    });
+    router.refresh();
   }, [router]);
 
   useEffect(() => {
+    setActiveTab(readActiveTab());
     setRecentGists(readRecentlyViewedGists());
 
     function handleStorage(event: StorageEvent) {
@@ -274,6 +293,9 @@ export function GistHistoryTabs({
         event.key === null
       ) {
         setRecentGists(readRecentlyViewedGists());
+      }
+      if (event.key === ACTIVE_TAB_STORAGE_KEY || event.key === null) {
+        setActiveTab(readActiveTab());
       }
     }
 
@@ -320,12 +342,17 @@ export function GistHistoryTabs({
     setPages((current) => ({ ...current, mine: 0 }));
   }
 
+  function selectTab(tab: TabId) {
+    setActiveTab(tab);
+    saveActiveTab(tab);
+  }
+
   function selectTabFromKeyboard(
     event: KeyboardEvent<HTMLButtonElement>,
     nextTab: TabId
   ) {
     event.preventDefault();
-    setActiveTab(nextTab);
+    selectTab(nextTab);
     document.getElementById(`gist-${nextTab}-tab`)?.focus();
   }
 
@@ -381,7 +408,7 @@ export function GistHistoryTabs({
             aria-selected={activeTab === "recent"}
             aria-controls="gist-recent-panel"
             tabIndex={activeTab === "recent" ? 0 : -1}
-            onClick={() => setActiveTab("recent")}
+            onClick={() => selectTab("recent")}
             onKeyDown={handleTabKeyDown}
           >
             RECENTLY VIEWED
@@ -397,23 +424,12 @@ export function GistHistoryTabs({
             aria-selected={activeTab === "mine"}
             aria-controls="gist-mine-panel"
             tabIndex={activeTab === "mine" ? 0 : -1}
-            onClick={() => setActiveTab("mine")}
+            onClick={() => selectTab("mine")}
             onKeyDown={handleTabKeyDown}
           >
             MY GISTS
           </button>
         </div>
-        <button
-          type="button"
-          className="icon-button gist-refresh-button"
-          aria-label={isRefreshing ? "Refreshing gists" : "Refresh gists"}
-          aria-busy={isRefreshing}
-          title="Refresh"
-          disabled={isRefreshing}
-          onClick={refreshGists}
-        >
-          <RefreshCw aria-hidden="true" size={15} strokeWidth={1.9} />
-        </button>
       </div>
 
       {activeTab === "recent" ? (

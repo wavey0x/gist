@@ -161,6 +161,37 @@ def test_read_json_is_public_and_reads_requested_revision(
     assert output == response
 
 
+def test_read_summary_json_omits_file_content(monkeypatch, capsys):
+    response = _gist_payload()
+
+    def handler(_url, **_kwargs):
+        return _json_bytes(response), "application/json"
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        ["--read", "--gist", GIST_ID, "--summary-json"],
+        handler,
+        stdin="",
+    )
+
+    assert result == 0
+    summary = json.loads(output)
+    assert summary == publish_gist.summary_json_manifest(response)
+    assert summary["url"] == GIST_URL
+    assert summary["revision_number"] == 2
+    assert summary["snapshot_sha256"] == response["snapshot_sha256"]
+    assert summary["files"]["README.md"] == {
+        "filename": "README.md",
+        "content_sha256": response["files"]["README.md"]["content_sha256"],
+        "byte_size": response["files"]["README.md"]["byte_size"],
+        "raw_url": response["files"]["README.md"]["raw_url"],
+    }
+    assert all("content" not in file for file in summary["files"].values())
+    assert "history" not in summary
+    assert error == ""
+
+
 def test_read_without_json_prints_only_primary_file(monkeypatch, capsys):
     def handler(_url, **_kwargs):
         return _json_bytes(_gist_payload()), "application/json"
@@ -176,6 +207,18 @@ def test_read_without_json_prints_only_primary_file(monkeypatch, capsys):
     assert result == 0
     assert output == FILES["README.md"]
     assert error == ""
+
+
+@pytest.mark.parametrize(
+    ("filenames", "primary"),
+    [
+        (["z.py", "README.md", "a.md"], "README.md"),
+        (["z.py", "guide.markdown", "a.md"], "a.md"),
+        (["z.py", "a.txt"], "a.txt"),
+    ],
+)
+def test_primary_file_selection_is_deterministic(filenames, primary):
+    assert publish_gist.ordered_filenames(dict.fromkeys(filenames))[0] == primary
 
 
 def test_read_output_dir_materializes_every_file(monkeypatch, capsys, tmp_path):
@@ -228,13 +271,13 @@ def test_create_sends_multi_file_snapshot(monkeypatch, capsys, tmp_path):
             str(script),
             "--title",
             "Plan",
-            "--json",
+            "--summary-json",
         ],
         handler,
     )
 
     assert result == 0
-    assert json.loads(output) == response
+    assert json.loads(output) == publish_gist.summary_json_manifest(response)
     assert error == ""
 
 
@@ -589,6 +632,7 @@ def test_output_dir_must_be_empty(tmp_path):
         ["--clear-title"],
         ["--delete-file", "README.md"],
         ["--output-dir", "out"],
+        ["--json", "--summary-json"],
         ["--check-key", "--json"],
         ["--title", "one", "--clear-title", "--gist", GIST_ID],
     ],

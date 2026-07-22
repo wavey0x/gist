@@ -945,41 +945,6 @@ button {
   line-height: 1.4;
 }
 
-.gist-refresh-button {
-  grid-column: 3;
-  justify-self: end;
-  width: 28px;
-  height: 28px;
-  border: 0;
-  background: transparent;
-  color: var(--muted-fg);
-}
-
-.gist-refresh-button:hover:not(:disabled) {
-  color: var(--page-fg);
-}
-
-.gist-refresh-button:disabled {
-  cursor: wait;
-  opacity: 0.7;
-}
-
-.gist-refresh-button[aria-busy="true"] svg {
-  animation: gist-refresh-spin 700ms linear infinite;
-}
-
-@keyframes gist-refresh-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .gist-refresh-button[aria-busy="true"] svg {
-    animation: none;
-  }
-}
-
 .gist-list {
   display: grid;
   gap: 0;
@@ -1923,6 +1888,7 @@ button.gist-file-action {
   min-width: 0;
   max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior-inline: contain;
   contain: inline-size;
   background: var(--page-bg);
@@ -1964,15 +1930,21 @@ button.gist-file-action {
   color: var(--page-fg);
 }
 
-.gist-code-content .highlight,
-.gist-code-content .highlight pre {
+.markdown-body.gist-code-content .highlight,
+.markdown-body.gist-code-content .highlight pre {
   max-width: none;
   overflow: visible;
+  background: transparent;
 }
 
-.gist-code-content .highlight pre {
-  margin-bottom: 0;
+.markdown-body.gist-code-content .highlight {
+  margin: 0;
+}
+
+.markdown-body.gist-code-content .highlight pre {
+  margin: 0;
   padding: 0;
+  border-radius: 0;
 }
 
 .raw-viewer {
@@ -2365,6 +2337,7 @@ button.gist-file-action {
   }
 
   .gist-line-numbers {
+    position: static;
     min-width: 34px;
     padding: 10px 5px;
   }

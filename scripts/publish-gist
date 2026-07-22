@@ -476,6 +476,40 @@ def response_files(data: dict) -> dict[str, str]:
     }
 
 
+def summary_json_manifest(data: dict) -> dict:
+    manifest = {
+        field: data[field]
+        for field in (
+            "id",
+            "url",
+            "title",
+            "display_title",
+            "author_name",
+            "primary_file",
+            "snapshot_sha256",
+            "revision_number",
+            "latest_revision_number",
+            "created_at",
+            "updated_at",
+        )
+        if field in data
+    }
+    manifest["files"] = {}
+    for filename in ordered_filenames(data["files"]):
+        source = data["files"][filename]
+        file_manifest = {
+            field: source[field]
+            for field in (
+                "filename",
+                "content_sha256",
+                "byte_size",
+                "raw_url",
+            )
+        }
+        manifest["files"][filename] = file_manifest
+    return manifest
+
+
 def materialize_files(data: dict, output_dir: str) -> None:
     directory = Path(output_dir)
     if directory.exists():
@@ -578,7 +612,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--file",
         action="append",
-        help="publish this UTF-8 text file; repeat for multiple files",
+        help="publish this UTF-8 text file under its basename; repeat as needed",
     )
     parser.add_argument(
         "--stdin-name",
@@ -624,6 +658,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print the complete API representation as JSON",
     )
+    parser.add_argument(
+        "--summary-json",
+        action="store_true",
+        help="print a summary JSON manifest without file text",
+    )
     return parser
 
 
@@ -632,6 +671,8 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise CliError("--title and --clear-title cannot be combined.")
     if args.file and args.stdin_name != "README.md":
         raise CliError("--stdin-name is valid only when reading from stdin.")
+    if args.json and args.summary_json:
+        raise CliError("--json and --summary-json cannot be combined.")
 
     if args.check_key:
         if any(
@@ -645,6 +686,7 @@ def _validate_args(args: argparse.Namespace) -> None:
                 args.output_dir,
                 args.verify,
                 args.json,
+                args.summary_json,
             )
         ):
             raise CliError("--check-key cannot be combined with another operation.")
@@ -734,6 +776,14 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         if args.json:
             print(json.dumps(data, ensure_ascii=False, sort_keys=True))
+        elif args.summary_json:
+            print(
+                json.dumps(
+                    summary_json_manifest(data),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
         elif not args.output_dir:
             sys.stdout.write(data["files"][data["primary_file"]]["content"])
         return 0
@@ -848,6 +898,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.json:
         print(json.dumps(published, ensure_ascii=False, sort_keys=True))
+    elif args.summary_json:
+        print(
+            json.dumps(
+                summary_json_manifest(published),
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
     else:
         print(published["url"])
     return 0

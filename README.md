@@ -100,13 +100,15 @@ third-party Python dependencies:
 
 ```sh
 export WAVEY_GIST_API_KEY=<api_key>
-scripts/publish-gist --file README.md --file example.py --verify --json
+scripts/publish-gist --file README.md --file example.py --verify --summary-json
 ```
 
-Read a public gist as JSON, or materialize all its files:
+Read a public gist as complete JSON, request a summary manifest, or materialize
+all its files:
 
 ```sh
 scripts/publish-gist --read --gist <url-or-id> --json
+scripts/publish-gist --read --gist <url-or-id> --summary-json
 scripts/publish-gist --read --gist <url-or-id> --output-dir <empty-dir>
 ```
 
@@ -119,19 +121,25 @@ scripts/publish-gist \
   --file README.md \
   --file example.py \
   --verify \
-  --json
+  --summary-json
 ```
 
+Each `--file` path is published under its basename; basename collisions are
+rejected. The primary file is exact `README.md` when present, otherwise the
+first Markdown filename alphabetically, otherwise the first filename
+alphabetically.
+
 Use repeated `--delete-file <filename>` options to remove files. `--json`
-returns the complete API representation. `--verify` checks every exact raw
-file, the snapshot digest, public render payload, and rendered page. If
-verification fails after the API accepted the write, the command exits nonzero
-and identifies the already-created revision; inspect it before taking further
-action.
+returns the complete API representation, including file text. `--summary-json`
+returns URL, revision, snapshot, and file metadata without file text or
+rendered HTML. `--verify` checks every exact raw file, the snapshot digest,
+public render payload, and rendered page. If verification fails after the API
+accepted the write, the command exits nonzero and identifies the already-created
+revision; inspect it before taking further action.
 
 Supported helper options include `--file`, `--stdin-name`, `--delete-file`,
 `--title`, `--clear-title`, `--gist`, `--read`, `--output-dir`, `--verify`,
-`--json`, `--api-base-url`, and `--check-key`. It uses
+`--json`, `--summary-json`, `--api-base-url`, and `--check-key`. It uses
 `WAVEY_GIST_API_BASE_URL` to override the default API origin. Credential lookup
 checks `WAVEY_GIST_API_KEY`, then the file named by `WAVEY_GIST_ENV_FILE`
 (default `~/.config/wavey/gist.env`), then the existing macOS Keychain service.
@@ -256,8 +264,13 @@ Authorization: Bearer <api_key>
 
 `POST /api/v1/gists` and `PATCH /api/v1/gists/{gist_id}` accept JSON with a
 `files` object keyed by flat filename. Each value is an object containing
-`content`. PATCH treats a supplied `files` object as the complete replacement
-snapshot and requires the current `expected_snapshot_sha256`.
+`content`.
+
+**Important:** Direct API PATCH and helper updates intentionally differ. A
+direct PATCH treats a supplied `files` object as the complete replacement
+snapshot and requires the current `expected_snapshot_sha256`. The helper first
+reads the latest snapshot, overlays supplied basenames, and then submits the
+resolved complete snapshot.
 
 For image uploads, send `multipart/form-data` with exactly one `payload` field
 containing that JSON object plus repeated `images[]` file fields. Markdown

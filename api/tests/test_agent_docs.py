@@ -29,12 +29,16 @@ def test_llms_text_teaches_current_agent_safe_workflow():
     assert "--file README.md --file example.py" in text
     assert "--delete-file <filename>" in text
     assert "--output-dir <empty-dir>" in text
+    assert "--summary-json" in text
     assert "--verify" in text
     assert "already-created revision" in text
     assert "WAVEY_GIST_API_KEY" in text
     assert "snapshot_sha256" in text
     assert "expected_snapshot_sha256" in text
     assert "complete replacement snapshot" in text
+    assert "not an overlay" in text
+    assert "published under its basename" in text
+    assert "first Markdown filename alphabetically" in text
     assert "repeated `images[]`" in text
     assert "base62 strings containing 16–64 ASCII letters or digits" in text
     assert "https://gist.wavey.info/{gist_id}/raw/{filename}" in text

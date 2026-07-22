@@ -147,8 +147,11 @@ combined. Filenames are at most 255 UTF-8 bytes and reject separators, dot
 segments, surrounding whitespace, control/format characters, and case-fold
 collisions.
 
-PATCH requires `expected_snapshot_sha256` even for title-only updates. A
-supplied `files` object is the complete replacement snapshot; omitting it keeps
-the current files. Public latest and historical render responses include the
-exact revision's `snapshot_sha256` and per-file digests, raw URLs, content,
-kind, language, and sanitized rendered HTML.
+The primary file is exact `README.md` when present, otherwise the first
+Markdown filename alphabetically, otherwise the first filename alphabetically.
+
+Direct PATCH requires `expected_snapshot_sha256` even for title-only updates.
+A supplied `files` object is the complete replacement snapshot, not an overlay;
+omitting it keeps the current files. Public latest and historical render
+responses include the exact revision's `snapshot_sha256` and per-file digests,
+raw URLs, content, kind, language, and sanitized rendered HTML.
