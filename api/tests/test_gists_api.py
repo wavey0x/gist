@@ -335,6 +335,55 @@ def test_source_and_plain_files_are_safely_rendered_under_one_highlight_budget(
     assert "&lt;script&gt;" in rendered["files"]["notes.log"]["rendered_html"]
 
 
+def test_multifile_highlighting_uses_one_snapshot_time_budget(
+    client, app, monkeypatch
+):
+    clock = iter([100.0, 101.0, 109.0])
+
+    def monotonic():
+        return next(clock, 109.0)
+
+    calls = []
+
+    def highlight_payload(blocks, *, timeout_seconds=None):
+        calls.append((blocks, timeout_seconds))
+        return {
+            block["index"]: {
+                "index": block["index"],
+                "ok": True,
+                "scope": "source.python",
+                "html": '<span class="pl-k">pass</span>\n',
+            }
+            for block in blocks
+        }, False
+
+    monkeypatch.setattr(markdown_module.time, "monotonic", monotonic)
+    monkeypatch.setattr(markdown_module, "HIGHLIGHT_TIMEOUT_SECONDS", 8.0)
+    monkeypatch.setattr(markdown_module, "_highlight_payload", highlight_payload)
+    key = make_key(app)
+    created = client.post(
+        "/api/v1/gists",
+        headers=auth_header(key),
+        json={
+            "files": {
+                "a.py": {"content": "pass\n"},
+                "b.py": {"content": "pass\n"},
+                "c.py": {"content": "pass\n"},
+            }
+        },
+    )
+
+    assert created.status_code == 201
+    assert len(calls) == 1
+    assert calls[0][1] == 7.0
+    rendered = client.get(
+        f"/api/v1/gists/{created.get_json()['id']}/render"
+    ).get_json()
+    assert 'class="highlight ' in rendered["files"]["a.py"]["rendered_html"]
+    assert 'class="language-python"' in rendered["files"]["b.py"]["rendered_html"]
+    assert 'class="language-python"' in rendered["files"]["c.py"]["rendered_html"]
+
+
 def test_configured_external_id_length_create_render_patch_and_delete(tmp_path):
     configured_app = create_app(
         {

@@ -179,7 +179,7 @@ Backend environment variables:
 | `SQLITE_BUSY_TIMEOUT_MS` | `5000` | SQLite busy timeout. |
 | `API_WRITE_LIMIT_PER_24H` | `150` | Write limit per key and source IP. |
 | `API_AUTH_FAILURE_LIMIT_PER_MINUTE` | `20` | Auth failure limit per source IP. |
-| `GIST_HIGHLIGHT_TIMEOUT_SECONDS` | `8` | Syntax highlighter subprocess timeout. |
+| `GIST_HIGHLIGHT_TIMEOUT_SECONDS` | `2` | Total syntax-highlighting time budget for one gist snapshot. |
 | `GIST_MAX_HIGHLIGHT_BLOCK_BYTES` | `204800` | Maximum bytes for one highlighted code block. |
 | `GIST_MAX_HIGHLIGHT_BLOCKS` | `64` | Maximum highlighted code blocks per render. |
 | `GIST_MAX_HIGHLIGHT_TOTAL_BYTES` | `524288` | Maximum total highlighted code bytes per render. |

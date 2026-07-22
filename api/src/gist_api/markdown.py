@@ -6,6 +6,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -26,7 +27,7 @@ HIGHLIGHT_GRAMMAR_SET = "all"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-HIGHLIGHT_TIMEOUT_SECONDS = float(os.getenv("GIST_HIGHLIGHT_TIMEOUT_SECONDS", "8"))
+HIGHLIGHT_TIMEOUT_SECONDS = float(os.getenv("GIST_HIGHLIGHT_TIMEOUT_SECONDS", "2"))
 MAX_HIGHLIGHT_BLOCK_BYTES = int(
     os.getenv("GIST_MAX_HIGHLIGHT_BLOCK_BYTES", str(200 * 1024))
 )
@@ -158,12 +159,15 @@ class RenderedMarkdown:
 class HighlightBudget:
     blocks_remaining: int | None = None
     bytes_remaining: int | None = None
+    deadline: float | None = None
 
     def __post_init__(self):
         if self.blocks_remaining is None:
             self.blocks_remaining = MAX_HIGHLIGHT_BLOCKS
         if self.bytes_remaining is None:
             self.bytes_remaining = MAX_HIGHLIGHT_TOTAL_BYTES
+        if self.deadline is None:
+            self.deadline = time.monotonic() + HIGHLIGHT_TIMEOUT_SECONDS
 
     def reserve(self, byte_count):
         if self.blocks_remaining <= 0 or byte_count > self.bytes_remaining:
@@ -171,6 +175,9 @@ class HighlightBudget:
         self.blocks_remaining -= 1
         self.bytes_remaining -= byte_count
         return True
+
+    def remaining_seconds(self):
+        return max(0.0, self.deadline - time.monotonic())
 
 
 @dataclass(frozen=True)
@@ -797,7 +804,7 @@ def _scope_to_highlight_class(scope):
     return f"highlight-{safe_scope.replace('.', '-')}"
 
 
-def _highlight_payload(blocks):
+def _highlight_payload(blocks, *, timeout_seconds=None):
     node_binary = _node_binary()
     if node_binary is None:
         logger.warning(
@@ -806,6 +813,7 @@ def _highlight_payload(blocks):
         )
         return {}, True
 
+    timeout = HIGHLIGHT_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
     process = subprocess.run(
         [node_binary, str(HIGHLIGHT_SCRIPT)],
         cwd=str(REPO_ROOT),
@@ -817,7 +825,7 @@ def _highlight_payload(blocks):
         ),
         text=True,
         capture_output=True,
-        timeout=HIGHLIGHT_TIMEOUT_SECONDS,
+        timeout=timeout,
         check=False,
     )
     if process.returncode != 0:
@@ -889,15 +897,25 @@ def _highlight_blocks(
     stats.candidates = len(candidates)
 
     highlighted = {}
+    time_remaining = budget.remaining_seconds() if candidates else 0.0
     if candidates and not HIGHLIGHT_SCRIPT.exists():
         stats.degraded = True
         logger.warning(
             "Gist code highlighting failed",
             extra={"reason": "highlight_script_missing"},
         )
+    elif candidates and time_remaining <= 0:
+        stats.degraded = True
+        logger.info(
+            "Skipping gist code highlighting",
+            extra={"reason": "highlight_time_budget_exceeded"},
+        )
     elif candidates:
         try:
-            highlighted, degraded = _highlight_payload(candidates)
+            highlighted, degraded = _highlight_payload(
+                candidates,
+                timeout_seconds=time_remaining,
+            )
             stats.degraded = stats.degraded or degraded
         except (
             OSError,
@@ -1092,10 +1110,13 @@ def render_source_result(content, language, *, highlight_budget=None):
     byte_count = len(content.encode("utf-8"))
     item = None
     degraded = False
-    if byte_count <= MAX_HIGHLIGHT_BLOCK_BYTES and budget.reserve(byte_count):
+    reserved = byte_count <= MAX_HIGHLIGHT_BLOCK_BYTES and budget.reserve(byte_count)
+    time_remaining = budget.remaining_seconds() if reserved else 0.0
+    if reserved and time_remaining > 0:
         try:
             highlighted, degraded = _highlight_payload(
-                [{"index": 0, "language": language, "code": content}]
+                [{"index": 0, "language": language, "code": content}],
+                timeout_seconds=time_remaining,
             )
             item = highlighted.get(0)
         except (
