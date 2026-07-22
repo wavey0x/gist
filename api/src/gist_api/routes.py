@@ -41,6 +41,12 @@ CREATE_GIST_FIELDS = frozenset({"title", "files"})
 UPDATE_GIST_FIELDS = frozenset(
     {"title", "files", "expected_snapshot_sha256"}
 )
+LEGACY_GIST_FIELDS = frozenset({"markdown", "expected_content_sha256"})
+LEGACY_GIST_REQUEST_MESSAGE = (
+    "Legacy gist fields are no longer supported. Send a files snapshot and "
+    "include expected_snapshot_sha256 for updates. See "
+    "https://gist.wavey.info/llms.txt."
+)
 TRUSTED_PROXY_REMOTES = {
     str(ip_address(value))
     for value in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
@@ -85,7 +91,17 @@ def _validate_fields(values, allowed_fields):
         )
 
 
-def parse_json_body(allowed_fields):
+def _validate_gist_fields(values, allowed_fields):
+    if set(values.keys()) & LEGACY_GIST_FIELDS:
+        raise GistError(
+            "invalid_request",
+            LEGACY_GIST_REQUEST_MESSAGE,
+            400,
+        )
+    _validate_fields(values, allowed_fields)
+
+
+def parse_json_body(allowed_fields, *, gist_payload=False):
     max_bytes = current_app.config.get("MAX_REQUEST_BYTES", 1048576 + 2048)
     if request.content_length is not None and request.content_length > max_bytes:
         raise GistError("payload_too_large", "Payload too large", 413)
@@ -94,7 +110,10 @@ def parse_json_body(allowed_fields):
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         raise GistError("invalid_request", "JSON object required", 400)
-    _validate_fields(data, allowed_fields)
+    if gist_payload:
+        _validate_gist_fields(data, allowed_fields)
+    else:
+        _validate_fields(data, allowed_fields)
     return data
 
 
@@ -130,7 +149,7 @@ def parse_multipart_gist_body(allowed_fields):
         raise GistError("invalid_request", "payload must be valid JSON", 400) from exc
     if not isinstance(payload, dict):
         raise GistError("invalid_request", "payload must be a JSON object", 400)
-    _validate_fields(payload, allowed_fields)
+    _validate_gist_fields(payload, allowed_fields)
     image_uploads = request.files.getlist("images[]")
     return payload, image_uploads
 
@@ -138,7 +157,7 @@ def parse_multipart_gist_body(allowed_fields):
 def parse_gist_body(allowed_fields):
     if request.mimetype == "multipart/form-data":
         return parse_multipart_gist_body(allowed_fields)
-    return parse_json_body(allowed_fields), []
+    return parse_json_body(allowed_fields, gist_payload=True), []
 
 
 def require_gist_auth():

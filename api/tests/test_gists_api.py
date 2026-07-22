@@ -929,6 +929,55 @@ def test_gist_routes_reject_unknown_and_route_inappropriate_json_fields(
         assert "unknown field" in response.get_json()["error"]["message"]
 
 
+def test_gist_routes_explain_legacy_fields_without_writing(client, app):
+    key = make_key(app)
+    created = create_gist(client, key, "# Existing").get_json()
+    gist_url = f"/api/v1/gists/{created['id']}"
+
+    legacy_create = client.post(
+        "/api/v1/gists",
+        headers=auth_header(key),
+        json={"markdown": "# Legacy create"},
+    )
+    legacy_update = client.patch(
+        gist_url,
+        headers=auth_header(key),
+        json={
+            "title": "Legacy update",
+            "expected_content_sha256": created["files"]["README.md"][
+                "content_sha256"
+            ],
+        },
+    )
+    legacy_multipart_update = client.patch(
+        gist_url,
+        headers=auth_header(key),
+        data={"payload": json.dumps({"markdown": "# Legacy multipart"})},
+        content_type="multipart/form-data",
+    )
+
+    expected_error = {
+        "code": "invalid_request",
+        "message": (
+            "Legacy gist fields are no longer supported. Send a files snapshot "
+            "and include expected_snapshot_sha256 for updates. See "
+            "https://gist.wavey.info/llms.txt."
+        ),
+    }
+    for response in (legacy_create, legacy_update, legacy_multipart_update):
+        assert response.status_code == 400
+        assert response.get_json()["error"] == expected_error
+
+    with gist_connection(app) as conn:
+        assert conn.execute("select count(*) from gists").fetchone()[0] == 1
+        assert conn.execute("select count(*) from gist_revisions").fetchone()[0] == 1
+
+    current = client.get(f"{gist_url}/render").get_json()
+    assert current["revision_number"] == 1
+    assert current["title"] == created["title"]
+    assert current["files"]["README.md"]["content"] == "# Existing"
+
+
 def test_multipart_gist_requires_exactly_one_json_payload(client, app):
     key = make_key(app)
 
