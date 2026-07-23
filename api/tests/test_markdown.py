@@ -183,6 +183,95 @@ def test_markdown_rendering_strips_user_supplied_mermaid_hook_classes():
     assert "pl-ent" in html
 
 
+def test_markdown_rendering_enriches_inline_and_block_math():
+    result = render_markdown_result(
+        r"""
+The resulting \(2.35443 \times 10^{38}\) unbacked yETH.
+
+\[
+\sum_{i=1}^{n} i = \frac{n(n+1)}{2}
+\]
+"""
+    )
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+
+    inline = root.xpath(
+        './/span[contains(concat(" ", @class, " "), " math-inline ")]'
+    )
+    display = root.xpath(
+        './/span[contains(concat(" ", @class, " "), " math-display ")]'
+    )
+
+    assert len(inline) == 1
+    assert len(display) == 1
+    assert inline[0].xpath(
+        './span[contains(concat(" ", @class, " "), " math-render-fallback ")]'
+    )[0].text == r"\(2.35443 \times 10^{38}\)"
+    assert r"\sum_{i=1}^{n} i = \frac{n(n+1)}{2}" in display[0].text_content()
+    assert "WAVEYGISTMATHTOKEN" not in result.html
+    assert "math-enrichment/" in result.version
+
+
+def test_markdown_rendering_keeps_math_literal_in_code_and_ignores_dollars():
+    result = render_markdown_result(
+        r"""
+Inline code `\(x^2\)` remains literal.
+
+```text
+\[
+x^2
+\]
+```
+
+Dollar values $43.1 million, $9.695 million, and $9.577 million stay plain.
+
+Malformed \(x stays plain.
+
+An opener inside code `\(not math` does not pair with this closer \).
+
+An opener before `inline code` cannot close across it: \(not `math` either\).
+
+```text
+\[not math
+```
+
+This closer is outside the fence: \].
+"""
+    )
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+    inline_code = root.xpath(".//p/code")
+    code_block = root.xpath(".//pre/code")
+
+    assert len(inline_code) == 4
+    assert inline_code[0].text_content() == r"\(x^2\)"
+    assert inline_code[1].text_content() == r"\(not math"
+    assert inline_code[2].text_content() == "inline code"
+    assert inline_code[3].text_content() == "math"
+    assert len(code_block) == 2
+    assert code_block[0].text_content() == "\\[\nx^2\n\\]\n"
+    assert code_block[1].text_content() == "\\[not math\n"
+    assert "$43.1 million" in result.html
+    assert "$9.695 million" in result.html
+    assert "$9.577 million" in result.html
+    assert "Malformed (x stays plain." in result.html
+    assert "not math" in result.html
+    assert "math-render" not in result.html
+
+
+def test_markdown_rendering_does_not_allow_user_math_hook_classes():
+    result = render_markdown_result(
+        '<span class="math-render js-math-render math-inline">'
+        '<span class="math-render-fallback">not math</span>'
+        '<span class="math-render-output">forged</span>'
+        "</span>"
+    )
+
+    assert "math-render" not in result.html
+    assert "js-math-render" not in result.html
+    assert "math-inline" not in result.html
+    assert "forged" in result.html
+
+
 def test_markdown_rendering_drops_images_without_allowed_prefix():
     markdown = (
         "![tracked](https://tracker.example/pixel.png)\n"

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "github-markdown-css/github-markdown.css";
+import "katex/dist/katex.min.css";
 import { AppHeader } from "../components/AppHeader";
 import "./markdown-theme.css";
 import "./globals.css";

@@ -23,6 +23,7 @@ SANITIZER_CONFIG_VERSION = "2026-07-08.2"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
 ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.3"
 MERMAID_RENDER_VERSION = "2026-07-08.2"
+MATH_RENDER_VERSION = "2026-07-23.1"
 HIGHLIGHT_GRAMMAR_SET = "all"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -147,6 +148,7 @@ FENCE_OPEN_RE = re.compile(
     r"^(?P<indent> {0,3})(?P<fence>`{3,}|~{3,})(?P<info>[^\r\n]*)(?P<line_end>\r?\n?)$"
 )
 MERMAID_PLACEHOLDER_PREFIX = "wavey-gist-mermaid-placeholder-"
+MATH_PLACEHOLDER_PREFIX = "WAVEYGISTMATHTOKEN"
 
 
 @dataclass(frozen=True)
@@ -191,6 +193,20 @@ class EthereumEntityTextMatch:
     start: int
     end: int
     entity: EthereumEntity
+
+
+@dataclass(frozen=True)
+class MathExpression:
+    token: str
+    source: str
+    display_mode: bool
+
+    @property
+    def original(self):
+        opener, closer = (
+            (r"\[", r"\]") if self.display_mode else (r"\(", r"\)")
+        )
+        return f"{opener}{self.source}{closer}"
 
 
 @dataclass
@@ -249,6 +265,190 @@ def _render_gfm(markdown):
         markdown,
         options=Options.CMARK_OPT_UNSAFE,
     )
+
+
+def _find_unescaped(value, needle, start):
+    index = value.find(needle, start)
+    while index >= 0:
+        preceding_backslashes = 0
+        cursor = index - 1
+        while cursor >= 0 and value[cursor] == "\\":
+            preceding_backslashes += 1
+            cursor -= 1
+        if preceding_backslashes % 2 == 0:
+            return index
+        index = value.find(needle, index + 1)
+    return -1
+
+
+def _fenced_code_ranges(markdown):
+    ranges = []
+    active_fence = None
+    offset = 0
+
+    for line in markdown.splitlines(keepends=True):
+        if active_fence is not None:
+            fence_start, fence_char, fence_length = active_fence
+            if _is_fence_close(line, fence_char, fence_length):
+                ranges.append((fence_start, offset + len(line)))
+                active_fence = None
+            offset += len(line)
+            continue
+
+        match = FENCE_OPEN_RE.match(line)
+        if match:
+            fence = match.group("fence")
+            if fence[0] != "`" or "`" not in match.group("info"):
+                active_fence = (offset, fence[0], len(fence))
+        offset += len(line)
+
+    if active_fence is not None:
+        ranges.append((active_fence[0], len(markdown)))
+    return ranges
+
+
+def _position_in_ranges(position, ranges):
+    return next(
+        (
+            (start, end)
+            for start, end in ranges
+            if start <= position < end
+        ),
+        None,
+    )
+
+
+def _inline_code_ranges(markdown, fenced_ranges):
+    ranges = []
+    cursor = 0
+
+    while cursor < len(markdown):
+        fenced_range = _position_in_ranges(cursor, fenced_ranges)
+        if fenced_range is not None:
+            cursor = fenced_range[1]
+            continue
+        if markdown[cursor] != "`":
+            cursor += 1
+            continue
+
+        run_end = cursor + 1
+        while run_end < len(markdown) and markdown[run_end] == "`":
+            run_end += 1
+        run_length = run_end - cursor
+        closing_start = run_end
+
+        while closing_start < len(markdown):
+            fenced_range = _position_in_ranges(closing_start, fenced_ranges)
+            if fenced_range is not None:
+                break
+            closing_start = markdown.find("`", closing_start)
+            if closing_start < 0:
+                break
+            closing_end = closing_start + 1
+            while closing_end < len(markdown) and markdown[closing_end] == "`":
+                closing_end += 1
+            if closing_end - closing_start == run_length:
+                ranges.append((cursor, closing_end))
+                cursor = closing_end
+                break
+            closing_start = closing_end
+        else:
+            cursor = run_end
+            continue
+
+        if closing_start < 0 or (
+            fenced_range is not None and closing_start < fenced_range[1]
+        ):
+            cursor = run_end
+
+    return ranges
+
+
+def _markdown_code_ranges(markdown):
+    fenced_ranges = _fenced_code_ranges(markdown)
+    return sorted(
+        [*fenced_ranges, *_inline_code_ranges(markdown, fenced_ranges)]
+    )
+
+
+def _find_unescaped_outside_ranges(value, needle, start, excluded_ranges):
+    index = _find_unescaped(value, needle, start)
+    while index >= 0:
+        excluded_range = _position_in_ranges(index, excluded_ranges)
+        if excluded_range is None:
+            return index
+        index = _find_unescaped(value, needle, excluded_range[1])
+    return -1
+
+
+def _range_intersects(start, end, ranges):
+    return any(
+        range_start < end and range_end > start
+        for range_start, range_end in ranges
+    )
+
+
+def _protect_math_expressions(markdown):
+    render_token = secrets.token_hex(12).upper()
+    excluded_ranges = _markdown_code_ranges(markdown)
+    expressions = []
+    protected = []
+    cursor = 0
+
+    while cursor < len(markdown):
+        candidates = [
+            (index, opener, closer, display_mode)
+            for opener, closer, display_mode in (
+                (r"\(", r"\)", False),
+                (r"\[", r"\]", True),
+            )
+            if (
+                index := _find_unescaped_outside_ranges(
+                    markdown,
+                    opener,
+                    cursor,
+                    excluded_ranges,
+                )
+            )
+            >= 0
+        ]
+        if not candidates:
+            protected.append(markdown[cursor:])
+            break
+
+        start, opener, closer, display_mode = min(
+            candidates,
+            key=lambda candidate: candidate[0],
+        )
+        source_start = start + len(opener)
+        end = _find_unescaped_outside_ranges(
+            markdown,
+            closer,
+            source_start,
+            excluded_ranges,
+        )
+        if (
+            end < 0
+            or _range_intersects(source_start, end, excluded_ranges)
+            or (not display_mode and "\n" in markdown[source_start:end])
+        ):
+            protected.append(markdown[cursor:source_start])
+            cursor = source_start
+            continue
+
+        token = f"{MATH_PLACEHOLDER_PREFIX}{render_token}X{len(expressions)}END"
+        protected.append(markdown[cursor:start])
+        protected.append(token)
+        expressions.append(
+            MathExpression(
+                token=token,
+                source=markdown[source_start:end],
+                display_mode=display_mode,
+            )
+        )
+        cursor = end + len(closer)
+
+    return "".join(protected), tuple(expressions)
 
 
 def _is_fence_close(line, fence_char, fence_length):
@@ -691,6 +891,83 @@ def _replace_child_tail(parent, child, fragments):
         previous_element = fragment
 
 
+def _restore_math_tokens(value, expressions):
+    if not value:
+        return value
+    for expression in expressions:
+        value = value.replace(expression.token, expression.original)
+    return value
+
+
+def _restore_math_placeholders_in_code_and_attributes(root, expressions):
+    if not expressions:
+        return
+
+    for element in root.iter():
+        for name, value in element.attrib.items():
+            element.attrib[name] = _restore_math_tokens(value, expressions)
+
+    for code in root.iter("code"):
+        for element in code.iter():
+            element.text = _restore_math_tokens(element.text, expressions)
+            if element is not code:
+                element.tail = _restore_math_tokens(element.tail, expressions)
+
+
+def _math_fragments(value, expressions):
+    if not value or not expressions:
+        return None
+
+    by_token = {expression.token: expression for expression in expressions}
+    token_re = re.compile("|".join(re.escape(token) for token in by_token))
+    matches = list(token_re.finditer(value))
+    if not matches:
+        return None
+
+    fragments = []
+    previous_end = 0
+    for match in matches:
+        if match.start() > previous_end:
+            fragments.append(value[previous_end : match.start()])
+        expression = by_token[match.group(0)]
+        wrapper = etree.Element("span")
+        mode_class = "math-display" if expression.display_mode else "math-inline"
+        wrapper.attrib["class"] = f"math-render js-math-render {mode_class}"
+        wrapper.attrib["dir"] = "auto"
+
+        fallback = etree.SubElement(wrapper, "span")
+        fallback.attrib["class"] = "math-render-fallback"
+        fallback.text = expression.original
+
+        output = etree.SubElement(wrapper, "span")
+        output.attrib["class"] = "math-render-output"
+
+        fragments.append(wrapper)
+        previous_end = match.end()
+
+    if previous_end < len(value):
+        fragments.append(value[previous_end:])
+    return fragments
+
+
+def _enrich_math_placeholders(root, expressions):
+    if not expressions:
+        return
+
+    for element in list(root.iter()):
+        if not isinstance(element.tag, str) or _is_code_context(element):
+            continue
+
+        text_fragments = _math_fragments(element.text, expressions)
+        if text_fragments is not None:
+            _replace_element_text(element, text_fragments)
+
+        for child in list(element):
+            tail_fragments = _math_fragments(child.tail, expressions)
+            if tail_fragments is not None:
+                _replace_child_tail(element, child, tail_fragments)
+
+
 def _post_process_ethereum_links(root):
     for element in root.iter("a"):
         if _is_code_block_context(element):
@@ -1069,11 +1346,13 @@ def render_markdown_result(
     allowed_image_src_prefixes=(),
     highlight_budget=None,
 ):
+    math_protected_markdown, math_expressions = _protect_math_expressions(markdown)
     protected_markdown, mermaid_placeholder_languages = _protect_mermaid_fences(
-        markdown
+        math_protected_markdown
     )
     raw_html = _render_gfm(protected_markdown)
     root = _parse_fragment(raw_html)
+    _restore_math_placeholders_in_code_and_attributes(root, math_expressions)
     _drop_scriptable_content(root)
     _drop_unsafe_images(root, tuple(allowed_image_src_prefixes))
     highlight_stats = _highlight_blocks(
@@ -1098,6 +1377,7 @@ def render_markdown_result(
     )
     cleaned_root = _parse_fragment(cleaned_html)
     _enrich_mermaid_blocks(cleaned_root, mermaid_placeholder_languages)
+    _enrich_math_placeholders(cleaned_root, math_expressions)
     enriched_html = _serialize_fragment(cleaned_root)
     return RenderedMarkdown(
         html=enriched_html,
@@ -1180,6 +1460,7 @@ def render_version(highlight_status="unknown"):
         f"highlight/{highlight_status};"
         f"ethereum-entities/on@{ETHEREUM_ENTITY_RENDER_VERSION};"
         f"mermaid-enrichment/{MERMAID_RENDER_VERSION};"
+        f"math-enrichment/{MATH_RENDER_VERSION};"
         f"bleach/{_package_version('bleach')};"
         f"lxml/{_package_version('lxml')};"
         f"syntax-css/{SYNTAX_CSS_VERSION};"

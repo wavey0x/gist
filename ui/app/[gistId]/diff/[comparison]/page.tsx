@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { GistViewer } from "../../../../components/GistViewer";
+import { MathRenderer } from "../../../../components/MathRenderer";
 import { MermaidRenderer } from "../../../../components/MermaidRenderer";
 import { RevisionDiffViewer } from "../../../../components/RevisionDiffViewer";
 import {
@@ -96,6 +97,10 @@ export default async function GistRevisionDiffPage({ params }: PageProps) {
             toRevision={toRevision}
           />
         }
+      />
+      <MathRenderer
+        gistId={toRevision.id}
+        revisionNumber={toRevision.revision_number}
       />
       <MermaidRenderer
         gistId={toRevision.id}

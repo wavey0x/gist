@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { GistViewer } from "../../../../components/GistViewer";
+import { MathRenderer } from "../../../../components/MathRenderer";
 import { MermaidRenderer } from "../../../../components/MermaidRenderer";
 import {
   PublicGistNotFoundError,
@@ -52,6 +53,7 @@ export default async function GistRevisionPage({ params }: PageProps) {
       className={hasMultipleFiles ? "page-shell page-shell-gist" : "page-shell"}
     >
       <GistViewer chrome={chrome} gist={gist} />
+      <MathRenderer gistId={gist.id} revisionNumber={gist.revision_number} />
       <MermaidRenderer gistId={gist.id} revisionNumber={gist.revision_number} />
     </main>
   );
