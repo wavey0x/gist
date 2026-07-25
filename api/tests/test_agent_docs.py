@@ -42,6 +42,10 @@ def test_llms_text_teaches_current_agent_safe_workflow():
     assert "repeated `images[]`" in text
     assert "base62 strings containing 16–64 ASCII letters or digits" in text
     assert "https://gist.wavey.info/{gist_id}/raw/{filename}" in text
+    assert "## Find Your Gists" in text
+    assert "--data-urlencode 'q=vault fees'" in text
+    assert "pagination.next_offset" in text
+    assert "does not search old revisions" in text
 
 
 def test_llms_text_omits_removed_helper_and_environment_aliases():

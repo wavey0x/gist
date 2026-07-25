@@ -101,6 +101,74 @@ def _validate_gist_fields(values, allowed_fields):
     _validate_fields(values, allowed_fields)
 
 
+def parse_gist_list_query():
+    allowed_fields = {"q", "limit", "offset", "sort"}
+    unknown_fields = sorted(set(request.args.keys()) - allowed_fields)
+    if unknown_fields:
+        raise GistError(
+            "invalid_request",
+            f"unknown query parameter: {unknown_fields[0]}",
+            400,
+        )
+    for field in allowed_fields:
+        if len(request.args.getlist(field)) > 1:
+            raise GistError(
+                "invalid_request",
+                f"duplicate query parameter: {field}",
+                400,
+            )
+
+    query = " ".join(request.args.get("q", "").split()) or None
+    if query is not None and len(query) > 200:
+        raise GistError("invalid_request", "q is too long", 400)
+
+    def parse_integer(field, default, minimum, maximum=None):
+        value = request.args.get(field)
+        if value is None:
+            return default
+        if not value.isascii() or not value.isdigit():
+            raise GistError(
+                "invalid_request",
+                f"{field} must be an integer",
+                400,
+            )
+        parsed = int(value)
+        if parsed < minimum or (maximum is not None and parsed > maximum):
+            qualifier = (
+                f"between {minimum} and {maximum}"
+                if maximum is not None
+                else f"at least {minimum}"
+            )
+            raise GistError(
+                "invalid_request",
+                f"{field} must be {qualifier}",
+                400,
+            )
+        return parsed
+
+    limit = parse_integer("limit", 20, 1, 100)
+    offset = parse_integer("offset", 0, 0)
+    sort = request.args.get("sort") or ("relevance" if query else "updated")
+    if sort not in {"relevance", "updated", "created"}:
+        raise GistError(
+            "invalid_request",
+            "sort must be relevance, updated, or created",
+            400,
+        )
+    if sort == "relevance" and query is None:
+        raise GistError(
+            "invalid_request",
+            "relevance sort requires q",
+            400,
+        )
+    return {
+        "query": query,
+        "limit": limit,
+        "offset": offset,
+        "sort": sort,
+    }
+
+
 def parse_json_body(allowed_fields, *, gist_payload=False):
     max_bytes = current_app.config.get("MAX_REQUEST_BYTES", 1048576 + 2048)
     if request.content_length is not None and request.content_length > max_bytes:
@@ -333,7 +401,15 @@ def list_my_gists():
     auth, response = require_web_session()
     if response:
         return response
-    return jsonify(list_gists_created_by_key(current_app, auth.key_id))
+    try:
+        options = parse_gist_list_query()
+        response = jsonify(
+            list_gists_created_by_key(current_app, auth.key_id, **options)
+        )
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
 
 
 @gists_api.route("/api/v1/me/gists/export", methods=["GET"])
@@ -435,6 +511,22 @@ def post_gist():
             image_uploads=image_uploads,
         )
         return jsonify(body), 201
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
+
+
+@gists_api.route("/api/v1/gists", methods=["GET"])
+def list_owned_gists():
+    auth, response = require_gist_auth()
+    if response:
+        return response
+    try:
+        options = parse_gist_list_query()
+        response = jsonify(
+            list_gists_created_by_key(current_app, auth.key_id, **options)
+        )
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
     except GistError as error:
         return error_response(error.code, error.message, error.status)
 

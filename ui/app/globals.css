@@ -857,6 +857,49 @@ button {
   gap: 12px;
 }
 
+.gist-mine-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.gist-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.gist-search-input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--page-bg);
+  color: var(--page-fg);
+  padding: 5px 9px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.gist-search-input::placeholder {
+  color: var(--subtle-fg);
+}
+
+.gist-search-input:focus {
+  border-color: var(--focus);
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.gist-search-status {
+  min-width: 70px;
+  color: var(--muted-fg);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
+}
+
 .me-tabs-header {
   display: grid;
   grid-template-columns: minmax(28px, 1fr) auto minmax(28px, 1fr);

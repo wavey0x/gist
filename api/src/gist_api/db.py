@@ -1,11 +1,18 @@
 import logging
 import os
 import sqlite3
+import unicodedata
 from contextlib import contextmanager
 from pathlib import Path
 
 
 logger = logging.getLogger(__name__)
+
+
+def _unicode_casefold(value):
+    if value is None:
+        return ""
+    return unicodedata.normalize("NFC", str(value)).casefold()
 
 
 def get_gist_db_path(app=None):
@@ -40,6 +47,12 @@ def _set_private_file_permissions(db_path):
 def _connect(db_path, busy_timeout_ms=5000):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    conn.create_function(
+        "wg_casefold",
+        1,
+        _unicode_casefold,
+        deterministic=True,
+    )
     conn.execute("pragma foreign_keys = on")
     conn.execute(f"pragma busy_timeout = {int(busy_timeout_ms)}")
     if db_path != ":memory:":

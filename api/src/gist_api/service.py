@@ -596,9 +596,110 @@ def get_public_raw_file(app, external_id, *, revision_number=None, filename=None
         return selected, row["content"]
 
 
-def _summary_rows(app, conn, key_id, limit):
+def _search_predicates(query):
+    if query is None:
+        return [], []
+
+    predicates = []
+    values = []
+    for term in query.split():
+        predicates.append(
+            """
+            (
+                instr(wg_casefold(g.external_id), wg_casefold(?)) > 0
+                or instr(wg_casefold(coalesce(r.title, '')), wg_casefold(?)) > 0
+                or exists (
+                    select 1
+                    from gist_revision_files search_file
+                    where search_file.gist_revision_id = r.id
+                      and (
+                          instr(
+                              wg_casefold(search_file.filename),
+                              wg_casefold(?)
+                          ) > 0
+                          or instr(
+                              wg_casefold(search_file.content),
+                              wg_casefold(?)
+                          ) > 0
+                      )
+                )
+            )
+            """
+        )
+        values.extend((term, term, term, term))
+    return predicates, values
+
+
+def _relevance_order(query):
+    terms = query.split()
+    title_terms = " and ".join(
+        "instr(wg_casefold(coalesce(r.title, '')), wg_casefold(?)) > 0"
+        for _ in terms
+    )
+    filename_terms = " and ".join(
+        "instr(wg_casefold(rank_file.filename), wg_casefold(?)) > 0"
+        for _ in terms
+    )
+    content_terms = " and ".join(
+        "instr(wg_casefold(rank_file.content), wg_casefold(?)) > 0"
+        for _ in terms
+    )
+    return (
+        f"""
+        case
+            when wg_casefold(g.external_id) = wg_casefold(?) then 0
+            when {title_terms} then 1
+            when exists (
+                select 1
+                from gist_revision_files rank_file
+                where rank_file.gist_revision_id = r.id
+                  and {filename_terms}
+            ) then 2
+            when exists (
+                select 1
+                from gist_revision_files rank_file
+                where rank_file.gist_revision_id = r.id
+                  and {content_terms}
+            ) then 3
+            else 4
+        end,
+        g.updated_at desc,
+        g.id desc
+        """,
+        [query, *terms, *terms, *terms],
+    )
+
+
+def _summary_rows(conn, key_id, query, limit, offset, sort):
+    search_predicates, search_values = _search_predicates(query)
+    where_clauses = [
+        "g.owner_key_id = ?",
+        "g.deleted_at is null",
+        *search_predicates,
+    ]
+    where_sql = " and ".join(where_clauses)
+    where_values = [key_id, *search_values]
+
+    if sort == "relevance":
+        order_sql, order_values = _relevance_order(query)
+    elif sort == "created":
+        order_sql, order_values = "g.created_at desc, g.id desc", []
+    else:
+        order_sql, order_values = "g.updated_at desc, g.id desc", []
+
+    total = conn.execute(
+        f"""
+        select count(*) as value
+        from gists g
+        join gist_revisions r
+          on r.gist_id = g.id and r.revision_number = g.latest_revision_number
+        where {where_sql}
+        """,
+        tuple(where_values),
+    ).fetchone()["value"]
+
     rows = conn.execute(
-        """
+        f"""
         select
             g.id as gist_id,
             g.external_id,
@@ -615,12 +716,12 @@ def _summary_rows(app, conn, key_id, limit):
           on r.gist_id = g.id and r.revision_number = g.latest_revision_number
         join gist_revision_files f on f.gist_revision_id = r.id
         left join api_keys author_key on author_key.id = r.created_by_key_id
-        where g.owner_key_id = ? and g.deleted_at is null
+        where {where_sql}
         group by g.id, r.id
-        order by g.updated_at desc
-        limit ?
+        order by {order_sql}
+        limit ? offset ?
         """,
-        (key_id, limit),
+        tuple([*where_values, *order_values, limit, offset]),
     ).fetchall()
     revision_ids = [row["revision_id"] for row in rows]
     files_by_revision = {revision_id: {} for revision_id in revision_ids}
@@ -638,13 +739,27 @@ def _summary_rows(app, conn, key_id, limit):
             files_by_revision[file_row["gist_revision_id"]][
                 file_row["filename"]
             ] = file_row
-    return rows, files_by_revision
+    return rows, files_by_revision, total
 
 
-def list_gists_created_by_key(app, key_id, *, limit=100):
-    limit = max(1, min(int(limit), 100))
+def list_gists_created_by_key(
+    app,
+    key_id,
+    *,
+    query=None,
+    limit=20,
+    offset=0,
+    sort="updated",
+):
     with gist_connection(app) as conn:
-        rows, files_by_revision = _summary_rows(app, conn, key_id, limit)
+        rows, files_by_revision, total = _summary_rows(
+            conn,
+            key_id,
+            query,
+            limit,
+            offset,
+            sort,
+        )
         stats_row = conn.execute(
             """
             select
@@ -683,7 +798,16 @@ def list_gists_created_by_key(app, key_id, *, limit=100):
             item["author_avatar_url"] = row["author_avatar_url"]
         gists.append(item)
     return {
+        "query": query,
         "gists": gists,
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+            "next_offset": (
+                offset + len(gists) if offset + len(gists) < total else None
+            ),
+        },
         "stats": {
             "gist_count": stats_row["gist_count"],
             "revision_count": stats_row["revision_count"],

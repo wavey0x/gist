@@ -700,13 +700,189 @@ def test_me_gist_stats_are_zero_for_an_empty_account(client, app):
 
     body = client.get("/api/v1/me/gists").get_json()
     assert body == {
+        "query": None,
         "gists": [],
+        "pagination": {
+            "limit": 20,
+            "offset": 0,
+            "total": 0,
+            "next_offset": None,
+        },
         "stats": {
             "gist_count": 0,
             "revision_count": 0,
             "last_updated_at": None,
         },
     }
+
+
+def test_owned_gist_search_is_agent_authenticated_latest_and_owner_scoped(
+    client, app
+):
+    owner_key = make_key(app, name="owner")
+    other_key = make_key(app, name="other")
+
+    title_match = create_gist(
+        client,
+        owner_key,
+        markdown="# Ordinary heading\n\nNo body match.",
+        title="Needle Café title",
+    ).get_json()
+    filename_match = client.post(
+        "/api/v1/gists",
+        headers=auth_header(owner_key),
+        json={
+            "title": "Filename result",
+            "files": {"needle_notes.txt": {"content": "Unrelated text."}},
+        },
+    ).get_json()
+    body_match = create_gist(
+        client,
+        owner_key,
+        markdown="# Body result\n\nThe STRAẞE contains a needle.",
+        title="BodyResultUnique",
+    ).get_json()
+    historical_match = create_gist(
+        client,
+        owner_key,
+        markdown="# historicalneedle\n\nOld text.",
+        title="History",
+    ).get_json()
+    updated = client.patch(
+        f"/api/v1/gists/{historical_match['id']}",
+        headers=auth_header(owner_key),
+        json={
+            "files": {"README.md": {"content": "# Current\n\nNew text."}},
+            "expected_snapshot_sha256": historical_match["snapshot_sha256"],
+        },
+    )
+    assert updated.status_code == 200
+    other = create_gist(
+        client,
+        other_key,
+        markdown="# needle\n\nOther owner.",
+        title="Needle other",
+    ).get_json()
+    deleted = create_gist(
+        client,
+        owner_key,
+        markdown="# needle\n\nDeleted.",
+        title="Needle deleted",
+    ).get_json()
+    assert (
+        client.delete(
+            f"/api/v1/gists/{deleted['id']}",
+            headers=auth_header(owner_key),
+        ).status_code
+        == 204
+    )
+
+    assert client.get("/api/v1/gists").status_code == 401
+    response = client.get(
+        "/api/v1/gists?q=needle",
+        headers=auth_header(owner_key),
+    )
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "private, no-store"
+    body = response.get_json()
+    assert body["query"] == "needle"
+    assert body["pagination"] == {
+        "limit": 20,
+        "offset": 0,
+        "total": 3,
+        "next_offset": None,
+    }
+    assert [gist["id"] for gist in body["gists"]] == [
+        title_match["id"],
+        filename_match["id"],
+        body_match["id"],
+    ]
+    assert all("content" not in gist for gist in body["gists"])
+    assert all("rendered_html" not in gist for gist in body["gists"])
+    assert historical_match["id"] not in {gist["id"] for gist in body["gists"]}
+    assert other["id"] not in {gist["id"] for gist in body["gists"]}
+    assert deleted["id"] not in {gist["id"] for gist in body["gists"]}
+
+    unicode_response = client.get(
+        "/api/v1/gists",
+        query_string={"q": "CAFE\u0301"},
+        headers=auth_header(owner_key),
+    )
+    assert [gist["id"] for gist in unicode_response.get_json()["gists"]] == [
+        title_match["id"]
+    ]
+    casefold_response = client.get(
+        "/api/v1/gists",
+        query_string={"q": "strasse"},
+        headers=auth_header(owner_key),
+    )
+    assert [gist["id"] for gist in casefold_response.get_json()["gists"]] == [
+        body_match["id"]
+    ]
+    cross_field_response = client.get(
+        "/api/v1/gists",
+        query_string={"q": "bodyresultunique needle"},
+        headers=auth_header(owner_key),
+    )
+    assert [gist["id"] for gist in cross_field_response.get_json()["gists"]] == [
+        body_match["id"]
+    ]
+
+
+def test_owned_gist_search_validates_queries_and_paginates_every_gist(client, app):
+    owner_key = make_key(app, name="owner")
+    created_ids = [
+        create_gist(
+            client,
+            owner_key,
+            markdown=f"# Gist {index}\n\nLiteral %_ marker.",
+            title=f"Gist {index:02d}",
+        ).get_json()["id"]
+        for index in range(23)
+    ]
+    login = client.post("/api/v1/auth/session", json={"api_key": owner_key})
+    assert login.status_code == 200
+
+    first = client.get("/api/v1/me/gists?limit=10&sort=created").get_json()
+    second = client.get(
+        "/api/v1/me/gists?limit=10&offset=10&sort=created"
+    ).get_json()
+    third = client.get(
+        "/api/v1/me/gists?limit=10&offset=20&sort=created"
+    ).get_json()
+    assert first["pagination"]["total"] == 23
+    assert first["pagination"]["next_offset"] == 10
+    assert second["pagination"]["next_offset"] == 20
+    assert third["pagination"]["next_offset"] is None
+    listed_ids = [
+        gist["id"]
+        for page in (first, second, third)
+        for gist in page["gists"]
+    ]
+    assert len(listed_ids) == 23
+    assert set(listed_ids) == set(created_ids)
+
+    literal = client.get(
+        "/api/v1/gists",
+        query_string={"q": "%_"},
+        headers=auth_header(owner_key),
+    ).get_json()
+    assert literal["pagination"]["total"] == 23
+
+    invalid_queries = (
+        "/api/v1/gists?limit=0",
+        "/api/v1/gists?limit=101",
+        "/api/v1/gists?offset=-1",
+        "/api/v1/gists?sort=relevance",
+        "/api/v1/gists?sort=unknown",
+        "/api/v1/gists?q=x&q=y",
+        "/api/v1/gists?unknown=value",
+        f"/api/v1/gists?q={'x' * 201}",
+    )
+    for path in invalid_queries:
+        response = client.get(path, headers=auth_header(owner_key))
+        assert response.status_code == 400
+        assert response.get_json()["error"]["code"] == "invalid_request"
 
 
 def test_custom_key_avatar_is_returned_with_public_and_account_gists(client, app):

@@ -1,6 +1,17 @@
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiUrl } from "./api-base";
+import {
+  normalizeMyGistsPayload,
+  type MyGistsPayload,
+  type MyGistSort
+} from "./my-gists";
+
+export type {
+  MyGistItem,
+  MyGistsPayload,
+  MyGistSort
+} from "./my-gists";
 
 export const SESSION_COOKIE_NAME = "wg_session";
 
@@ -12,26 +23,21 @@ export type SessionIdentity = {
   avatar_url?: string;
 };
 
-export type MyGistItem = {
-  id: string;
-  url: string;
-  title: string | null;
-  display_title: string;
-  author_name: string;
-  author_avatar_url?: string;
-  revision_number: number;
-  created_at: string;
-  updated_at: string;
+export type MyGistsOptions = {
+  query?: string;
+  limit?: number;
+  offset?: number;
+  sort?: MyGistSort;
 };
 
-export type MyGistsPayload = {
-  gists: MyGistItem[];
-  stats: {
-    gist_count: number;
-    revision_count: number;
-    last_updated_at: string | null;
-  };
-};
+export class MyGistsRequestError extends Error {
+  status: number;
+
+  constructor(status: number) {
+    super(`Failed to load gist list: ${status}`);
+    this.status = status;
+  }
+}
 
 export type NotificationSettings = {
   available: boolean;
@@ -66,59 +72,6 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
       typeof identity.github_login === "string") &&
     (identity.avatar_url === undefined || typeof identity.avatar_url === "string")
   );
-}
-
-function isMyGistItem(value: unknown): value is MyGistItem {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const item = value as Partial<MyGistItem>;
-  return (
-    typeof item.id === "string" &&
-    typeof item.url === "string" &&
-    (item.title === null || typeof item.title === "string") &&
-    typeof item.display_title === "string" &&
-    typeof item.author_name === "string" &&
-    (item.author_avatar_url === undefined ||
-      typeof item.author_avatar_url === "string") &&
-    typeof item.revision_number === "number" &&
-    Number.isInteger(item.revision_number) &&
-    item.revision_number > 0 &&
-    typeof item.created_at === "string" &&
-    typeof item.updated_at === "string"
-  );
-}
-
-function normalizeMyGistsPayload(payload: unknown): MyGistsPayload {
-  if (!payload || typeof payload !== "object") {
-    throw new Error("Invalid gist list payload");
-  }
-  const body = payload as Partial<MyGistsPayload>;
-  const stats = body.stats;
-  if (
-    !Array.isArray(body.gists) ||
-    !body.gists.every(isMyGistItem) ||
-    !stats ||
-    typeof stats !== "object" ||
-    typeof stats.gist_count !== "number" ||
-    !Number.isInteger(stats.gist_count) ||
-    stats.gist_count < 0 ||
-    typeof stats.revision_count !== "number" ||
-    !Number.isInteger(stats.revision_count) ||
-    stats.revision_count < 0 ||
-    (stats.last_updated_at !== null &&
-      typeof stats.last_updated_at !== "string")
-  ) {
-    throw new Error("Invalid gist list payload");
-  }
-  return {
-    gists: body.gists,
-    stats: {
-      gist_count: stats.gist_count,
-      revision_count: stats.revision_count,
-      last_updated_at: stats.last_updated_at
-    }
-  };
 }
 
 function normalizeNotificationSettings(
@@ -176,13 +129,30 @@ export async function fetchCurrentSession(): Promise<SessionIdentity | null> {
   return payload;
 }
 
-export async function fetchMyGists(): Promise<MyGistsPayload | null> {
+export async function fetchMyGists(
+  options: MyGistsOptions = {}
+): Promise<MyGistsPayload | null> {
   const cookieHeader = await currentSessionCookieHeader();
   if (!cookieHeader) {
     return null;
   }
 
-  const response = await fetch(await apiUrl("/api/v1/me/gists"), {
+  const parameters = new URLSearchParams();
+  if (options.query !== undefined) {
+    parameters.set("q", options.query);
+  }
+  if (options.limit !== undefined) {
+    parameters.set("limit", String(options.limit));
+  }
+  if (options.offset !== undefined) {
+    parameters.set("offset", String(options.offset));
+  }
+  if (options.sort !== undefined) {
+    parameters.set("sort", options.sort);
+  }
+  const queryString = parameters.toString();
+  const path = `/api/v1/me/gists${queryString ? `?${queryString}` : ""}`;
+  const response = await fetch(await apiUrl(path), {
     cache: "no-store",
     headers: {
       Accept: "application/json",
@@ -194,7 +164,7 @@ export async function fetchMyGists(): Promise<MyGistsPayload | null> {
     return null;
   }
   if (!response.ok) {
-    throw new Error(`Failed to load gist list: ${response.status}`);
+    throw new MyGistsRequestError(response.status);
   }
 
   return normalizeMyGistsPayload(await response.json());

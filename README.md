@@ -17,6 +17,7 @@ gists; anyone with a random gist URL can read the rendered files and raw text.
 - Immutable revision and revision-diff URLs.
 - Read-only rendered/raw browser views.
 - Home-page tabs for browser-local recent views and the logged-in key's gists.
+- Owner-scoped title, filename, and latest-file-content search.
 - Account settings for browser Web Push enrollment and publication alerts.
 - Gist API keys with owner-scoped mutation.
 - SQLite persistence by default.
@@ -160,9 +161,22 @@ Open the returned `url` in the browser.
 
 Visit `/` to see recently viewed gists stored in this browser. Log in at
 `http://localhost:3000/login` with an API key to use the `MY GISTS` home-page
-tab. The browser stores an HttpOnly `wg_session` cookie. The linked account page
-at `/me` contains collapsed notification settings, account stats, a ZIP export,
-and API-key and logout actions.
+tab and search across the current title, filenames, and text of every owned
+gist. The browser stores an HttpOnly `wg_session` cookie. The linked account
+page at `/me` contains collapsed notification settings, account stats, a ZIP
+export, and API-key and logout actions.
+
+Agents can browse or search the same owner-scoped collection with bearer
+authentication:
+
+```sh
+curl -sSG http://localhost:3001/api/v1/gists \
+  -H "Authorization: Bearer $WAVEY_GIST_API_KEY" \
+  --data-urlencode "q=vault fees"
+```
+
+The response contains compact summaries and offset pagination, never gist file
+content. Search covers active gists' latest revisions only.
 
 ## Configuration
 

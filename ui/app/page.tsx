@@ -39,7 +39,7 @@ export default async function Home() {
 
       <section className="home-gist-history" aria-label="Gist history">
         <GistHistoryTabs
-          myGists={payload?.gists ?? []}
+          initialMyGists={payload}
           isAuthenticated={isAuthenticated}
         />
       </section>

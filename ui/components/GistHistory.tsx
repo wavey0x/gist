@@ -3,7 +3,11 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { MyGistItem } from "../lib/auth";
+import {
+  normalizeMyGistsPayload,
+  type MyGistItem,
+  type MyGistsPayload
+} from "../lib/my-gists";
 import {
   readRecentlyViewedGists,
   RECENTLY_VIEWED_STORAGE_KEY,
@@ -13,20 +17,17 @@ import { DeleteGistButton } from "./DeleteGistButton";
 import { LocalTimestamp } from "./LocalTimestamp";
 
 const ITEMS_PER_PAGE = 20;
+const SEARCH_DEBOUNCE_MS = 250;
 const ACTIVE_TAB_STORAGE_KEY = "waveygist:home-tab:v1";
 const GITHUB_LOGIN_RE =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 
 type TabId = "recent" | "mine";
-type MyGistSort = "updated" | "created";
+type MyGistDateSort = "updated" | "created";
 
 type GistHistoryTabsProps = {
-  myGists: MyGistItem[];
+  initialMyGists: MyGistsPayload | null;
   isAuthenticated: boolean;
-};
-
-type OwnedGistListProps = {
-  myGists: MyGistItem[];
 };
 
 type ListItem = {
@@ -62,6 +63,10 @@ function saveActiveTab(tab: TabId) {
   } catch {
     // Browsers can reject localStorage writes; this preference is best effort.
   }
+}
+
+function normalizeSearchQuery(value: string) {
+  return value.trim().replace(/\s+/g, " ");
 }
 
 function displayTitle(
@@ -131,7 +136,11 @@ function GistListAuthor({
   );
 }
 
-function myGistToListItem(gist: MyGistItem, sort: MyGistSort): ListItem {
+function myGistToListItem(
+  gist: MyGistItem,
+  sort: MyGistDateSort,
+  onDeleted: () => void
+): ListItem {
   const title = displayTitle(gist.display_title, gist.title, gist.id);
   return {
     id: gist.id,
@@ -144,22 +153,14 @@ function myGistToListItem(gist: MyGistItem, sort: MyGistSort): ListItem {
     revisionNumber: gist.revision_number,
     dateTime: sort === "created" ? gist.created_at : gist.updated_at,
     dateLabel: sort,
-    action: <DeleteGistButton gistId={gist.id} gistTitle={title} />
+    action: (
+      <DeleteGistButton
+        gistId={gist.id}
+        gistTitle={title}
+        onDeleted={onDeleted}
+      />
+    )
   };
-}
-
-function timestampValue(value: string) {
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? 0 : timestamp;
-}
-
-function sortMyGists(gists: MyGistItem[], sort: MyGistSort) {
-  const field = sort === "created" ? "created_at" : "updated_at";
-  return [...gists].sort((left, right) => {
-    const dateOrder =
-      timestampValue(right[field]) - timestampValue(left[field]);
-    return dateOrder || right.id.localeCompare(left.id);
-  });
 }
 
 function recentGistToListItem(gist: RecentGistItem): ListItem {
@@ -176,31 +177,37 @@ function recentGistToListItem(gist: RecentGistItem): ListItem {
   };
 }
 
-function getPageCount(items: ListItem[]) {
-  return Math.max(1, Math.ceil(items.length / ITEMS_PER_PAGE));
+function getPageCount(total: number) {
+  return Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
 }
 
 function GistList({
   items,
   emptyState,
   page,
+  totalItems = items.length,
+  serverPaginated = false,
   onPageChange
 }: {
   items: ListItem[];
   emptyState: ReactNode;
   page: number;
+  totalItems?: number;
+  serverPaginated?: boolean;
   onPageChange: (page: number) => void;
 }) {
   if (items.length === 0) {
     return <div className="empty-list">{emptyState}</div>;
   }
 
-  const pageCount = getPageCount(items);
+  const pageCount = getPageCount(totalItems);
   const currentPage = Math.min(page, pageCount - 1);
-  const pageItems = items.slice(
-    currentPage * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE + ITEMS_PER_PAGE
-  );
+  const pageItems = serverPaginated
+    ? items
+    : items.slice(
+        currentPage * ITEMS_PER_PAGE,
+        currentPage * ITEMS_PER_PAGE + ITEMS_PER_PAGE
+      );
   const hasPreviousPage = currentPage > 0;
   const hasNextPage = currentPage < pageCount - 1;
 
@@ -220,15 +227,15 @@ function GistList({
                     <GistListAuthor
                       authorName={item.authorName}
                       authorAvatarUrl={item.authorAvatarUrl}
-                    /> -{" "}
+                    />{" "}
+                    -{" "}
                     <a
                       className="gist-list-meta-link"
                       href={item.revisionUrl}
                     >
                       revision {item.revisionNumber}
                     </a>{" "}
-                    -{" "}
-                    {item.dateLabel}{" "}
+                    - {item.dateLabel}{" "}
                     <LocalTimestamp value={item.dateTime} variant="compact" />
                   </span>
                 </div>
@@ -266,20 +273,28 @@ function GistList({
 }
 
 export function GistHistoryTabs({
-  myGists,
+  initialMyGists,
   isAuthenticated
 }: GistHistoryTabsProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>("recent");
-  const [myGistSort, setMyGistSort] = useState<MyGistSort>("updated");
+  const [myGistSort, setMyGistSort] =
+    useState<MyGistDateSort>("updated");
   const [recentGists, setRecentGists] = useState<RecentGistItem[] | null>(null);
-  const [pages, setPages] = useState<Record<TabId, number>>({
-    recent: 0,
-    mine: 0
-  });
+  const [recentPage, setRecentPage] = useState(0);
+  const [myPage, setMyPage] = useState(0);
+  const [myGists, setMyGists] = useState<MyGistsPayload | null>(
+    initialMyGists
+  );
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchError, setSearchError] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
 
   const refreshGists = useCallback(() => {
     setRecentGists(readRecentlyViewedGists());
+    setReloadToken((current) => current + 1);
     router.refresh();
   }, [router]);
 
@@ -313,33 +328,98 @@ export function GistHistoryTabs({
     };
   }, [refreshGists]);
 
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const normalized = normalizeSearchQuery(searchInput);
+      setSearchQuery(normalized);
+      setMyPage(0);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeout);
+  }, [searchInput]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const parameters = new URLSearchParams({
+      limit: String(ITEMS_PER_PAGE),
+      offset: String(myPage * ITEMS_PER_PAGE),
+      sort: searchQuery ? "relevance" : myGistSort
+    });
+    if (searchQuery) {
+      parameters.set("q", searchQuery);
+    }
+
+    async function loadMyGists() {
+      setSearchLoading(true);
+      setSearchError(false);
+      try {
+        const response = await fetch(`/api/me/gists?${parameters}`, {
+          cache: "no-store",
+          signal: controller.signal
+        });
+        if (response.status === 401) {
+          window.location.assign("/login");
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(`Failed to load gists: ${response.status}`);
+        }
+        const payload = normalizeMyGistsPayload(await response.json());
+        if (
+          payload.pagination.total > 0 &&
+          payload.gists.length === 0 &&
+          myPage > 0
+        ) {
+          setMyPage(
+            Math.max(0, getPageCount(payload.pagination.total) - 1)
+          );
+          return;
+        }
+        setMyGists(payload);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setSearchError(true);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setSearchLoading(false);
+        }
+      }
+    }
+
+    void loadMyGists();
+    return () => controller.abort();
+  }, [
+    isAuthenticated,
+    myGistSort,
+    myPage,
+    reloadToken,
+    searchQuery
+  ]);
+
   const recentItems = useMemo(
     () => (recentGists ?? []).map(recentGistToListItem),
     [recentGists]
   );
+  const handleGistDeleted = useCallback(() => {
+    setReloadToken((current) => current + 1);
+  }, []);
+  const myDateSort: MyGistDateSort =
+    searchQuery || myGistSort === "updated" ? "updated" : "created";
   const myItems = useMemo(
-    () => sortMyGists(myGists, myGistSort).map((gist) =>
-      myGistToListItem(gist, myGistSort)
-    ),
-    [myGists, myGistSort]
+    () =>
+      (myGists?.gists ?? []).map((gist) =>
+        myGistToListItem(gist, myDateSort, handleGistDeleted)
+      ),
+    [handleGistDeleted, myDateSort, myGists]
   );
 
-  const activeItems = activeTab === "recent" ? recentItems : myItems;
-  const activePage = Math.min(
-    pages[activeTab],
-    getPageCount(activeItems) - 1
-  );
-
-  function setActivePage(page: number) {
-    setPages((current) => ({
-      ...current,
-      [activeTab]: Math.max(0, Math.min(page, getPageCount(activeItems) - 1))
-    }));
-  }
-
-  function selectMyGistSort(sort: MyGistSort) {
+  function selectMyGistSort(sort: MyGistDateSort) {
     setMyGistSort(sort);
-    setPages((current) => ({ ...current, mine: 0 }));
+    setMyPage(0);
   }
 
   function selectTab(tab: TabId) {
@@ -369,10 +449,19 @@ export function GistHistoryTabs({
     }
   }
 
+  const hasOwnedGists = (myGists?.stats.gist_count ?? 0) > 0;
+  const myTotal = myGists?.pagination.total ?? 0;
+  const normalizedSearchInput = normalizeSearchQuery(searchInput);
+  const pendingSearch =
+    Boolean(normalizedSearchInput || searchQuery) &&
+    (searchLoading || normalizedSearchInput !== searchQuery);
+
   return (
     <section className="me-tabs-section" aria-label="Gists">
       <div className="me-tabs-header">
-        {activeTab === "mine" && myGists.length > 1 ? (
+        {activeTab === "mine" &&
+        !searchInput.trim() &&
+        (myGists?.stats.gist_count ?? 0) > 1 ? (
           <div
             className="gist-sort-control"
             role="group"
@@ -447,52 +536,69 @@ export function GistHistoryTabs({
                 "No recently viewed gists."
               )
             }
-            page={activePage}
-            onPageChange={setActivePage}
+            page={recentPage}
+            onPageChange={setRecentPage}
           />
         </div>
       ) : (
         <div
           id="gist-mine-panel"
+          className="gist-mine-panel"
           role="tabpanel"
           aria-labelledby="gist-mine-tab"
+          aria-busy={searchLoading}
         >
+          {isAuthenticated && hasOwnedGists ? (
+            <div className="gist-search">
+              <label className="sr-only" htmlFor="gist-search-input">
+                Search my gists
+              </label>
+              <input
+                id="gist-search-input"
+                className="gist-search-input"
+                type="search"
+                value={searchInput}
+                maxLength={200}
+                placeholder="Search my gists"
+                autoComplete="off"
+                onChange={(event) => setSearchInput(event.target.value)}
+              />
+              <span className="gist-search-status" aria-live="polite">
+                {searchError
+                  ? "Search unavailable."
+                  : pendingSearch
+                    ? "Searching."
+                  : searchQuery
+                    ? `${myTotal} ${myTotal === 1 ? "result" : "results"}`
+                    : ""}
+              </span>
+            </div>
+          ) : null}
           <GistList
             items={myItems}
             emptyState={
-              isAuthenticated ? (
-                "No gists yet."
-              ) : (
+              !isAuthenticated ? (
                 <>
                   <a className="inline-link" href="/login">
                     Log in
                   </a>{" "}
                   to view your gists.
                 </>
+              ) : searchLoading ? (
+                "Searching."
+              ) : searchQuery ? (
+                `No gists match “${searchQuery}”.`
+              ) : (
+                "No gists yet."
               )
             }
-            page={activePage}
-            onPageChange={setActivePage}
+            page={myPage}
+            totalItems={myTotal}
+            serverPaginated
+            onPageChange={setMyPage}
           />
         </div>
       )}
     </section>
-  );
-}
-
-export function OwnedGistList({ myGists }: OwnedGistListProps) {
-  const [page, setPage] = useState(0);
-  const items = useMemo(
-    () => myGists.map((gist) => myGistToListItem(gist, "updated")),
-    [myGists]
-  );
-
-  return (
-    <GistList
-      items={items}
-      emptyState="No gists yet."
-      page={page}
-      onPageChange={setPage}
-    />
   );
 }

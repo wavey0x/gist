@@ -8,9 +8,14 @@ import { ConfirmModal } from "./ConfirmModal";
 type DeleteGistButtonProps = {
   gistId: string;
   gistTitle: string;
+  onDeleted?: () => void;
 };
 
-export function DeleteGistButton({ gistId, gistTitle }: DeleteGistButtonProps) {
+export function DeleteGistButton({
+  gistId,
+  gistTitle,
+  onDeleted
+}: DeleteGistButtonProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -33,6 +38,7 @@ export function DeleteGistButton({ gistId, gistTitle }: DeleteGistButtonProps) {
 
       if (response.status === 204) {
         setOpen(false);
+        onDeleted?.();
         router.refresh();
         return;
       }

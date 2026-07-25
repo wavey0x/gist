@@ -101,9 +101,44 @@ DELETE /api/v1/me/push-subscriptions
 ```
 
 `/api/v1/me/gists` returns gists owned by the logged-in key plus aggregate
-active-gist statistics. It does not include file content or rendered HTML.
+active-gist statistics. It supports the same search and pagination parameters
+as the bearer-authenticated collection route described below. It does not
+include file content or rendered HTML.
 `/api/v1/me/gists/export` returns a ZIP containing a versioned JSON manifest
 and every file from each active gist's latest snapshot.
+
+## Owned Gist Search
+
+Agents can browse or search gists owned by an API key:
+
+```text
+GET /api/v1/gists?q=<query>&limit=20&offset=0&sort=relevance
+Authorization: Bearer <gist API key>
+```
+
+`q` is optional and limited to 200 characters. Its whitespace-separated terms
+are Unicode case-insensitive literal AND terms matched against each active
+gist's id, explicit title, filenames, and latest file contents. Historical
+revisions and deleted or differently owned gists are never searched.
+
+`limit` defaults to 20 and is capped at 100. `offset` defaults to zero. `sort`
+accepts `relevance`, `updated`, or `created`; the default is `relevance` when
+searching and `updated` when browsing. The response contains the existing
+compact `gists` summaries, the normalized `query`, account-wide `stats`, and:
+
+```json
+{
+  "pagination": {
+    "limit": 20,
+    "offset": 0,
+    "total": 42,
+    "next_offset": 20
+  }
+}
+```
+
+Search responses do not include file content or rendered HTML. Fetch a selected
+gist by id to read its complete snapshot.
 
 ## Image Uploads
 
