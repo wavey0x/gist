@@ -151,5 +151,6 @@ export const LLMS_TXT =
     "- Preserve user content unless asked to edit it. Never print or publish API keys, secrets, or private identifiers.",
     "- Prefer a self-contained lead Markdown file beginning with a non-empty `# Title`; code/plain-text leads should have an explicit gist title.",
     "- Mermaid fences are supported in Markdown and are rendered with strict security settings.",
+    "- Math uses GitHub-style dollar delimiters, dollar-backtick inline syntax, and fenced `math` blocks.",
     "",
   ].join("\n");

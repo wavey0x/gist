@@ -186,11 +186,19 @@ def test_markdown_rendering_strips_user_supplied_mermaid_hook_classes():
 def test_markdown_rendering_enriches_inline_and_block_math():
     result = render_markdown_result(
         r"""
-The resulting \(2.35443 \times 10^{38}\) unbacked yETH.
+The resulting $2.35443 \times 10^{38}$ unbacked yETH.
 
-\[
+$$
 \sum_{i=1}^{n} i = \frac{n(n+1)}{2}
-\]
+$$
+
+$$x^2 + y^2$$
+
+Markdown-heavy inline math stays intact: $`x_i * y_i`$.
+
+```math
+\int_0^1 x^2\,dx
+```
 """
     )
     root = html_parser.fragment_fromstring(result.html, create_parent="div")
@@ -202,58 +210,58 @@ The resulting \(2.35443 \times 10^{38}\) unbacked yETH.
         './/span[contains(concat(" ", @class, " "), " math-display ")]'
     )
 
-    assert len(inline) == 1
-    assert len(display) == 1
+    assert len(inline) == 2
+    assert len(display) == 3
     assert inline[0].xpath(
         './span[contains(concat(" ", @class, " "), " math-render-fallback ")]'
-    )[0].text == r"\(2.35443 \times 10^{38}\)"
+    )[0].text == r"$2.35443 \times 10^{38}$"
     assert r"\sum_{i=1}^{n} i = \frac{n(n+1)}{2}" in display[0].text_content()
+    assert "$$x^2 + y^2$$" in display[1].text_content()
+    assert r"\int_0^1 x^2\,dx" in display[2].text_content()
     assert "WAVEYGISTMATHTOKEN" not in result.html
     assert "math-enrichment/" in result.version
 
 
-def test_markdown_rendering_keeps_math_literal_in_code_and_ignores_dollars():
+def test_markdown_rendering_preserves_commonmark_escapes_and_ignores_non_math():
     result = render_markdown_result(
         r"""
-Inline code `\(x^2\)` remains literal.
+Inline code `$x^2$` remains literal.
 
 ```text
-\[
+$$
 x^2
-\]
+$$
 ```
 
 Dollar values $43.1 million, $9.695 million, and $9.577 million stay plain.
 
-Malformed \(x stays plain.
+Escaped CommonMark brackets \[0,3\] and parentheses \(x^2\) stay literal.
 
-An opener inside code `\(not math` does not pair with this closer \).
+Malformed $x stays plain.
 
-An opener before `inline code` cannot close across it: \(not `math` either\).
+An opener before `inline code` cannot close across it: $not `math` either$.
 
 ```text
-\[not math
+$$not math
 ```
-
-This closer is outside the fence: \].
 """
     )
     root = html_parser.fragment_fromstring(result.html, create_parent="div")
     inline_code = root.xpath(".//p/code")
     code_block = root.xpath(".//pre/code")
 
-    assert len(inline_code) == 4
-    assert inline_code[0].text_content() == r"\(x^2\)"
-    assert inline_code[1].text_content() == r"\(not math"
-    assert inline_code[2].text_content() == "inline code"
-    assert inline_code[3].text_content() == "math"
+    assert len(inline_code) == 3
+    assert inline_code[0].text_content() == "$x^2$"
+    assert inline_code[1].text_content() == "inline code"
+    assert inline_code[2].text_content() == "math"
     assert len(code_block) == 2
-    assert code_block[0].text_content() == "\\[\nx^2\n\\]\n"
-    assert code_block[1].text_content() == "\\[not math\n"
+    assert code_block[0].text_content() == "$$\nx^2\n$$\n"
+    assert code_block[1].text_content() == "$$not math\n"
     assert "$43.1 million" in result.html
     assert "$9.695 million" in result.html
     assert "$9.577 million" in result.html
-    assert "Malformed (x stays plain." in result.html
+    assert "[0,3] and parentheses (x^2) stay literal." in result.html
+    assert "Malformed $x stays plain." in result.html
     assert "not math" in result.html
     assert "math-render" not in result.html
 

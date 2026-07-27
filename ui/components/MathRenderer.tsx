@@ -25,14 +25,15 @@ function mathSource(container: HTMLElement) {
     MATH_FALLBACK_SELECTOR
   );
   const original = fallback?.textContent ?? "";
-  if (original.length < 4) {
-    return null;
-  }
 
   const displayMode = container.classList.contains("math-display");
-  const opener = displayMode ? "\\[" : "\\(";
-  const closer = displayMode ? "\\]" : "\\)";
-  if (!original.startsWith(opener) || !original.endsWith(closer)) {
+  const opener = displayMode ? "$$" : "$";
+  const closer = opener;
+  if (
+    original.length <= opener.length + closer.length ||
+    !original.startsWith(opener) ||
+    !original.endsWith(closer)
+  ) {
     return null;
   }
 

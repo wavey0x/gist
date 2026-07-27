@@ -23,7 +23,7 @@ SANITIZER_CONFIG_VERSION = "2026-07-08.2"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
 ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.3"
 MERMAID_RENDER_VERSION = "2026-07-08.2"
-MATH_RENDER_VERSION = "2026-07-23.1"
+MATH_RENDER_VERSION = "2026-07-27.1"
 HIGHLIGHT_GRAMMAR_SET = "all"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -203,10 +203,16 @@ class MathExpression:
 
     @property
     def original(self):
-        opener, closer = (
-            (r"\[", r"\]") if self.display_mode else (r"\(", r"\)")
-        )
+        opener, closer = ("$$", "$$") if self.display_mode else ("$", "$")
         return f"{opener}{self.source}{closer}"
+
+
+@dataclass(frozen=True)
+class MathMatch:
+    start: int
+    end: int
+    source: str
+    display_mode: bool
 
 
 @dataclass
@@ -388,66 +394,220 @@ def _range_intersects(start, end, ranges):
     )
 
 
-def _protect_math_expressions(markdown):
-    render_token = secrets.token_hex(12).upper()
-    excluded_ranges = _markdown_code_ranges(markdown)
-    expressions = []
-    protected = []
+def _line_end_without_break(markdown, start):
+    end = markdown.find("\n", start)
+    if end < 0:
+        end = len(markdown)
+    if end > start and markdown[end - 1] == "\r":
+        end -= 1
+    return end
+
+
+def _math_fence_matches(markdown):
+    matches = []
+    active = None
+    offset = 0
+
+    for line in markdown.splitlines(keepends=True):
+        if active is not None:
+            start, content_start, fence_char, fence_length, is_math = active
+            if _is_fence_close(line, fence_char, fence_length):
+                if is_math:
+                    matches.append(
+                        MathMatch(
+                            start=start,
+                            end=offset + len(line.rstrip("\r\n")),
+                            source=markdown[content_start:offset].rstrip("\r\n"),
+                            display_mode=True,
+                        )
+                    )
+                active = None
+            offset += len(line)
+            continue
+
+        match = FENCE_OPEN_RE.match(line)
+        if match:
+            fence = match.group("fence")
+            if fence[0] != "`" or "`" not in match.group("info"):
+                active = (
+                    offset,
+                    offset + len(line),
+                    fence[0],
+                    len(fence),
+                    match.group("info").strip().casefold() == "math",
+                )
+        offset += len(line)
+
+    return matches
+
+
+def _math_hybrid_matches(markdown, inline_ranges, blocked_ranges):
+    matches = []
+    for code_start, code_end in inline_ranges:
+        start = code_start - 1
+        if (
+            start < 0
+            or code_end >= len(markdown)
+            or markdown[start] != "$"
+            or markdown[code_end] != "$"
+            or _find_unescaped(markdown, "$", start) != start
+        ):
+            continue
+
+        opening_end = code_start + 1
+        while opening_end < code_end and markdown[opening_end] == "`":
+            opening_end += 1
+        fence_length = opening_end - code_start
+        closing_start = code_end - fence_length
+        source = markdown[opening_end:closing_start]
+        if "\n" in source:
+            continue
+        source = source.replace("\r", " ")
+        if (
+            source.startswith(" ")
+            and source.endswith(" ")
+            and not source.isspace()
+        ):
+            source = source[1:-1]
+
+        end = code_end + 1
+        if _range_intersects(start, end, blocked_ranges):
+            continue
+        matches.append(
+            MathMatch(
+                start=start,
+                end=end,
+                source=source,
+                display_mode=False,
+            )
+        )
+
+    return matches
+
+
+def _math_display_matches(markdown, blocked_ranges):
+    matches = []
+    claimed = []
+    line_pattern = re.compile(r"(?m)^(?P<indent> {0,3})\$\$(?P<body>[^\r\n]+?)\$\$")
+    for match in line_pattern.finditer(markdown):
+        end = match.end()
+        line_end = _line_end_without_break(markdown, end)
+        if markdown[end:line_end].strip():
+            continue
+        start = match.start() + len(match.group("indent"))
+        if _range_intersects(start, end, [*blocked_ranges, *claimed]):
+            continue
+        matches.append(MathMatch(start, end, match.group("body"), True))
+        claimed.append((start, end))
+
+    opener_pattern = re.compile(r"(?m)^(?P<indent> {0,3})\$\$[ \t]*\r?\n")
+    closer_pattern = re.compile(r"(?m)^ {0,3}\$\$[ \t]*(?=\r?$)")
+    for opener in opener_pattern.finditer(markdown):
+        start = opener.start() + len(opener.group("indent"))
+        if _range_intersects(start, opener.end(), [*blocked_ranges, *claimed]):
+            continue
+        closer = closer_pattern.search(markdown, opener.end())
+        if closer is None:
+            continue
+        end = closer.end()
+        if _range_intersects(start, end, [*blocked_ranges, *claimed]):
+            continue
+        source = markdown[opener.end() : closer.start()].rstrip("\r\n")
+        if not source.strip():
+            continue
+        matches.append(MathMatch(start, end, source, True))
+        claimed.append((start, end))
+
+    return matches
+
+
+def _math_inline_matches(markdown, blocked_ranges):
+    matches = []
     cursor = 0
 
     while cursor < len(markdown):
-        candidates = [
-            (index, opener, closer, display_mode)
-            for opener, closer, display_mode in (
-                (r"\(", r"\)", False),
-                (r"\[", r"\]", True),
-            )
-            if (
-                index := _find_unescaped_outside_ranges(
-                    markdown,
-                    opener,
-                    cursor,
-                    excluded_ranges,
-                )
-            )
-            >= 0
-        ]
-        if not candidates:
-            protected.append(markdown[cursor:])
+        start = _find_unescaped_outside_ranges(markdown, "$", cursor, blocked_ranges)
+        if start < 0:
             break
-
-        start, opener, closer, display_mode = min(
-            candidates,
-            key=lambda candidate: candidate[0],
-        )
-        source_start = start + len(opener)
-        end = _find_unescaped_outside_ranges(
-            markdown,
-            closer,
-            source_start,
-            excluded_ranges,
-        )
+        source_start = start + 1
         if (
-            end < 0
-            or _range_intersects(source_start, end, excluded_ranges)
-            or (not display_mode and "\n" in markdown[source_start:end])
+            source_start >= len(markdown)
+            or markdown[source_start] in {"$", "`"}
+            or markdown[source_start].isspace()
+            or (start > 0 and markdown[start - 1] == "$")
         ):
-            protected.append(markdown[cursor:source_start])
             cursor = source_start
             continue
 
+        end = _find_unescaped_outside_ranges(
+            markdown,
+            "$",
+            source_start,
+            blocked_ranges,
+        )
+        if end >= 0 and "\n" not in markdown[source_start:end]:
+            following = markdown[end + 1] if end + 1 < len(markdown) else ""
+            if (
+                end > source_start
+                and not markdown[end - 1].isspace()
+                and markdown[end - 1] != "$"
+                and following != "$"
+                and not following.isdigit()
+                and not _range_intersects(start, end + 1, blocked_ranges)
+            ):
+                matches.append(
+                    MathMatch(start, end + 1, markdown[source_start:end], False)
+                )
+                cursor = end + 1
+                continue
+        cursor = source_start
+
+    return matches
+
+
+def _protect_math_expressions(markdown):
+    fenced_ranges = _fenced_code_ranges(markdown)
+    inline_ranges = _inline_code_ranges(markdown, fenced_ranges)
+    matches = _math_fence_matches(markdown)
+    claimed = [(match.start, match.end) for match in matches]
+
+    hybrids = _math_hybrid_matches(
+        markdown,
+        inline_ranges,
+        [*fenced_ranges, *claimed],
+    )
+    matches.extend(hybrids)
+    claimed.extend((match.start, match.end) for match in hybrids)
+
+    displays = _math_display_matches(markdown, [*fenced_ranges, *claimed])
+    matches.extend(displays)
+    claimed.extend((match.start, match.end) for match in displays)
+
+    inlines = _math_inline_matches(
+        markdown,
+        [*fenced_ranges, *inline_ranges, *claimed],
+    )
+    matches.extend(inlines)
+    matches.sort(key=lambda match: match.start)
+
+    render_token = secrets.token_hex(12).upper()
+    expressions = []
+    protected = []
+    cursor = 0
+    for match in matches:
+        if match.start < cursor:
+            continue
         token = f"{MATH_PLACEHOLDER_PREFIX}{render_token}X{len(expressions)}END"
-        protected.append(markdown[cursor:start])
-        protected.append(token)
+        protected.extend((markdown[cursor : match.start], token))
         expressions.append(
             MathExpression(
                 token=token,
-                source=markdown[source_start:end],
-                display_mode=display_mode,
+                source=match.source,
+                display_mode=match.display_mode,
             )
         )
-        cursor = end + len(closer)
-
+        cursor = match.end
+    protected.append(markdown[cursor:])
     return "".join(protected), tuple(expressions)
 
 
