@@ -292,6 +292,14 @@ containing that JSON object plus repeated `images[]` file fields. Markdown
 references like `attachment:chart.png` are replaced with the stored image URL.
 Unreferenced images are appended to the Markdown lead file.
 
+Markdown can also embed absolute external HTTPS image URLs. External images
+load directly in each reader's browser: their host receives the reader's
+network request, and the image can change or disappear later. The renderer
+does not send a referrer and lazy-loads images, but this does not hide the
+reader's IP address from the image host. Use a Wavey Gist image upload when the
+image should be archived with stable first-party hosting. HTTP, relative,
+malformed, and unsafe image URLs are rendered as their escaped alt text.
+
 Requests reject unknown fields. The accepted fields are:
 
 - auth session create: JSON `api_key`;

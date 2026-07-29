@@ -233,7 +233,11 @@ def test_multipart_gist_replaces_attachment_references(client, app):
     assert public.status_code == 200
     public_body = public.get_json()
     assert public_body["files"]["README.md"]["content"] == content
-    assert f'<img src="{image["url"]}" alt="Revenue">' in public_body["files"]["README.md"]["rendered_html"]
+    assert (
+        f'<img src="{image["url"]}" alt="Revenue" loading="lazy" '
+        'decoding="async" referrerpolicy="no-referrer">'
+        in public_body["files"]["README.md"]["rendered_html"]
+    )
 
 
 def test_multipart_gist_appends_unreferenced_images(client, app):
@@ -274,7 +278,11 @@ def test_multipart_gist_can_be_image_only(client, app):
     public = client.get(f"/api/v1/gists/{body['id']}/render")
     assert public.status_code == 200
     public_body = public.get_json()
-    assert f'<img src="{image["url"]}" alt="chart.png">' in public_body["files"]["README.md"]["rendered_html"]
+    assert (
+        f'<img src="{image["url"]}" alt="chart.png" loading="lazy" '
+        'decoding="async" referrerpolicy="no-referrer">'
+        in public_body["files"]["README.md"]["rendered_html"]
+    )
 
 
 def test_multipart_gist_rejects_duplicate_attachment_filenames(client, app):

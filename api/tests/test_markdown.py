@@ -280,24 +280,111 @@ def test_markdown_rendering_does_not_allow_user_math_hook_classes():
     assert "forged" in result.html
 
 
-def test_markdown_rendering_drops_images_without_allowed_prefix():
+def test_markdown_rendering_allows_external_https_and_first_party_images():
     markdown = (
-        "![tracked](https://tracker.example/pixel.png)\n"
-        "![kept](https://api.example.com/api/v1/images/img_abc1234567890abc)"
+        "![external](https://cdn.example.com/chart.png?version=2)\n"
+        "![upload](http://localhost:3001/api/v1/images/img_abc1234567890abc)\n"
+        "![other](http://localhost:3001/api/v1/other.png)"
     )
 
     result = render_markdown_result(markdown)
-    assert "<img" not in result.html
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+    images = root.xpath(".//img")
+    assert [image.attrib["src"] for image in images] == [
+        "https://cdn.example.com/chart.png?version=2"
+    ]
+    assert images[0].attrib == {
+        "src": "https://cdn.example.com/chart.png?version=2",
+        "alt": "external",
+        "loading": "lazy",
+        "decoding": "async",
+        "referrerpolicy": "no-referrer",
+    }
+    assert "upload" in result.html
+    assert "other" in result.html
 
     allowed = render_markdown_result(
         markdown,
-        allowed_image_src_prefixes=("https://api.example.com/api/v1/images/",),
+        allowed_image_src_prefixes=("http://localhost:3001/api/v1/images/",),
     )
-    assert "tracker.example" not in allowed.html
-    assert (
-        '<img src="https://api.example.com/api/v1/images/img_abc1234567890abc" alt="kept">'
-        in allowed.html
+    allowed_root = html_parser.fragment_fromstring(allowed.html, create_parent="div")
+    allowed_images = allowed_root.xpath(".//img")
+    assert [image.attrib["alt"] for image in allowed_images] == [
+        "external",
+        "upload",
+    ]
+    assert "other" in allowed.html
+
+
+def test_markdown_rendering_rejects_unsafe_and_malformed_image_urls():
+    rejected = {
+        "http": "http://cdn.example.com/image.png",
+        "protocol relative": "//cdn.example.com/image.png",
+        "missing authority": "https:image.png",
+        "missing host": "https://",
+        "credentials": "https://user:secret@cdn.example.com/image.png",
+        "invalid port": "https://cdn.example.com:99999/image.png",
+        "backslash": r"https://cdn.example.com\@attacker.example/image.png",
+        "data": "data:image/png;base64,AAAA",
+        "file": "file:///tmp/image.png",
+        "javascript": "javascript:alert(1)",
+    }
+    raw_html = "".join(
+        f'<img src="{source}" alt="{label}">' for label, source in rejected.items()
     )
+
+    result = render_markdown_result(raw_html)
+
+    assert "<img" not in result.html
+    for label in rejected:
+        assert label in result.html
+    for source in rejected.values():
+        assert source not in result.html
+
+
+def test_rejected_image_alt_text_is_escaped_and_preserves_surrounding_text():
+    result = render_markdown_result(
+        'before <img src="javascript:alert(1)" '
+        'alt="&lt;strong&gt;fallback&lt;/strong&gt;"> after'
+    )
+
+    assert result.html == (
+        "<p>before &lt;strong&gt;fallback&lt;/strong&gt; after</p>\n"
+    )
+    assert "<img" not in result.html
+    assert "<strong>fallback</strong>" not in result.html
+
+
+def test_markdown_rendering_enforces_safe_image_attributes():
+    oversized_dimension = "9" * 5000
+    result = render_markdown_result(
+        '<img src="HTTPS://cdn.example.com/chart.png" alt="Chart" title="Quarterly" '
+        'width="640" height="480" loading="eager" decoding="sync" '
+        'referrerpolicy="unsafe-url" srcset="https://attacker.example/2x.png 2x" '
+        'style="display:none" class="bad" onerror="alert(1)">'
+        '<img src="https://cdn.example.com/large.png" alt="Large" '
+        f'width="0" height="{oversized_dimension}">'
+    )
+
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+    first, second = root.xpath(".//img")
+    assert first.attrib == {
+        "src": "HTTPS://cdn.example.com/chart.png",
+        "alt": "Chart",
+        "title": "Quarterly",
+        "width": "640",
+        "height": "480",
+        "loading": "lazy",
+        "decoding": "async",
+        "referrerpolicy": "no-referrer",
+    }
+    assert second.attrib == {
+        "src": "https://cdn.example.com/large.png",
+        "alt": "Large",
+        "loading": "lazy",
+        "decoding": "async",
+        "referrerpolicy": "no-referrer",
+    }
 
 
 def test_ethereum_entity_rendering_marks_plain_linked_and_abbreviated_values():
@@ -844,6 +931,68 @@ def test_rerender_gists_updates_current_rows_and_revisions(client, app):
     assert "highlight highlight-source-python" in row["rendered_html"]
     assert "cmarkgfm/" in row["render_version"]
     assert "highlight/ok" in row["render_version"]
+
+
+def test_rerender_gists_activates_external_images_without_changing_source(client, app):
+    write_key = make_key(app, name="external-image-renderer")
+    source = "![Progress](https://images.example/progress.png)"
+    created = create_gist(client, write_key, markdown=source)
+    assert created.status_code == 201
+    gist_id = created.get_json()["id"]
+
+    with gist_connection(app) as conn:
+        before = conn.execute(
+            """
+            select f.content, f.content_sha256, f.byte_size
+            from gist_revision_files f
+            join gist_revisions r on r.id = f.gist_revision_id
+            join gists g on g.id = r.gist_id
+            where g.external_id = ?
+            """,
+            (gist_id,),
+        ).fetchone()
+        with conn:
+            conn.execute(
+                """
+                update gist_revision_files
+                set rendered_html = 'Progress', render_version = 'old'
+                where gist_revision_id in (
+                    select r.id from gist_revisions r
+                    join gists g on g.id = r.gist_id
+                    where g.external_id = ?
+                )
+                """,
+                (gist_id,),
+            )
+
+    result = rerender_gists(app, external_id=gist_id)
+    assert result["gists"] == 1
+    assert result["revisions"] == 1
+
+    with gist_connection(app) as conn:
+        after = conn.execute(
+            """
+            select f.content, f.content_sha256, f.byte_size,
+                   f.rendered_html, f.render_version
+            from gist_revision_files f
+            join gist_revisions r on r.id = f.gist_revision_id
+            join gists g on g.id = r.gist_id
+            where g.external_id = ?
+            """,
+            (gist_id,),
+        ).fetchone()
+
+    assert {
+        "content": after["content"],
+        "content_sha256": after["content_sha256"],
+        "byte_size": after["byte_size"],
+    } == dict(before)
+    assert (
+        '<img src="https://images.example/progress.png" alt="Progress" '
+        'loading="lazy" decoding="async" referrerpolicy="no-referrer">'
+        in after["rendered_html"]
+    )
+    assert "sanitizer/2026-07-29.1" in after["render_version"]
 
 
 def test_rerender_gists_uses_current_ethereum_rendering(client, app):

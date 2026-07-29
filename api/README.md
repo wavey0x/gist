@@ -158,6 +158,14 @@ the normal JSON request and repeated `images[]` file fields.
 `attachment:<filename>` references in any Markdown file are replaced with the
 stored image URL; unreferenced uploads are appended to the Markdown lead file.
 
+Markdown may alternatively reference an absolute external HTTPS image URL.
+External images are fetched directly by each reader's browser, so the remote
+host receives the request and the content can change or disappear. Rendered
+images use lazy loading and a no-referrer policy, but the remote host can still
+observe the reader's IP address. Use first-party uploads for stable archived
+images. HTTP, relative, malformed, and unsafe image URLs are replaced by their
+escaped alt text.
+
 `PATCH /api/v1/gists/{gist_id}` only updates gists owned by the authenticated
 key.
 

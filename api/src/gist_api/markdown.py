@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import bleach
 import cmarkgfm
@@ -19,7 +20,7 @@ from lxml import etree, html
 
 logger = logging.getLogger(__name__)
 
-SANITIZER_CONFIG_VERSION = "2026-07-08.2"
+SANITIZER_CONFIG_VERSION = "2026-07-29.1"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
 ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.3"
 MERMAID_RENDER_VERSION = "2026-07-08.2"
@@ -1435,14 +1436,90 @@ def _safe_class_value(value):
     return bool(tokens) and all(_safe_class_token(token) for token in tokens)
 
 
+def _parse_absolute_image_url(value):
+    if (
+        not value
+        or value != value.strip()
+        or "\\" in value
+        or any(
+            ord(character) <= 0x20 or ord(character) == 0x7F
+            for character in value
+        )
+    ):
+        return None
+
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return None
+
+    if (
+        not parsed.scheme
+        or not parsed.netloc
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return None
+
+    return parsed, port
+
+
+def _matches_allowed_image_src_prefix(value, prefix):
+    parsed_value = _parse_absolute_image_url(value)
+    parsed_prefix = _parse_absolute_image_url(prefix)
+    if parsed_value is None or parsed_prefix is None:
+        return False
+
+    value_url, value_port = parsed_value
+    prefix_url, prefix_port = parsed_prefix
+    return (
+        value_url.scheme.lower() == prefix_url.scheme.lower()
+        and value_url.hostname.lower() == prefix_url.hostname.lower()
+        and value_port == prefix_port
+        and value_url.path.startswith(prefix_url.path)
+        and not prefix_url.query
+        and not prefix_url.fragment
+    )
+
+
 def _safe_image_src(value, allowed_image_src_prefixes):
-    return any(value.startswith(prefix) for prefix in allowed_image_src_prefixes)
+    parsed = _parse_absolute_image_url(value)
+    if parsed is None:
+        return False
+
+    url, _port = parsed
+    if url.scheme.lower() == "https":
+        return True
+
+    return any(
+        _matches_allowed_image_src_prefix(value, prefix)
+        for prefix in allowed_image_src_prefixes
+    )
 
 
-def _drop_unsafe_images(root, allowed_image_src_prefixes):
+def _append_text_before_element(element, value):
+    previous = element.getprevious()
+    if previous is None:
+        parent = element.getparent()
+        parent.text = (parent.text or "") + value
+    else:
+        previous.tail = (previous.tail or "") + value
+
+
+def _replace_unsafe_images(root, allowed_image_src_prefixes):
     for element in list(root.iter("img")):
         if not _safe_image_src(element.attrib.get("src", ""), allowed_image_src_prefixes):
+            _append_text_before_element(element, element.attrib.get("alt", ""))
             element.drop_tree()
+
+
+def _enrich_images(root):
+    for element in root.iter("img"):
+        element.attrib["loading"] = "lazy"
+        element.attrib["decoding"] = "async"
+        element.attrib["referrerpolicy"] = "no-referrer"
 
 
 def _allow_attribute_factory(allowed_image_src_prefixes, mermaid_placeholder_languages):
@@ -1484,7 +1561,16 @@ def _allow_attribute(
     if tag == "img":
         if name == "src":
             return _safe_image_src(value, allowed_image_src_prefixes)
-        return name in {"alt", "title", "width", "height"}
+        if name in {"alt", "title"}:
+            return True
+        if name in {"width", "height"}:
+            return (
+                value.isascii()
+                and value.isdigit()
+                and len(value) <= 4
+                and 1 <= int(value) <= 4096
+            )
+        return False
 
     if tag == "input":
         if name == "type":
@@ -1514,7 +1600,7 @@ def render_markdown_result(
     root = _parse_fragment(raw_html)
     _restore_math_placeholders_in_code_and_attributes(root, math_expressions)
     _drop_scriptable_content(root)
-    _drop_unsafe_images(root, tuple(allowed_image_src_prefixes))
+    _replace_unsafe_images(root, tuple(allowed_image_src_prefixes))
     highlight_stats = _highlight_blocks(
         root,
         mermaid_placeholder_languages,
@@ -1536,6 +1622,7 @@ def render_markdown_result(
         strip_comments=True,
     )
     cleaned_root = _parse_fragment(cleaned_html)
+    _enrich_images(cleaned_root)
     _enrich_mermaid_blocks(cleaned_root, mermaid_placeholder_languages)
     _enrich_math_placeholders(cleaned_root, math_expressions)
     enriched_html = _serialize_fragment(cleaned_root)

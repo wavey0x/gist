@@ -992,7 +992,10 @@ def test_sanitizer_strips_scriptable_content(client, app):
     markdown = """
 <script>alert(1)</script>
 <img src="javascript:alert(1)" onerror="alert(1)">
-![tracker](https://tracker.example/pixel.png)
+
+![external](https://images.example/report.png)
+![insecure](http://tracker.example/pixel.png)
+
 <a href="javascript:alert(1)" onclick="alert(1)">bad</a>
 <svg><script>alert(1)</script></svg>
 """
@@ -1007,7 +1010,12 @@ def test_sanitizer_strips_scriptable_content(client, app):
     assert "alert(1)" not in html
     assert "javascript:" not in html
     assert "tracker.example" not in html
-    assert "<img" not in html
+    assert (
+        '<img src="https://images.example/report.png" alt="external" '
+        'loading="lazy" decoding="async" referrerpolicy="no-referrer">'
+        in html
+    )
+    assert "insecure" in html
     assert "onerror" not in html
     assert "onclick" not in html
     assert "<svg" not in html

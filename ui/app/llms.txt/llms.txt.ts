@@ -116,6 +116,8 @@ export const LLMS_TXT =
     "",
     "A standalone image upload uses POST `/api/v1/images` with one multipart `image` field.",
     "",
+    "Markdown may also embed absolute external HTTPS image URLs. They load directly from the remote host in each reader's browser, can change or disappear, and expose the reader's IP address to that host even though Wavey Gist sends no referrer. Use uploaded Wavey images for stable archived content. HTTP, relative, malformed, and unsafe image URLs render as escaped alt text.",
+    "",
     "### Delete",
     "",
     "```sh",
