@@ -105,3 +105,34 @@ def test_admin_key_list_revoke_and_rotate(monkeypatch, tmp_path, capsys):
     admin_main(["keys", "revoke", preserved["key_prefix"]])
     revoked = json.loads(capsys.readouterr().out)
     assert revoked == {"revoked": True}
+
+
+def test_admin_key_update_can_store_avatar_without_returning_secret(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    monkeypatch.setenv("SQLITE_DB_PATH", str(tmp_path / "admin.sqlite3"))
+    monkeypatch.setenv("PUBLIC_API_BASE_URL", "https://api.example.com")
+    avatar = tmp_path / "avatar.png"
+    avatar.write_bytes(b"\x89PNG\r\n\x1a\nupdated-avatar")
+    admin_main(["keys", "create", "--name", "Review Agent"])
+    created = _admin_json(capsys.readouterr().out)
+
+    admin_main(
+        [
+            "keys",
+            "update",
+            created["key_prefix"],
+            "--avatar-file",
+            str(avatar),
+        ]
+    )
+    updated = json.loads(capsys.readouterr().out)
+
+    assert updated["key_prefix"] == created["key_prefix"]
+    assert updated["avatar_url"].startswith(
+        "https://api.example.com/api/v1/avatars/"
+    )
+    assert "key" not in updated
+    assert len(list((tmp_path / "avatars").glob("*.png"))) == 1

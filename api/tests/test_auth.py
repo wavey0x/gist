@@ -6,6 +6,7 @@ from gist_api.auth import (
     revoke_api_key,
     rotate_api_key,
     session_identity,
+    update_api_key,
     verify_api_key,
     verify_web_session,
 )
@@ -137,6 +138,41 @@ def test_key_rotation_can_replace_github_login(app):
 
     assert rotated["name"] == "rotate"
     assert rotated["github_login"] == "second-login"
+
+
+def test_key_update_preserves_secret_and_web_sessions(app):
+    avatar_url = "https://api.example.com/api/v1/avatars/reviewer.png"
+    with gist_connection(app) as conn:
+        created = create_api_key(conn, "reviewer")
+        token, _auth, error = create_web_session(conn, created["key"])
+        assert error is None
+
+        updated = update_api_key(
+            conn,
+            created["key_prefix"],
+            name="Review Agent",
+            avatar_url=avatar_url,
+        )
+        key_auth, key_error = verify_api_key(
+            conn,
+            f"Bearer {created['key']}",
+        )
+        session_auth, session_error = verify_web_session(conn, token)
+
+    assert updated == {
+        "id": created["id"],
+        "key_prefix": created["key_prefix"],
+        "name": "Review Agent",
+        "github_login": None,
+        "avatar_url": avatar_url,
+        "created_at": created["created_at"],
+    }
+    assert key_error is None
+    assert key_auth.key_value == created["key"]
+    assert key_auth.avatar_url == avatar_url
+    assert session_error is None
+    assert session_auth.key_value == created["key"]
+    assert session_auth.avatar_url == avatar_url
 
 
 def test_key_creation_and_rotation_can_set_custom_avatar_url(app):

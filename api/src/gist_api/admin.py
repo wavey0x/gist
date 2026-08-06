@@ -2,7 +2,13 @@ import argparse
 import json
 
 from .avatars import save_avatar_file
-from .auth import create_api_key, list_api_keys, revoke_api_key, rotate_api_key
+from .auth import (
+    create_api_key,
+    list_api_keys,
+    revoke_api_key,
+    rotate_api_key,
+    update_api_key,
+)
 from .db import gist_connection
 from .migrations import init_gist_database
 from .service import rerender_gists
@@ -51,6 +57,12 @@ def main(argv=None):
     revoke = key_commands.add_parser("revoke")
     revoke.add_argument("key_prefix_or_id")
 
+    update = key_commands.add_parser("update")
+    update.add_argument("key_prefix_or_id")
+    update.add_argument("--name")
+    update.add_argument("--github-login")
+    _add_avatar_arguments(update)
+
     rotate = key_commands.add_parser("rotate")
     rotate.add_argument("key_prefix_or_id")
     rotate.add_argument("--name")
@@ -86,6 +98,22 @@ def main(argv=None):
             elif args.command == "revoke":
                 revoke_api_key(conn, args.key_prefix_or_id)
                 print(json.dumps({"revoked": True}, indent=2))
+            elif args.command == "update":
+                avatar_args_present = (
+                    args.avatar_url is not None or args.avatar_file or args.clear_avatar
+                )
+                update_kwargs = {}
+                if args.github_login is not None:
+                    update_kwargs["github_login"] = args.github_login
+                if avatar_args_present:
+                    update_kwargs["avatar_url"] = _avatar_arg(app, args)
+                result = update_api_key(
+                    conn,
+                    args.key_prefix_or_id,
+                    args.name,
+                    **update_kwargs,
+                )
+                print(json.dumps(result, indent=2))
             elif args.command == "rotate":
                 avatar_args_present = (
                     args.avatar_url is not None or args.avatar_file or args.clear_avatar

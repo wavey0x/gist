@@ -352,6 +352,82 @@ def revoke_api_key(conn, key_prefix_or_id):
             )
 
 
+def _api_key_row(conn, key_prefix_or_id):
+    if str(key_prefix_or_id).isdigit():
+        selector = "id = ?"
+        selector_value = int(key_prefix_or_id)
+    else:
+        selector = "key_prefix = ?"
+        selector_value = key_prefix_or_id
+
+    row = conn.execute(
+        f"""
+        select id, name, github_login, avatar_url, key_prefix, created_at
+        from api_keys
+        where {selector}
+        """,
+        (selector_value,),
+    ).fetchone()
+    if row is None:
+        raise ValueError("key not found")
+    return row
+
+
+def _updated_key_profile(
+    row,
+    name=None,
+    github_login=_PRESERVE,
+    avatar_url=_PRESERVE,
+):
+    new_name = _normalize_key_name(name or row["name"])
+    new_github_login = (
+        row["github_login"]
+        if github_login is _PRESERVE
+        else _normalize_github_login(github_login)
+    )
+    new_avatar_url = (
+        row["avatar_url"]
+        if avatar_url is _PRESERVE
+        else normalize_avatar_url(avatar_url)
+    )
+    return new_name, new_github_login, new_avatar_url
+
+
+def update_api_key(
+    conn,
+    key_prefix_or_id,
+    name=None,
+    github_login=_PRESERVE,
+    avatar_url=_PRESERVE,
+):
+    row = _api_key_row(conn, key_prefix_or_id)
+    new_name, new_github_login, new_avatar_url = _updated_key_profile(
+        row,
+        name=name,
+        github_login=github_login,
+        avatar_url=avatar_url,
+    )
+
+    with conn:
+        conn.execute(
+            """
+            update api_keys
+            set name = ?, github_login = ?, avatar_url = ?
+            where id = ?
+            """,
+            (new_name, new_github_login, new_avatar_url, row["id"]),
+        )
+
+    return {
+        "id": row["id"],
+        "key_prefix": row["key_prefix"],
+        "name": new_name,
+        "github_login": new_github_login,
+        "avatar_url": new_avatar_url,
+        "created_at": row["created_at"],
+    }
+
+
 def rotate_api_key(
     conn,
     key_prefix_or_id,
@@ -359,37 +435,13 @@ def rotate_api_key(
     github_login=_PRESERVE,
     avatar_url=_PRESERVE,
 ):
-    if str(key_prefix_or_id).isdigit():
-        row = conn.execute(
-            """
-            select id, name, github_login, avatar_url, created_at
-            from api_keys
-            where id = ?
-            """,
-            (int(key_prefix_or_id),),
-        ).fetchone()
-    else:
-        row = conn.execute(
-            """
-            select id, name, github_login, avatar_url, created_at
-            from api_keys
-            where key_prefix = ?
-            """,
-            (key_prefix_or_id,),
-        ).fetchone()
-
-    if row is None:
-        raise ValueError("key not found")
-
-    new_name = _normalize_key_name(name or row["name"])
-    if github_login is _PRESERVE:
-        new_github_login = row["github_login"]
-    else:
-        new_github_login = _normalize_github_login(github_login)
-    if avatar_url is _PRESERVE:
-        new_avatar_url = row["avatar_url"]
-    else:
-        new_avatar_url = normalize_avatar_url(avatar_url)
+    row = _api_key_row(conn, key_prefix_or_id)
+    new_name, new_github_login, new_avatar_url = _updated_key_profile(
+        row,
+        name=name,
+        github_login=github_login,
+        avatar_url=avatar_url,
+    )
     now = utc_now()
 
     for _ in range(8):

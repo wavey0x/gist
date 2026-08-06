@@ -231,6 +231,7 @@ uv run admin keys create --name <name> --github-login <github_login>
 uv run admin keys create --name <name> --avatar-file <path_to_image>
 uv run admin keys list
 uv run admin keys revoke <key_prefix_or_id>
+uv run admin keys update <key_prefix_or_id> --avatar-file <path_to_image>
 uv run admin keys rotate <key_prefix_or_id> --name <new_name>
 uv run admin keys rotate <key_prefix_or_id> --github-login <github_login>
 uv run admin keys rotate <key_prefix_or_id> --avatar-url <https_url>
