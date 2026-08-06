@@ -443,11 +443,31 @@ def publish(
         image_uploads=images,
     )
     try:
-        return parse_snapshot(data, expected_id)
+        snapshot = parse_snapshot(data, expected_id)
     except CliError as exc:
         raise AmbiguousWriteError(
             "Write may have succeeded but the API response was invalid; do not retry."
         ) from exc
+    if images:
+        image_assets = data.get("images")
+        valid_assets = isinstance(image_assets, list) and len(image_assets) == len(
+            images
+        )
+        if valid_assets:
+            valid_assets = all(
+                isinstance(asset, dict)
+                and asset.get("original_filename") == upload.filename
+                and asset.get("byte_size") == len(upload.content)
+                and isinstance(asset.get("url"), str)
+                and bool(asset["url"])
+                for upload, asset in zip(images, image_assets)
+            )
+        if not valid_assets:
+            raise CliError(
+                "Published gist returned invalid image metadata; do not retry: "
+                f"{snapshot.url} revision {snapshot.revision_number}"
+            )
+    return snapshot
 
 
 def create_gist(
@@ -473,8 +493,8 @@ def create_gist(
         images=images,
         expected_id=None,
     )
-    if not images and (
-        published.files != files or published.title != expected_title
+    if published.title != expected_title or (
+        not images and published.files != files
     ):
         raise CliError(
             "Published gist differs from the submitted files; do not retry: "
@@ -538,8 +558,8 @@ def update_gist(
             raise CliError("Gist changed while updating; read it and retry.") from exc
         raise
 
-    if not images and (
-        published.files != files or published.title != expected_title
+    if published.title != expected_title or (
+        not images and published.files != files
     ):
         raise CliError(
             "Published gist differs from the submitted files; do not retry: "
@@ -590,11 +610,11 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     token = None
     try:
-        base_url = api_base_url()
         if args.command == "check":
             require_token()
             print("Wavey Gist API key found.")
             return 0
+        base_url = api_base_url()
         if args.command == "read":
             gist_id, revision_number = parse_gist_target(args.target)
             snapshot = read_public_snapshot(base_url, gist_id, revision_number)

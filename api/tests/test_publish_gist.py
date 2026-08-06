@@ -82,6 +82,19 @@ def _gist_payload(
     return payload
 
 
+def _image_asset(filename="chart.png", content=PNG_1X1):
+    return {
+        "id": IMAGE_ID,
+        "url": IMAGE_URL,
+        "original_filename": filename,
+        "mime_type": "image/png",
+        "byte_size": len(content),
+        "width": 1,
+        "height": 1,
+        "markdown": f"![{filename}]({IMAGE_URL})",
+    }
+
+
 def _run(monkeypatch, capsys, argv, handler):
     monkeypatch.delenv("WAVEY_GIST_API_BASE_URL", raising=False)
     monkeypatch.setattr(publish_gist, "_request", handler)
@@ -281,7 +294,7 @@ def test_create_passes_images_to_the_api(monkeypatch, capsys, tmp_path):
         latest_revision_number=1,
         title=None,
         files={"README.md": resolved},
-        images=[{"id": IMAGE_ID, "url": IMAGE_URL}],
+        images=[_image_asset()],
     )
 
     def handler(_url, **kwargs):
@@ -303,6 +316,74 @@ def test_create_passes_images_to_the_api(monkeypatch, capsys, tmp_path):
     assert result == 0
     assert output == f"{GIST_URL}\n"
     assert error == ""
+
+
+@pytest.mark.parametrize(
+    "images",
+    [
+        [],
+        [{**_image_asset(), "original_filename": "other.png"}],
+        [{**_image_asset(), "byte_size": len(PNG_1X1) + 1}],
+        [{**_image_asset(), "url": ""}],
+    ],
+)
+def test_image_writes_require_matching_metadata(
+    monkeypatch,
+    capsys,
+    tmp_path,
+    images,
+):
+    readme = tmp_path / "README.md"
+    image = tmp_path / "chart.png"
+    readme.write_text("# Chart\n")
+    image.write_bytes(PNG_1X1)
+    response = _gist_payload(
+        revision_number=1,
+        latest_revision_number=1,
+        title=None,
+        files={"README.md": "# Chart\n"},
+        images=images,
+    )
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        ["create", str(readme), "--image", str(image)],
+        lambda _url, **_kwargs: _json_bytes(response),
+    )
+
+    assert result == 1
+    assert output == ""
+    assert "invalid image metadata" in error
+    assert "do not retry" in error
+    assert GIST_URL in error
+
+
+def test_image_writes_require_the_expected_title(monkeypatch, capsys, tmp_path):
+    readme = tmp_path / "README.md"
+    image = tmp_path / "chart.png"
+    readme.write_text("# Chart\n")
+    image.write_bytes(PNG_1X1)
+    response = _gist_payload(
+        revision_number=1,
+        latest_revision_number=1,
+        title="Unexpected",
+        files={"README.md": "# Chart\n"},
+        images=[_image_asset()],
+    )
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        ["create", str(readme), "--image", str(image)],
+        lambda _url, **_kwargs: _json_bytes(response),
+    )
+
+    assert result == 1
+    assert output == ""
+    assert "differs from the submitted files" in error
+    assert "do not retry" in error
+    assert GIST_URL in error
 
 
 def test_update_overlays_deletes_and_clears_title(monkeypatch, capsys, tmp_path):
@@ -520,6 +601,16 @@ def test_check_reports_credentials_without_printing_them(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == "Wavey Gist API key found.\n"
     assert TOKEN not in captured.out
+
+
+def test_check_does_not_validate_the_api_base_url(monkeypatch, capsys):
+    monkeypatch.setenv("WAVEY_GIST_API_BASE_URL", "")
+    monkeypatch.setattr(publish_gist, "wavey_token", lambda: TOKEN)
+
+    assert publish_gist.main(["check"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "Wavey Gist API key found.\n"
+    assert captured.err == ""
 
 
 def test_errors_redact_discovered_secret(monkeypatch, capsys, tmp_path):
