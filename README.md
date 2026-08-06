@@ -97,67 +97,43 @@ from the account page.
 ## Create A Gist
 
 The repository helper is the recommended interface for text and image
-publishing. It uses `WAVEY_GIST_API_KEY`, reads text from repeated `--file`
-options or stdin, and has no third-party Python dependencies:
+publishing. It reads UTF-8 files directly from disk and has no third-party
+Python dependencies:
 
 ```sh
 export WAVEY_GIST_API_KEY=<api_key>
-scripts/publish-gist --file README.md --file example.py --verify --summary-json
+scripts/publish-gist create README.md example.py
 ```
 
-Attach stable first-party images with repeated `--image` options. Reference an
-upload from any Markdown file as `attachment:<basename>`; an unreferenced image
-is appended to the Markdown lead file:
+Attach stable first-party images with `--image`. Reference an upload from
+Markdown as `attachment:<basename>`:
 
 ```sh
-scripts/publish-gist \
-  --file README.md \
-  --image chart.png \
-  --verify \
-  --summary-json
+scripts/publish-gist create README.md --image chart.png
 ```
 
-Read a public gist as complete JSON, request a summary manifest, or materialize
-all its files:
+Read a public gist as compact JSON containing its metadata and every file:
 
 ```sh
-scripts/publish-gist --read --gist <url-or-id> --json
-scripts/publish-gist --read --gist <url-or-id> --summary-json
-scripts/publish-gist --read --gist <url-or-id> --output-dir <empty-dir>
+scripts/publish-gist read <url-or-id>
 ```
 
-Safely update it. The helper reads the latest snapshot, overlays the named
-files, and sends one conflict-safe full snapshot:
+Update an owned gist. Named files replace files with the same basenames; all
+other files remain unchanged:
 
 ```sh
-scripts/publish-gist \
-  --gist <url-or-id> \
-  --file README.md \
-  --file example.py \
-  --verify \
-  --summary-json
+scripts/publish-gist update <url-or-id> README.md example.py
 ```
 
-Each `--file` path is published under its basename; basename collisions are
-rejected. The primary file is exact `README.md` when present, otherwise the
-first Markdown filename alphabetically, otherwise the first filename
-alphabetically.
+Use `--delete <filename>` to remove a file. Use `--title <title>` to set a
+title, or `--title ""` to clear one. Create and update print only the public
+URL. Updates use optimistic concurrency and never retry writes blindly.
 
-Use repeated `--delete-file <filename>` options to remove files. `--json`
-returns the complete API representation, including file text. `--summary-json`
-returns URL, revision, snapshot, and file metadata without file text or
-rendered HTML. `--verify` checks every exact raw file, the snapshot digest,
-public render payload, and rendered page. If verification fails after the API
-accepted the write, the command exits nonzero and identifies the already-created
-revision; inspect it before taking further action.
-
-Supported helper options include `--file`, `--image`, `--stdin-name`,
-`--delete-file`, `--title`, `--clear-title`, `--gist`, `--read`, `--output-dir`,
-`--verify`, `--json`, `--summary-json`, `--api-base-url`, and `--check-key`. It uses
-`WAVEY_GIST_API_BASE_URL` to override the default API origin. Credential lookup
-checks `WAVEY_GIST_API_KEY`, then the file named by `WAVEY_GIST_ENV_FILE`
-(default `~/.config/wavey/gist.env`), then the existing macOS Keychain service.
-Read mode never discovers credentials.
+`scripts/publish-gist check` verifies that write credentials are available
+without publishing. Credential lookup checks `WAVEY_GIST_API_KEY`, then the
+file named by `WAVEY_GIST_ENV_FILE` (default `~/.config/wavey/gist.env`), then
+the existing macOS Keychain service. Public reads do not discover credentials.
+Set `WAVEY_GIST_API_BASE_URL` only to use a non-production API origin.
 
 The underlying API remains available for direct integrations:
 

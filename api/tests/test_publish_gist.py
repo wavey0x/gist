@@ -51,62 +51,41 @@ def _gist_payload(
     latest_revision_number=2,
     title="Plan",
     files=None,
-    digest=None,
     gist_id=GIST_ID,
-    pin_raw_revision=False,
     images=None,
 ):
     files = dict(FILES if files is None else files)
-    digest = digest or publish_gist.snapshot_sha256(title, files)
-    raw_prefix = f"{GIST_URL}/revisions/{revision_number}" if pin_raw_revision else GIST_URL
     payload = {
         "id": gist_id,
-        "url": GIST_URL,
+        "url": f"https://gist.wavey.info/{gist_id}",
         "title": title,
-        "display_title": title or "Plan",
-        "author_name": "owner",
-        "primary_file": publish_gist.ordered_filenames(files)[0],
-        "snapshot_sha256": digest,
+        "display_title": title or next(iter(files)),
+        "primary_file": "README.md" if "README.md" in files else next(iter(files)),
+        "snapshot_sha256": "a" * 64,
         "revision_number": revision_number,
         "latest_revision_number": latest_revision_number,
-        "created_at": "2026-07-22T10:00:00.000Z",
-        "updated_at": "2026-07-22T10:01:00.000Z",
         "files": {
             filename: {
                 "filename": filename,
                 "content": content,
-                "content_sha256": publish_gist.content_sha256(content),
+                "content_sha256": "b" * 64,
                 "byte_size": len(content.encode()),
-                "raw_url": (
-                    f"{raw_prefix}/raw/{publish_gist.urllib.parse.quote(filename, safe='')}"
-                ),
+                "raw_url": f"{GIST_URL}/raw/{filename}",
+                "rendered_html": f"<pre>{content}</pre>",
             }
             for filename, content in files.items()
         },
-        "history": [],
+        "history": [{"revision_number": revision_number}],
     }
     if images is not None:
         payload["images"] = images
     return payload
 
 
-def _image_asset(filename="chart.png", content=PNG_1X1):
-    return {
-        "id": IMAGE_ID,
-        "url": IMAGE_URL,
-        "original_filename": filename,
-        "mime_type": "image/png",
-        "byte_size": len(content),
-        "width": 1,
-        "height": 1,
-        "markdown": f"![{filename}]({IMAGE_URL})",
-    }
-
-
-def _run(monkeypatch, capsys, argv, handler, *, stdin=FILES["README.md"]):
+def _run(monkeypatch, capsys, argv, handler):
+    monkeypatch.delenv("WAVEY_GIST_API_BASE_URL", raising=False)
     monkeypatch.setattr(publish_gist, "_request", handler)
     monkeypatch.setattr(publish_gist, "wavey_token", lambda: TOKEN)
-    monkeypatch.setattr(publish_gist.sys, "stdin", io.StringIO(stdin))
     result = publish_gist.main(argv)
     captured = capsys.readouterr()
     return result, captured.out, captured.err
@@ -119,193 +98,152 @@ def _run(monkeypatch, capsys, argv, handler, *, stdin=FILES["README.md"]):
         (GIST_URL, (GIST_ID, None)),
         (f"{GIST_URL}/", (GIST_ID, None)),
         (f"{GIST_URL}/revisions/2", (GIST_ID, 2)),
-        (f"{GIST_URL}/revisions/2/", (GIST_ID, 2)),
     ],
 )
-def test_parse_gist_target_accepts_only_canonical_targets(target, expected):
+def test_parse_gist_target_accepts_current_targets(target, expected):
     assert publish_gist.parse_gist_target(target) == expected
 
 
 @pytest.mark.parametrize(
     "target",
     [
-        "legacy_id_with_underscores_1234",
-        f"prefix-{GIST_ID}-suffix",
+        "short",
         f"{GIST_URL}?revision=2",
         f"{GIST_URL}#raw",
-        f"https://gist.wavey.info/gists/{GIST_ID}",
+        f"https://user:pass@gist.wavey.info/{GIST_ID}",
         f"{GIST_URL}/revisions/0",
         f"{GIST_URL}/raw/README.md",
     ],
 )
-def test_parse_gist_target_rejects_legacy_or_ambiguous_targets(target):
+def test_parse_gist_target_rejects_ambiguous_targets(target):
     with pytest.raises(publish_gist.CliError):
         publish_gist.parse_gist_target(target)
 
 
-@pytest.mark.parametrize(
-    ("target", "expected_revision"),
-    [
-        (GIST_URL, 2),
-        (f"{GIST_URL}/revisions/1", 1),
-    ],
-)
-def test_read_json_is_public_and_reads_requested_revision(
+def test_read_returns_one_compact_complete_snapshot_without_credentials(
     monkeypatch,
     capsys,
-    target,
-    expected_revision,
 ):
-    def no_credentials():
-        raise AssertionError("read mode must not discover credentials")
+    response = _gist_payload()
 
-    response = _gist_payload(
-        revision_number=expected_revision,
-        latest_revision_number=2,
-        pin_raw_revision=expected_revision != 2,
-    )
+    def no_credentials():
+        raise AssertionError("public reads must not discover credentials")
 
     def handler(url, **kwargs):
-        expected_suffix = (
-            f"/{GIST_ID}/revisions/1/render"
-            if expected_revision == 1
-            else f"/{GIST_ID}/render"
-        )
-        assert url.endswith(expected_suffix)
-        assert kwargs["token"] is None
-        return _json_bytes(response), "application/json"
+        assert url.endswith(f"/{GIST_ID}/render")
+        assert kwargs.get("token") is None
+        return _json_bytes(response)
 
     monkeypatch.setattr(publish_gist, "wavey_token", no_credentials)
     monkeypatch.setattr(publish_gist, "_request", handler)
 
-    result = publish_gist.main(["--read", "--gist", target, "--json"])
+    assert publish_gist.main(["read", GIST_ID]) == 0
     output = json.loads(capsys.readouterr().out)
-
-    assert result == 0
-    assert output == response
-
-
-def test_read_summary_json_omits_file_content(monkeypatch, capsys):
-    response = _gist_payload()
-
-    def handler(_url, **_kwargs):
-        return _json_bytes(response), "application/json"
-
-    result, output, error = _run(
-        monkeypatch,
-        capsys,
-        ["--read", "--gist", GIST_ID, "--summary-json"],
-        handler,
-        stdin="",
-    )
-
-    assert result == 0
-    summary = json.loads(output)
-    assert summary == publish_gist.summary_json_manifest(response)
-    assert summary["url"] == GIST_URL
-    assert summary["revision_number"] == 2
-    assert summary["snapshot_sha256"] == response["snapshot_sha256"]
-    assert summary["files"]["README.md"] == {
-        "filename": "README.md",
-        "content_sha256": response["files"]["README.md"]["content_sha256"],
-        "byte_size": response["files"]["README.md"]["byte_size"],
-        "raw_url": response["files"]["README.md"]["raw_url"],
+    assert output == {
+        "id": GIST_ID,
+        "url": GIST_URL,
+        "title": "Plan",
+        "display_title": "Plan",
+        "primary_file": "README.md",
+        "snapshot_sha256": "a" * 64,
+        "revision_number": 2,
+        "latest_revision_number": 2,
+        "files": FILES,
     }
-    assert all("content" not in file for file in summary["files"].values())
-    assert "history" not in summary
-    assert error == ""
+    assert "history" not in output
+    assert "rendered_html" not in json.dumps(output)
 
 
-def test_read_without_json_prints_only_primary_file(monkeypatch, capsys):
+def test_read_revision_requires_the_requested_revision(monkeypatch, capsys):
     def handler(_url, **_kwargs):
-        return _json_bytes(_gist_payload()), "application/json"
+        return _json_bytes(_gist_payload(revision_number=3, latest_revision_number=3))
 
     result, output, error = _run(
         monkeypatch,
         capsys,
-        ["--read", "--gist", GIST_ID],
+        ["read", f"{GIST_URL}/revisions/2"],
         handler,
-        stdin="",
     )
 
-    assert result == 0
-    assert output == FILES["README.md"]
-    assert error == ""
-
-
-@pytest.mark.parametrize(
-    ("filenames", "primary"),
-    [
-        (["z.py", "README.md", "a.md"], "README.md"),
-        (["z.py", "guide.markdown", "a.md"], "a.md"),
-        (["z.py", "a.txt"], "a.txt"),
-    ],
-)
-def test_primary_file_selection_is_deterministic(filenames, primary):
-    assert publish_gist.ordered_filenames(dict.fromkeys(filenames))[0] == primary
-
-
-def test_read_output_dir_materializes_every_file(monkeypatch, capsys, tmp_path):
-    output_dir = tmp_path / "gist"
-
-    def handler(_url, **_kwargs):
-        return _json_bytes(_gist_payload()), "application/json"
-
-    result, output, error = _run(
-        monkeypatch,
-        capsys,
-        ["--read", "--gist", GIST_ID, "--output-dir", str(output_dir)],
-        handler,
-        stdin="",
-    )
-
-    assert result == 0
+    assert result == 1
     assert output == ""
-    assert error == ""
-    assert {path.name: path.read_text() for path in output_dir.iterdir()} == FILES
+    assert "wrong gist revision" in error
 
 
-def test_create_sends_multi_file_snapshot(monkeypatch, capsys, tmp_path):
+def test_create_reads_markdown_from_disk_without_shell_interpretation(
+    monkeypatch,
+    capsys,
+    tmp_path,
+):
+    content = (
+        "# Literal Markdown\n\n"
+        "`inline` and **bold**\n\n"
+        "```sh\n"
+        "printf '%s\\n' \"$HOME\"\n"
+        "echo $(date) && echo `uname`\n"
+        "printf 'C:\\\\tmp\\\\file'\n"
+        "```\n"
+    )
     readme = tmp_path / "README.md"
-    script = tmp_path / "check.py"
-    readme.write_text(FILES["README.md"])
-    script.write_text(FILES["check.py"])
-    response = _gist_payload(revision_number=1, latest_revision_number=1)
+    readme.write_bytes(content.encode())
+    response = _gist_payload(
+        revision_number=1,
+        latest_revision_number=1,
+        title=None,
+        files={"README.md": content},
+    )
 
     def handler(url, **kwargs):
-        assert url == "https://api.wavey.info/api/v1/gists"
+        assert url.endswith("/api/v1/gists")
         assert kwargs["method"] == "POST"
         assert kwargs["token"] == TOKEN
         assert kwargs["payload"] == {
-            "title": "Plan",
-            "files": {
-                "README.md": {"content": FILES["README.md"]},
-                "check.py": {"content": FILES["check.py"]},
-            },
+            "files": {"README.md": {"content": content}}
         }
-        return _json_bytes(response), "application/json"
+        assert kwargs["image_uploads"] == []
+        return _json_bytes(response)
 
     result, output, error = _run(
         monkeypatch,
         capsys,
-        [
-            "--file",
-            str(readme),
-            "--file",
-            str(script),
-            "--title",
-            "Plan",
-            "--summary-json",
-        ],
+        ["create", str(readme)],
         handler,
     )
 
     assert result == 0
-    assert json.loads(output) == publish_gist.summary_json_manifest(response)
+    assert output == f"{GIST_URL}\n"
     assert error == ""
 
 
-def test_multipart_encoder_preserves_json_and_unicode_image_name():
+def test_create_does_not_require_a_markdown_heading(monkeypatch, capsys, tmp_path):
+    readme = tmp_path / "README.md"
+    readme.write_text("plain but intentional\n")
+    response = _gist_payload(
+        revision_number=1,
+        latest_revision_number=1,
+        title=None,
+        files={"README.md": "plain but intentional\n"},
+    )
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        ["create", str(readme)],
+        lambda _url, **_kwargs: _json_bytes(response),
+    )
+
+    assert result == 0
+    assert output == f"{GIST_URL}\n"
+    assert error == ""
+
+
+def test_create_requires_a_disk_file():
+    with pytest.raises(SystemExit) as error:
+        publish_gist.main(["create"])
+    assert error.value.code == 2
+
+
+def test_multipart_encoder_preserves_payload_and_unicode_image_name():
     from werkzeug.formparser import parse_form_data
 
     payload = {"files": {"README.md": {"content": "# Chart"}}}
@@ -328,65 +266,46 @@ def test_multipart_encoder_preserves_json_and_unicode_image_name():
     assert json.loads(form["payload"]) == payload
     assert len(stored) == 1
     assert stored[0].filename == upload.filename
-    assert stored[0].content_type == upload.content_type
     assert stored[0].read() == upload.content
 
 
-def test_create_with_referenced_image_sends_multipart_snapshot(
-    monkeypatch,
-    capsys,
-    tmp_path,
-):
-    source = "# Chart\n\n![Revenue](attachment:chart.png)\n"
+def test_create_passes_images_to_the_api(monkeypatch, capsys, tmp_path):
+    source = "# Chart\n\n![Chart](attachment:chart.png)\n"
     resolved = source.replace("attachment:chart.png", IMAGE_URL)
     readme = tmp_path / "README.md"
     image = tmp_path / "chart.png"
     readme.write_text(source)
     image.write_bytes(PNG_1X1)
-    asset = _image_asset()
     response = _gist_payload(
         revision_number=1,
         latest_revision_number=1,
         title=None,
         files={"README.md": resolved},
-        images=[asset],
+        images=[{"id": IMAGE_ID, "url": IMAGE_URL}],
     )
 
-    def handler(url, **kwargs):
-        assert url == "https://api.wavey.info/api/v1/gists"
-        assert kwargs["method"] == "POST"
+    def handler(_url, **kwargs):
         assert kwargs["payload"] == {
-            "files": {"README.md": {"content": source}},
+            "files": {"README.md": {"content": source}}
         }
         assert kwargs["image_uploads"] == [
             publish_gist.ImageUpload("chart.png", PNG_1X1, "image/png")
         ]
-        return _json_bytes(response), "application/json"
+        return _json_bytes(response)
 
     result, output, error = _run(
         monkeypatch,
         capsys,
-        [
-            "--file",
-            str(readme),
-            "--image",
-            str(image),
-            "--summary-json",
-        ],
+        ["create", str(readme), "--image", str(image)],
         handler,
-        stdin="",
     )
 
     assert result == 0
-    assert json.loads(output) == publish_gist.summary_json_manifest(response)
+    assert output == f"{GIST_URL}\n"
     assert error == ""
 
 
-def test_update_reads_latest_and_sends_resolved_full_snapshot(
-    monkeypatch,
-    capsys,
-    tmp_path,
-):
+def test_update_overlays_deletes_and_clears_title(monkeypatch, capsys, tmp_path):
     current_files = {
         "README.md": FILES["README.md"],
         "old.py": "print('old')\n",
@@ -399,6 +318,7 @@ def test_update_reads_latest_and_sends_resolved_full_snapshot(
     published = _gist_payload(
         revision_number=3,
         latest_revision_number=3,
+        title=None,
         files=next_files,
     )
     new_file = tmp_path / "new.py"
@@ -407,143 +327,235 @@ def test_update_reads_latest_and_sends_resolved_full_snapshot(
 
     def handler(url, **kwargs):
         calls.append((url, kwargs))
-        if kwargs.get("method") == "GET":
-            return _json_bytes(current), "application/json"
-        assert url == f"https://api.wavey.info/api/v1/gists/{GIST_ID}"
+        if kwargs.get("method", "GET") == "GET":
+            assert url.endswith(f"/api/v1/gists/{GIST_ID}")
+            assert kwargs["token"] == TOKEN
+            return _json_bytes(current)
         assert kwargs["method"] == "PATCH"
         assert kwargs["payload"] == {
             "files": {
-                "README.md": {"content": FILES["README.md"]},
-                "new.py": {"content": next_files["new.py"]},
+                filename: {"content": content}
+                for filename, content in next_files.items()
             },
             "expected_snapshot_sha256": current["snapshot_sha256"],
+            "title": "",
         }
-        return _json_bytes(published), "application/json"
+        return _json_bytes(published)
 
     result, output, error = _run(
         monkeypatch,
         capsys,
         [
-            "--gist",
-            f"{GIST_URL}/revisions/1",
-            "--file",
+            "update",
+            GIST_ID,
             str(new_file),
-            "--delete-file",
+            "--delete",
             "old.py",
-            "--json",
+            "--title",
+            "",
         ],
         handler,
-        stdin="",
     )
 
     assert result == 0
-    assert json.loads(output) == published
+    assert output == f"{GIST_URL}\n"
     assert error == ""
-    assert calls[0][0].endswith(f"/{GIST_ID}/render")
+    assert len(calls) == 2
 
 
-def test_update_with_unreferenced_image_verifies_server_resolved_snapshot(
-    monkeypatch,
-    capsys,
-    tmp_path,
-):
-    current = _gist_payload(title="Plan")
-    asset = _image_asset()
-    resolved_files = {
-        **FILES,
-        "README.md": f"{FILES['README.md'].rstrip()}\n\n{asset['markdown']}",
-    }
-    published = _gist_payload(
-        revision_number=3,
-        latest_revision_number=3,
-        title="Plan",
-        files=resolved_files,
-        images=[asset],
-    )
-    exact = _gist_payload(
-        revision_number=3,
-        latest_revision_number=3,
-        title="Plan",
-        files=resolved_files,
-        pin_raw_revision=True,
-    )
-    image = tmp_path / "chart.png"
-    image.write_bytes(PNG_1X1)
-    revision_url = f"{GIST_URL}/revisions/3"
-
-    def handler(url, **kwargs):
-        method = kwargs.get("method", "GET")
-        if method == "PATCH":
-            assert kwargs["payload"] == {
-                "files": {
-                    filename: {"content": content}
-                    for filename, content in FILES.items()
-                },
-                "expected_snapshot_sha256": current["snapshot_sha256"],
-            }
-            assert kwargs["image_uploads"] == [
-                publish_gist.ImageUpload("chart.png", PNG_1X1, "image/png")
-            ]
-            return _json_bytes(published), "application/json"
-        if url.endswith(f"/{GIST_ID}/render"):
-            return _json_bytes(current), "application/json"
-        if url.endswith(f"/{GIST_ID}/revisions/3/render"):
-            return _json_bytes(exact), "application/json"
-        for filename, content in resolved_files.items():
-            if url == exact["files"][filename]["raw_url"]:
-                return content.encode(), "text/plain; charset=utf-8"
-        if url == revision_url:
-            page = f"<html><body>Plan {' '.join(resolved_files)}</body></html>"
-            return page.encode(), "text/html; charset=utf-8"
-        raise AssertionError(url)
+def test_update_rejects_revision_url_without_reading(monkeypatch, capsys):
+    def handler(_url, **_kwargs):
+        raise AssertionError("revision update must not call the API")
 
     result, output, error = _run(
         monkeypatch,
         capsys,
-        ["--gist", GIST_ID, "--image", str(image), "--verify", "--json"],
+        ["update", f"{GIST_URL}/revisions/1", "--title", "New"],
         handler,
-        stdin="",
     )
 
-    assert result == 0
-    assert json.loads(output) == published
-    assert error == ""
+    assert result == 1
+    assert output == ""
+    assert "latest gist URL" in error
 
 
-def test_title_only_update_does_not_require_stdin(monkeypatch, capsys):
+def test_update_conflict_does_not_reread_or_retry(monkeypatch, capsys):
+    reads = 0
+    writes = 0
+
+    def handler(_url, **kwargs):
+        nonlocal reads, writes
+        if kwargs.get("method", "GET") == "GET":
+            reads += 1
+            return _json_bytes(_gist_payload())
+        writes += 1
+        raise publish_gist.ApiError(409, "conflict", "Conflict")
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        ["update", GIST_ID, "--title", "New"],
+        handler,
+    )
+
+    assert result == 1
+    assert output == ""
+    assert "read it and retry" in error
+    assert reads == 1
+    assert writes == 1
+
+
+def test_ambiguous_update_reconciles_without_retry(monkeypatch, capsys):
     current = _gist_payload(title="Old")
-    published = _gist_payload(
+    desired = _gist_payload(
         revision_number=3,
         latest_revision_number=3,
         title="New",
     )
+    reads = 0
+    writes = 0
 
     def handler(_url, **kwargs):
-        if kwargs.get("method") == "GET":
-            return _json_bytes(current), "application/json"
-        assert kwargs["payload"] == {
-            "files": {
-                filename: {"content": content} for filename, content in FILES.items()
-            },
-            "expected_snapshot_sha256": current["snapshot_sha256"],
-            "title": "New",
-        }
-        return _json_bytes(published), "application/json"
+        nonlocal reads, writes
+        if kwargs.get("method", "GET") == "GET":
+            reads += 1
+            return _json_bytes(current if reads == 1 else desired)
+        writes += 1
+        raise publish_gist.AmbiguousWriteError("unknown")
 
     result, output, error = _run(
         monkeypatch,
         capsys,
-        ["--gist", GIST_ID, "--title", "New", "--json"],
+        ["update", GIST_ID, "--title", "New"],
         handler,
-        stdin="",
     )
 
     assert result == 0
-    assert json.loads(output)["title"] == "New"
+    assert output == f"{GIST_URL}\n"
     assert error == ""
+    assert reads == 2
+    assert writes == 1
 
 
-def test_http_conflict_preserves_status_and_backend_code(monkeypatch):
+def test_ambiguous_create_is_not_retried(monkeypatch, capsys, tmp_path):
+    readme = tmp_path / "README.md"
+    readme.write_text("# Test\n")
+    writes = 0
+
+    def handler(_url, **_kwargs):
+        nonlocal writes
+        writes += 1
+        raise publish_gist.AmbiguousWriteError("unknown write")
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        ["create", str(readme)],
+        handler,
+    )
+
+    assert result == 1
+    assert output == ""
+    assert "unknown write" in error
+    assert writes == 1
+
+
+def test_ambiguous_image_update_is_not_reconciled(monkeypatch, capsys, tmp_path):
+    image = tmp_path / "chart.png"
+    image.write_bytes(PNG_1X1)
+    reads = 0
+
+    def handler(_url, **kwargs):
+        nonlocal reads
+        if kwargs.get("method", "GET") == "GET":
+            reads += 1
+            return _json_bytes(_gist_payload())
+        raise publish_gist.AmbiguousWriteError("unknown image write")
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        ["update", GIST_ID, "--image", str(image)],
+        handler,
+    )
+
+    assert result == 1
+    assert output == ""
+    assert "unknown image write" in error
+    assert reads == 1
+
+
+def test_write_response_mismatch_reports_the_existing_gist(
+    monkeypatch,
+    capsys,
+    tmp_path,
+):
+    readme = tmp_path / "README.md"
+    readme.write_text("# Intended\n")
+    response = _gist_payload(
+        revision_number=1,
+        latest_revision_number=1,
+        title=None,
+        files={"README.md": "# Different\n"},
+    )
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        ["create", str(readme)],
+        lambda _url, **_kwargs: _json_bytes(response),
+    )
+
+    assert result == 1
+    assert output == ""
+    assert "do not retry" in error
+    assert GIST_URL in error
+    assert "revision 1" in error
+
+
+def test_check_reports_credentials_without_printing_them(monkeypatch, capsys):
+    monkeypatch.setattr(publish_gist, "wavey_token", lambda: TOKEN)
+
+    assert publish_gist.main(["check"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "Wavey Gist API key found.\n"
+    assert TOKEN not in captured.out
+
+
+def test_errors_redact_discovered_secret(monkeypatch, capsys, tmp_path):
+    readme = tmp_path / "README.md"
+    readme.write_text("# Test\n")
+
+    def handler(_url, **_kwargs):
+        raise publish_gist.CliError(f"backend echoed {TOKEN}")
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        ["create", str(readme)],
+        handler,
+    )
+
+    assert result == 1
+    assert output == ""
+    assert TOKEN not in error
+    assert "[REDACTED]" in error
+
+
+def test_environment_api_base_url_is_used(monkeypatch, capsys):
+    monkeypatch.setenv("WAVEY_GIST_API_BASE_URL", "http://localhost:9999/")
+    monkeypatch.setattr(publish_gist, "wavey_token", lambda: TOKEN)
+
+    def handler(url, **_kwargs):
+        assert url.startswith("http://localhost:9999/api/v1/")
+        return _json_bytes(_gist_payload())
+
+    monkeypatch.setattr(publish_gist, "_request", handler)
+    assert publish_gist.main(["read", GIST_ID]) == 0
+    assert json.loads(capsys.readouterr().out)["id"] == GIST_ID
+
+
+def test_http_errors_preserve_status_and_backend_code(monkeypatch):
     response = io.BytesIO(
         _json_bytes({"error": {"code": "conflict", "message": "Conflict"}})
     )
@@ -560,346 +572,3 @@ def test_http_conflict_preserves_status_and_backend_code(monkeypatch):
         match="Wavey API error 409: conflict: Conflict",
     ):
         publish_gist._request(GIST_URL)
-
-
-def test_update_conflict_reports_latest_snapshot_without_success_output(
-    monkeypatch,
-    capsys,
-):
-    current = _gist_payload()
-    latest = _gist_payload(
-        revision_number=3,
-        latest_revision_number=3,
-        files={**FILES, "late.txt": "late\n"},
-    )
-    reads = 0
-
-    def handler(_url, **kwargs):
-        nonlocal reads
-        if kwargs.get("method") == "GET":
-            reads += 1
-            return _json_bytes(current if reads == 1 else latest), "application/json"
-        raise publish_gist.ApiError(409, "conflict", "Conflict")
-
-    result, output, error = _run(
-        monkeypatch,
-        capsys,
-        ["--gist", GIST_ID, "--json"],
-        handler,
-    )
-
-    assert result == 1
-    assert output == ""
-    assert latest["snapshot_sha256"] in error
-    assert reads == 2
-
-
-def test_ambiguous_update_is_reconciled_but_not_retried(monkeypatch, capsys):
-    current = _gist_payload(title="Old")
-    desired = _gist_payload(
-        revision_number=3,
-        latest_revision_number=3,
-        title="New",
-    )
-    reads = 0
-    writes = 0
-
-    def handler(_url, **kwargs):
-        nonlocal reads, writes
-        if kwargs.get("method") == "GET":
-            reads += 1
-            return _json_bytes(current if reads == 1 else desired), "application/json"
-        writes += 1
-        raise publish_gist.AmbiguousWriteError("unknown")
-
-    result, output, error = _run(
-        monkeypatch,
-        capsys,
-        ["--gist", GIST_ID, "--title", "New", "--json"],
-        handler,
-        stdin="",
-    )
-
-    assert result == 0
-    assert json.loads(output) == desired
-    assert error == ""
-    assert reads == 2
-    assert writes == 1
-
-
-def test_ambiguous_create_is_not_retried(monkeypatch, capsys):
-    writes = 0
-
-    def handler(_url, **kwargs):
-        nonlocal writes
-        writes += 1
-        raise publish_gist.AmbiguousWriteError("unknown")
-
-    result, output, error = _run(monkeypatch, capsys, ["--json"], handler)
-
-    assert result == 1
-    assert output == ""
-    assert "unknown" in error
-    assert writes == 1
-
-
-def test_ambiguous_image_update_is_not_reconciled_or_retried(
-    monkeypatch,
-    capsys,
-    tmp_path,
-):
-    current = _gist_payload()
-    image = tmp_path / "chart.png"
-    image.write_bytes(PNG_1X1)
-    reads = 0
-    writes = 0
-
-    def handler(_url, **kwargs):
-        nonlocal reads, writes
-        if kwargs.get("method") == "GET":
-            reads += 1
-            return _json_bytes(current), "application/json"
-        writes += 1
-        raise publish_gist.AmbiguousWriteError("unknown image write")
-
-    result, output, error = _run(
-        monkeypatch,
-        capsys,
-        ["--gist", GIST_ID, "--image", str(image), "--json"],
-        handler,
-        stdin="",
-    )
-
-    assert result == 1
-    assert output == ""
-    assert "unknown image write" in error
-    assert reads == 1
-    assert writes == 1
-
-
-@pytest.mark.parametrize(
-    ("mutate", "message"),
-    [
-        (lambda data: data.update(id="B" * 16), "invalid gist response"),
-        (lambda data: data.update(revision_number=1), "invalid gist response"),
-        (lambda data: data.update(snapshot_sha256="b" * 64), "invalid gist response"),
-        (
-            lambda data: data["files"]["README.md"].update(content="# Changed\n"),
-            "invalid gist response",
-        ),
-        (
-            lambda data: data["files"].update(
-                {"readme.MD": data["files"]["README.md"]}
-            ),
-            "invalid gist response",
-        ),
-        (
-            lambda data: data["files"]["README.md"].update(
-                raw_url="http://127.0.0.1/private"
-            ),
-            "invalid gist response",
-        ),
-    ],
-)
-def test_read_response_rejects_wrong_identity_digest_or_files(mutate, message):
-    response = _gist_payload()
-    mutate(response)
-
-    with pytest.raises(publish_gist.CliError, match=message):
-        publish_gist.validate_gist_response(response, GIST_ID, 2)
-
-
-def test_verify_checks_each_raw_file_render_and_public_revision(monkeypatch, capsys):
-    current = _gist_payload(title="Old")
-    published = _gist_payload(
-        revision_number=3,
-        latest_revision_number=3,
-        title="Plan",
-    )
-    exact = _gist_payload(
-        revision_number=3,
-        latest_revision_number=3,
-        title="Plan",
-        pin_raw_revision=True,
-    )
-    revision_url = f"{GIST_URL}/revisions/3"
-    seen = []
-
-    def handler(url, **kwargs):
-        method = kwargs.get("method", "GET")
-        accept = kwargs.get("accept", "application/json")
-        seen.append((url, method, accept))
-        if method == "PATCH":
-            return _json_bytes(published), "application/json"
-        if url.endswith(f"/{GIST_ID}/render"):
-            return _json_bytes(current), "application/json"
-        if url.endswith(f"/{GIST_ID}/revisions/3/render"):
-            return _json_bytes(exact), "application/json"
-        for filename, content in FILES.items():
-            if url == exact["files"][filename]["raw_url"]:
-                return content.encode(), "text/plain; charset=utf-8"
-        if url == revision_url:
-            page = f"<html><body>Plan {' '.join(FILES)}</body></html>"
-            return page.encode(), "text/html; charset=utf-8"
-        raise AssertionError(url)
-
-    result, output, error = _run(
-        monkeypatch,
-        capsys,
-        ["--gist", GIST_ID, "--title", "Plan", "--verify", "--json"],
-        handler,
-        stdin="",
-    )
-
-    assert result == 0
-    assert json.loads(output) == published
-    assert error == ""
-    raw_calls = [call for call in seen if call[2] == "text/plain"]
-    assert len(raw_calls) == len(FILES)
-    assert all(call[1] == "GET" for call in raw_calls)
-
-
-def test_verify_failure_reports_already_created_revision(monkeypatch, capsys):
-    current = _gist_payload(title="Old")
-    published = _gist_payload(
-        revision_number=3,
-        latest_revision_number=3,
-        title="Plan",
-    )
-    bad_exact = _gist_payload(
-        revision_number=3,
-        latest_revision_number=3,
-        title="Plan",
-        files={**FILES, "check.py": "changed\n"},
-        pin_raw_revision=True,
-    )
-
-    def handler(url, **kwargs):
-        if kwargs.get("method") == "PATCH":
-            return _json_bytes(published), "application/json"
-        if url.endswith(f"/{GIST_ID}/render"):
-            return _json_bytes(current), "application/json"
-        if url.endswith(f"/{GIST_ID}/revisions/3/render"):
-            return _json_bytes(bad_exact), "application/json"
-        raise AssertionError(url)
-
-    result, output, error = _run(
-        monkeypatch,
-        capsys,
-        ["--gist", GIST_ID, "--title", "Plan", "--verify", "--json"],
-        handler,
-        stdin="",
-    )
-
-    assert result == 1
-    assert output == ""
-    assert "Published revision was already created" in error
-    assert GIST_URL in error
-    assert "revision 3" in error
-    assert f"snapshot {published['snapshot_sha256']}" in error
-
-
-@pytest.mark.parametrize(
-    "filename",
-    ["../secret", "folder/file.md", "folder\\file.md", ".", "..", " name.md", "a\u202eb.md"],
-)
-def test_unsafe_filenames_are_rejected(filename):
-    with pytest.raises(publish_gist.CliError):
-        publish_gist.validate_files({filename: "content"})
-
-
-def test_casefold_and_normalization_collisions_are_rejected():
-    with pytest.raises(publish_gist.CliError, match="colliding"):
-        publish_gist.validate_files({"README.md": "one", "readme.MD": "two"})
-    with pytest.raises(publish_gist.CliError, match="colliding"):
-        publish_gist.validate_files({"café.md": "one", "café.md": "two"})
-
-
-def test_missing_and_case_colliding_images_are_rejected(tmp_path):
-    with pytest.raises(publish_gist.CliError, match="does not exist"):
-        publish_gist.read_image_uploads([str(tmp_path / "missing.png")])
-
-    first = tmp_path / "Chart.PNG"
-    second = tmp_path / "chart.png"
-    first.write_bytes(PNG_1X1)
-    second.write_bytes(PNG_1X1)
-    with pytest.raises(publish_gist.CliError, match="case-colliding"):
-        publish_gist.read_image_uploads([str(first), str(second)])
-
-
-def test_output_dir_must_be_empty(tmp_path):
-    output_dir = tmp_path / "gist"
-    output_dir.mkdir()
-    (output_dir / "keep.txt").write_text("keep")
-
-    with pytest.raises(publish_gist.CliError, match="empty"):
-        publish_gist.materialize_files(_gist_payload(), str(output_dir))
-
-    assert (output_dir / "keep.txt").read_text() == "keep"
-
-
-@pytest.mark.parametrize(
-    "argv",
-    [
-        ["--read"],
-        ["--read", "--gist", GIST_ID, "--verify"],
-        ["--read", "--gist", GIST_ID, "--delete-file", "README.md"],
-        ["--read", "--gist", GIST_ID, "--image", "chart.png"],
-        ["--clear-title"],
-        ["--delete-file", "README.md"],
-        ["--output-dir", "out"],
-        ["--json", "--summary-json"],
-        ["--check-key", "--json"],
-        ["--check-key", "--image", "chart.png"],
-        ["--title", "one", "--clear-title", "--gist", GIST_ID],
-    ],
-)
-def test_option_conflicts_return_usage_error(monkeypatch, capsys, argv):
-    monkeypatch.setattr(
-        publish_gist,
-        "wavey_token",
-        lambda: (_ for _ in ()).throw(AssertionError("must not discover key")),
-    )
-
-    assert publish_gist.main(argv) == 2
-    assert capsys.readouterr().err
-
-
-@pytest.mark.parametrize(
-    ("argv", "response"),
-    [
-        (["--read", "--gist", GIST_ID, "--json"], {"id": GIST_ID}),
-        (["--gist", GIST_ID, "--json"], {"id": GIST_ID, "url": GIST_URL}),
-    ],
-)
-def test_malformed_api_responses_fail_without_partial_output(
-    monkeypatch,
-    capsys,
-    argv,
-    response,
-):
-    def handler(_url, **_kwargs):
-        return _json_bytes(response), "application/json"
-
-    result, output, error = _run(monkeypatch, capsys, argv, handler)
-
-    assert result == 1
-    assert output == ""
-    assert "invalid" in error.lower()
-
-
-def test_errors_redact_discovered_secret(monkeypatch, capsys):
-    def handler(_url, **_kwargs):
-        raise publish_gist.CliError(f"backend echoed {TOKEN}")
-
-    result, output, error = _run(
-        monkeypatch,
-        capsys,
-        ["--gist", GIST_ID],
-        handler,
-    )
-
-    assert result == 1
-    assert output == ""
-    assert TOKEN not in error
-    assert "[REDACTED]" in error

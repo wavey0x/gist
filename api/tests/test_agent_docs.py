@@ -25,21 +25,19 @@ def _generated_llms_text():
 def test_llms_text_teaches_current_agent_safe_workflow():
     text = _generated_llms_text()
 
-    assert "publish-gist --read --gist <url-or-id> --json" in text
-    assert "--file README.md --file example.py" in text
-    assert "--file README.md --image chart.png" in text
-    assert "--delete-file <filename>" in text
-    assert "--output-dir <empty-dir>" in text
-    assert "--summary-json" in text
-    assert "--verify" in text
-    assert "already-created revision" in text
+    assert "publish-gist read <url-or-id>" in text
+    assert "publish-gist create README.md example.py" in text
+    assert "publish-gist create README.md --image chart.png" in text
+    assert "publish-gist update <url-or-id> README.md example.py" in text
+    assert "--delete <filename>" in text
+    assert "publish-gist check" in text
+    assert "do not stream generated Markdown" in text
     assert "WAVEY_GIST_API_KEY" in text
     assert "snapshot_sha256" in text
     assert "expected_snapshot_sha256" in text
     assert "complete replacement snapshot" in text
     assert "not an overlay" in text
     assert "published under its basename" in text
-    assert "first Markdown filename alphabetically" in text
     assert "repeated `images[]`" in text
     assert "return the public gist URL" in text
     assert "materially improves the explanation" in text
@@ -63,6 +61,12 @@ def test_llms_text_omits_removed_helper_and_environment_aliases():
         "--expected-content-sha256",
         "expected_content_sha256",
         "--public",
+        "--stdin-name",
+        "--output-dir",
+        "--summary-json",
+        "--verify",
+        "--clear-title",
+        "--delete-file",
         "SITE_BASE_URL",
         "ALLOW_EMPTY_MARKDOWN",
     ):
