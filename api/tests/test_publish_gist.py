@@ -13,6 +13,13 @@ HELPER_PATH = Path(__file__).resolve().parents[2] / "scripts" / "publish-gist"
 GIST_ID = "A" * 16
 GIST_URL = f"https://gist.wavey.info/{GIST_ID}"
 TOKEN = "wapi_gist_testpref_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"
+IMAGE_ID = f"img_{'I' * 22}"
+IMAGE_URL = f"https://api.wavey.info/api/v1/images/{IMAGE_ID}"
+PNG_1X1 = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+    b"\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x00\x00\x00\x00"
+)
 FILES = {
     "README.md": "# Plan\n\nSafe changes.\n",
     "check.py": "print('safe')\n",
@@ -47,11 +54,12 @@ def _gist_payload(
     digest=None,
     gist_id=GIST_ID,
     pin_raw_revision=False,
+    images=None,
 ):
     files = dict(FILES if files is None else files)
     digest = digest or publish_gist.snapshot_sha256(title, files)
     raw_prefix = f"{GIST_URL}/revisions/{revision_number}" if pin_raw_revision else GIST_URL
-    return {
+    payload = {
         "id": gist_id,
         "url": GIST_URL,
         "title": title,
@@ -76,6 +84,22 @@ def _gist_payload(
             for filename, content in files.items()
         },
         "history": [],
+    }
+    if images is not None:
+        payload["images"] = images
+    return payload
+
+
+def _image_asset(filename="chart.png", content=PNG_1X1):
+    return {
+        "id": IMAGE_ID,
+        "url": IMAGE_URL,
+        "original_filename": filename,
+        "mime_type": "image/png",
+        "byte_size": len(content),
+        "width": 1,
+        "height": 1,
+        "markdown": f"![{filename}]({IMAGE_URL})",
     }
 
 
@@ -281,6 +305,83 @@ def test_create_sends_multi_file_snapshot(monkeypatch, capsys, tmp_path):
     assert error == ""
 
 
+def test_multipart_encoder_preserves_json_and_unicode_image_name():
+    from werkzeug.formparser import parse_form_data
+
+    payload = {"files": {"README.md": {"content": "# Chart"}}}
+    upload = publish_gist.ImageUpload(
+        filename="résumé [1].png",
+        content=PNG_1X1,
+        content_type="image/png",
+    )
+
+    content_type, body = publish_gist.encode_multipart_form_data(payload, [upload])
+    environ = {
+        "REQUEST_METHOD": "POST",
+        "CONTENT_TYPE": content_type,
+        "CONTENT_LENGTH": str(len(body)),
+        "wsgi.input": io.BytesIO(body),
+    }
+    _stream, form, files = parse_form_data(environ)
+    stored = files.getlist("images[]")
+
+    assert json.loads(form["payload"]) == payload
+    assert len(stored) == 1
+    assert stored[0].filename == upload.filename
+    assert stored[0].content_type == upload.content_type
+    assert stored[0].read() == upload.content
+
+
+def test_create_with_referenced_image_sends_multipart_snapshot(
+    monkeypatch,
+    capsys,
+    tmp_path,
+):
+    source = "# Chart\n\n![Revenue](attachment:chart.png)\n"
+    resolved = source.replace("attachment:chart.png", IMAGE_URL)
+    readme = tmp_path / "README.md"
+    image = tmp_path / "chart.png"
+    readme.write_text(source)
+    image.write_bytes(PNG_1X1)
+    asset = _image_asset()
+    response = _gist_payload(
+        revision_number=1,
+        latest_revision_number=1,
+        title=None,
+        files={"README.md": resolved},
+        images=[asset],
+    )
+
+    def handler(url, **kwargs):
+        assert url == "https://api.wavey.info/api/v1/gists"
+        assert kwargs["method"] == "POST"
+        assert kwargs["payload"] == {
+            "files": {"README.md": {"content": source}},
+        }
+        assert kwargs["image_uploads"] == [
+            publish_gist.ImageUpload("chart.png", PNG_1X1, "image/png")
+        ]
+        return _json_bytes(response), "application/json"
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        [
+            "--file",
+            str(readme),
+            "--image",
+            str(image),
+            "--summary-json",
+        ],
+        handler,
+        stdin="",
+    )
+
+    assert result == 0
+    assert json.loads(output) == publish_gist.summary_json_manifest(response)
+    assert error == ""
+
+
 def test_update_reads_latest_and_sends_resolved_full_snapshot(
     monkeypatch,
     capsys,
@@ -339,6 +440,74 @@ def test_update_reads_latest_and_sends_resolved_full_snapshot(
     assert json.loads(output) == published
     assert error == ""
     assert calls[0][0].endswith(f"/{GIST_ID}/render")
+
+
+def test_update_with_unreferenced_image_verifies_server_resolved_snapshot(
+    monkeypatch,
+    capsys,
+    tmp_path,
+):
+    current = _gist_payload(title="Plan")
+    asset = _image_asset()
+    resolved_files = {
+        **FILES,
+        "README.md": f"{FILES['README.md'].rstrip()}\n\n{asset['markdown']}",
+    }
+    published = _gist_payload(
+        revision_number=3,
+        latest_revision_number=3,
+        title="Plan",
+        files=resolved_files,
+        images=[asset],
+    )
+    exact = _gist_payload(
+        revision_number=3,
+        latest_revision_number=3,
+        title="Plan",
+        files=resolved_files,
+        pin_raw_revision=True,
+    )
+    image = tmp_path / "chart.png"
+    image.write_bytes(PNG_1X1)
+    revision_url = f"{GIST_URL}/revisions/3"
+
+    def handler(url, **kwargs):
+        method = kwargs.get("method", "GET")
+        if method == "PATCH":
+            assert kwargs["payload"] == {
+                "files": {
+                    filename: {"content": content}
+                    for filename, content in FILES.items()
+                },
+                "expected_snapshot_sha256": current["snapshot_sha256"],
+            }
+            assert kwargs["image_uploads"] == [
+                publish_gist.ImageUpload("chart.png", PNG_1X1, "image/png")
+            ]
+            return _json_bytes(published), "application/json"
+        if url.endswith(f"/{GIST_ID}/render"):
+            return _json_bytes(current), "application/json"
+        if url.endswith(f"/{GIST_ID}/revisions/3/render"):
+            return _json_bytes(exact), "application/json"
+        for filename, content in resolved_files.items():
+            if url == exact["files"][filename]["raw_url"]:
+                return content.encode(), "text/plain; charset=utf-8"
+        if url == revision_url:
+            page = f"<html><body>Plan {' '.join(resolved_files)}</body></html>"
+            return page.encode(), "text/html; charset=utf-8"
+        raise AssertionError(url)
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        ["--gist", GIST_ID, "--image", str(image), "--verify", "--json"],
+        handler,
+        stdin="",
+    )
+
+    assert result == 0
+    assert json.loads(output) == published
+    assert error == ""
 
 
 def test_title_only_update_does_not_require_stdin(monkeypatch, capsys):
@@ -471,6 +640,40 @@ def test_ambiguous_create_is_not_retried(monkeypatch, capsys):
     assert result == 1
     assert output == ""
     assert "unknown" in error
+    assert writes == 1
+
+
+def test_ambiguous_image_update_is_not_reconciled_or_retried(
+    monkeypatch,
+    capsys,
+    tmp_path,
+):
+    current = _gist_payload()
+    image = tmp_path / "chart.png"
+    image.write_bytes(PNG_1X1)
+    reads = 0
+    writes = 0
+
+    def handler(_url, **kwargs):
+        nonlocal reads, writes
+        if kwargs.get("method") == "GET":
+            reads += 1
+            return _json_bytes(current), "application/json"
+        writes += 1
+        raise publish_gist.AmbiguousWriteError("unknown image write")
+
+    result, output, error = _run(
+        monkeypatch,
+        capsys,
+        ["--gist", GIST_ID, "--image", str(image), "--json"],
+        handler,
+        stdin="",
+    )
+
+    assert result == 1
+    assert output == ""
+    assert "unknown image write" in error
+    assert reads == 1
     assert writes == 1
 
 
@@ -612,6 +815,18 @@ def test_casefold_and_normalization_collisions_are_rejected():
         publish_gist.validate_files({"café.md": "one", "café.md": "two"})
 
 
+def test_missing_and_case_colliding_images_are_rejected(tmp_path):
+    with pytest.raises(publish_gist.CliError, match="does not exist"):
+        publish_gist.read_image_uploads([str(tmp_path / "missing.png")])
+
+    first = tmp_path / "Chart.PNG"
+    second = tmp_path / "chart.png"
+    first.write_bytes(PNG_1X1)
+    second.write_bytes(PNG_1X1)
+    with pytest.raises(publish_gist.CliError, match="case-colliding"):
+        publish_gist.read_image_uploads([str(first), str(second)])
+
+
 def test_output_dir_must_be_empty(tmp_path):
     output_dir = tmp_path / "gist"
     output_dir.mkdir()
@@ -629,11 +844,13 @@ def test_output_dir_must_be_empty(tmp_path):
         ["--read"],
         ["--read", "--gist", GIST_ID, "--verify"],
         ["--read", "--gist", GIST_ID, "--delete-file", "README.md"],
+        ["--read", "--gist", GIST_ID, "--image", "chart.png"],
         ["--clear-title"],
         ["--delete-file", "README.md"],
         ["--output-dir", "out"],
         ["--json", "--summary-json"],
         ["--check-key", "--json"],
+        ["--check-key", "--image", "chart.png"],
         ["--title", "one", "--clear-title", "--gist", GIST_ID],
     ],
 )

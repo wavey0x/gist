@@ -96,13 +96,25 @@ from the account page.
 
 ## Create A Gist
 
-The repository helper is the recommended interface for text publishing. It uses
-`WAVEY_GIST_API_KEY`, reads from repeated `--file` options or stdin, and has no
-third-party Python dependencies:
+The repository helper is the recommended interface for text and image
+publishing. It uses `WAVEY_GIST_API_KEY`, reads text from repeated `--file`
+options or stdin, and has no third-party Python dependencies:
 
 ```sh
 export WAVEY_GIST_API_KEY=<api_key>
 scripts/publish-gist --file README.md --file example.py --verify --summary-json
+```
+
+Attach stable first-party images with repeated `--image` options. Reference an
+upload from any Markdown file as `attachment:<basename>`; an unreferenced image
+is appended to the Markdown lead file:
+
+```sh
+scripts/publish-gist \
+  --file README.md \
+  --image chart.png \
+  --verify \
+  --summary-json
 ```
 
 Read a public gist as complete JSON, request a summary manifest, or materialize
@@ -139,9 +151,9 @@ public render payload, and rendered page. If verification fails after the API
 accepted the write, the command exits nonzero and identifies the already-created
 revision; inspect it before taking further action.
 
-Supported helper options include `--file`, `--stdin-name`, `--delete-file`,
-`--title`, `--clear-title`, `--gist`, `--read`, `--output-dir`, `--verify`,
-`--json`, `--summary-json`, `--api-base-url`, and `--check-key`. It uses
+Supported helper options include `--file`, `--image`, `--stdin-name`,
+`--delete-file`, `--title`, `--clear-title`, `--gist`, `--read`, `--output-dir`,
+`--verify`, `--json`, `--summary-json`, `--api-base-url`, and `--check-key`. It uses
 `WAVEY_GIST_API_BASE_URL` to override the default API origin. Credential lookup
 checks `WAVEY_GIST_API_KEY`, then the file named by `WAVEY_GIST_ENV_FILE`
 (default `~/.config/wavey/gist.env`), then the existing macOS Keychain service.

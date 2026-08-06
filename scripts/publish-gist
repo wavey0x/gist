@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create, read, update, and verify Wavey text gists."""
+"""Create, read, update, and verify Wavey text and image gists."""
 
 from __future__ import annotations
 
@@ -7,8 +7,10 @@ import argparse
 import hashlib
 import html
 import json
+import mimetypes
 import os
 import re
+import secrets
 import shlex
 import subprocess
 import sys
@@ -16,6 +18,7 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -51,6 +54,13 @@ class ApiError(CliError):
 
 class AmbiguousWriteError(CliError):
     pass
+
+
+@dataclass(frozen=True)
+class ImageUpload:
+    filename: str
+    content: bytes
+    content_type: str
 
 
 def is_real_secret(value: str | None) -> bool:
@@ -277,12 +287,75 @@ def validate_publication_quality(files: dict[str, str], title: str | None) -> No
         raise CliError("A code/plain-text lead gist requires --title.")
 
 
+def read_image_uploads(paths: list[str] | None) -> list[ImageUpload]:
+    uploads = []
+    collision_keys: set[str] = set()
+    for value in paths or []:
+        path = Path(value)
+        filename = normalize_filename(path.name)
+        collision_key = unicodedata.normalize("NFC", filename.casefold())
+        if collision_key in collision_keys:
+            raise CliError(f"Duplicate or case-colliding image basename: {filename}")
+        if not path.is_file():
+            raise CliError(f"Image file does not exist or is not a file: {value}")
+        uploads.append(
+            ImageUpload(
+                filename=filename,
+                content=path.read_bytes(),
+                content_type=(
+                    mimetypes.guess_type(filename)[0] or "application/octet-stream"
+                ),
+            )
+        )
+        collision_keys.add(collision_key)
+    return uploads
+
+
+def encode_multipart_form_data(
+    payload: dict,
+    image_uploads: list[ImageUpload],
+) -> tuple[str, bytes]:
+    boundary = f"----waveygist{secrets.token_hex(16)}"
+    boundary_bytes = boundary.encode("ascii")
+    chunks = [
+        b"--" + boundary_bytes + b"\r\n",
+        b'Content-Disposition: form-data; name="payload"\r\n',
+        b"Content-Type: application/json; charset=utf-8\r\n\r\n",
+        json.dumps(payload).encode("utf-8"),
+        b"\r\n",
+    ]
+    for upload in image_uploads:
+        ascii_filename = (
+            upload.filename.encode("ascii", errors="replace")
+            .decode("ascii")
+            .replace("\\", "\\\\")
+            .replace('"', '\\"')
+        )
+        encoded_filename = urllib.parse.quote(upload.filename, safe="")
+        chunks.extend(
+            (
+                b"--" + boundary_bytes + b"\r\n",
+                (
+                    "Content-Disposition: form-data; name=\"images[]\"; "
+                    f'filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{encoded_filename}\r\n"
+                ).encode("ascii"),
+                f"Content-Type: {upload.content_type}\r\n\r\n".encode("ascii"),
+                upload.content,
+                b"\r\n",
+            )
+        )
+    chunks.extend((b"--" + boundary_bytes + b"--\r\n",))
+    return f"multipart/form-data; boundary={boundary}", b"".join(chunks)
+
+
 def _request(
     url: str,
     *,
     method: str = "GET",
     token: str | None = None,
     payload: dict | None = None,
+    image_uploads: list[ImageUpload] | None = None,
     accept: str = "application/json",
 ) -> tuple[bytes, str]:
     headers = {"Accept": accept, "User-Agent": USER_AGENT}
@@ -290,8 +363,14 @@ def _request(
     if token:
         headers["Authorization"] = f"Bearer {token}"
     if payload is not None:
-        headers["Content-Type"] = "application/json"
-        body = json.dumps(payload).encode("utf-8")
+        if image_uploads:
+            headers["Content-Type"], body = encode_multipart_form_data(
+                payload,
+                image_uploads,
+            )
+        else:
+            headers["Content-Type"] = "application/json"
+            body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         url,
         data=body,
@@ -329,12 +408,14 @@ def request_json(
     method: str = "GET",
     token: str | None = None,
     payload: dict | None = None,
+    image_uploads: list[ImageUpload] | None = None,
 ) -> dict:
     body, _content_type = _request(
         url,
         method=method,
         token=token,
         payload=payload,
+        image_uploads=image_uploads,
     )
     try:
         parsed = json.loads(body.decode("utf-8"))
@@ -551,6 +632,22 @@ def read_input_files(
     return validate_files(files)
 
 
+def image_response_files(
+    published: dict,
+    image_uploads: list[ImageUpload],
+) -> dict[str, str]:
+    raw_assets = published.get("images")
+    if not isinstance(raw_assets, list) or len(raw_assets) != len(image_uploads):
+        raise CliError("Wavey API returned invalid uploaded image metadata.")
+    for upload, raw_asset in zip(image_uploads, raw_assets):
+        if (
+            not isinstance(raw_asset, dict)
+            or raw_asset.get("original_filename") != upload.filename
+        ):
+            raise CliError("Wavey API returned invalid uploaded image metadata.")
+    return response_files(published)
+
+
 def verify_publish(
     api_base_url: str,
     published: dict,
@@ -613,6 +710,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--file",
         action="append",
         help="publish this UTF-8 text file under its basename; repeat as needed",
+    )
+    parser.add_argument(
+        "--image",
+        action="append",
+        help="attach this image under its basename; repeat as needed",
     )
     parser.add_argument(
         "--stdin-name",
@@ -679,6 +781,7 @@ def _validate_args(args: argparse.Namespace) -> None:
             (
                 args.read,
                 args.file,
+                args.image,
                 args.gist,
                 args.title is not None,
                 args.clear_title,
@@ -698,6 +801,7 @@ def _validate_args(args: argparse.Namespace) -> None:
         if any(
             (
                 args.file,
+                args.image,
                 args.title is not None,
                 args.clear_title,
                 args.delete_file,
@@ -803,9 +907,15 @@ def main(argv: list[str] | None = None) -> int:
             args.stdin_name,
             allow_empty_stdin=bool(
                 args.gist
-                and (args.title is not None or args.clear_title or args.delete_file)
+                and (
+                    args.title is not None
+                    or args.clear_title
+                    or args.delete_file
+                    or args.image
+                )
             ),
         )
+        image_uploads = read_image_uploads(args.image)
         gist_id = None
         current = None
         title_is_present = args.title is not None or args.clear_title
@@ -853,10 +963,11 @@ def main(argv: list[str] | None = None) -> int:
                 method=method,
                 token=token,
                 payload=payload,
+                image_uploads=image_uploads,
             )
             published = validate_write_response(response, gist_id)
         except AmbiguousWriteError:
-            if not gist_id:
+            if not gist_id or image_uploads:
                 raise
             reconciled = read_gist(api_base_url, gist_id, None)
             if (
@@ -876,12 +987,28 @@ def main(argv: list[str] | None = None) -> int:
                 ) from exc
             raise
 
+        expected_files = desired_files
+        if image_uploads:
+            try:
+                expected_files = image_response_files(
+                    published,
+                    image_uploads,
+                )
+            except CliError as exc:
+                print(
+                    "Published revision was already created: "
+                    f"{published['url']} revision {published['revision_number']} "
+                    f"snapshot {published['snapshot_sha256']}",
+                    file=sys.stderr,
+                )
+                raise exc
+
         if args.verify:
             try:
                 verify_publish(
                     api_base_url,
                     published,
-                    desired_files,
+                    expected_files,
                     desired_title,
                 )
             except CliError as exc:
