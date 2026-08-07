@@ -26,9 +26,9 @@ def test_llms_text_teaches_current_agent_safe_workflow():
     text = _generated_llms_text()
 
     assert "publish-gist read <url-or-id>" in text
-    assert "publish-gist create README.md example.py" in text
+    assert "publish-gist create README.md" in text
     assert "publish-gist create README.md --image chart.png" in text
-    assert "publish-gist update <url-or-id> README.md example.py" in text
+    assert "publish-gist update <url-or-id> README.md" in text
     assert "--delete <filename>" in text
     assert "publish-gist check" in text
     assert "do not stream generated Markdown" in text
@@ -40,7 +40,10 @@ def test_llms_text_teaches_current_agent_safe_workflow():
     assert "published under its basename" in text
     assert "repeated `images[]`" in text
     assert "return the public gist URL" in text
-    assert "materially improves the explanation" in text
+    assert "default to one self-contained `README.md`" in text
+    assert "language-tagged fenced code blocks" in text
+    assert "Use separate files only for standalone artifacts" in text
+    assert "Do not publish a separate `.mmd` file" in text
     assert "base62 strings containing 16–64 ASCII letters or digits" in text
     assert "https://gist.wavey.info/{gist_id}/raw/{filename}" in text
     assert "## Find Your Gists" in text
