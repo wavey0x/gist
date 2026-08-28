@@ -1419,21 +1419,11 @@ button {
 .article-audio-toolbar-group {
   grid-column: 3;
   justify-self: end;
-  display: grid;
-  justify-items: start;
-  gap: 4px;
   min-width: max-content;
 }
 
 .article-audio-toolbar-group .toolbar {
   grid-column: auto;
-}
-
-.article-audio-preparing-message {
-  max-width: 160px;
-  color: var(--muted-fg);
-  font-size: 12px;
-  line-height: 1.35;
 }
 
 .article-audio-spinner {
@@ -1500,6 +1490,16 @@ button {
 
 :root[data-theme="dark"] .article-audio-overlay {
   box-shadow: 0 5px 20px rgb(1 4 9 / 48%);
+}
+
+.article-audio-preparing-overlay {
+  width: min(100%, 230px);
+  min-height: 42px;
+  grid-template-columns: minmax(0, 1fr);
+  color: var(--muted-fg);
+  padding: 8px 11px;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .article-audio-play-button,

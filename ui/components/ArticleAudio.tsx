@@ -540,15 +540,15 @@ export function ArticleAudio({
           ) : null}
           {children}
         </div>
-        {viewState === "preparing" && message ? (
-          <span
-            className="article-audio-preparing-message"
-            role="status"
-          >
-            {message}
-          </span>
-        ) : null}
       </div>
+      {active && viewState === "preparing" && message ? (
+        <div
+          className="article-audio-overlay article-audio-preparing-overlay"
+          role="status"
+        >
+          {message}
+        </div>
+      ) : null}
       {active && audioUrl ? (
         <audio
           ref={audioRef}
