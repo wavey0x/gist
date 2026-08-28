@@ -8,6 +8,7 @@
   --button-bg-active: #f6f8fa;
   --button-fg: #24292f;
   --focus: #0969da;
+  --audio-accent-rgb: 9 105 218;
   --danger-fg: #cf222e;
   --switch-on: #1f883d;
   --switch-off: #8c959f;
@@ -25,6 +26,7 @@
   --button-bg-active: #21262d;
   --button-fg: #e6edf3;
   --focus: #2f81f7;
+  --audio-accent-rgb: 88 166 255;
   --danger-fg: #f85149;
   --switch-on: #3fb950;
   --switch-off: #6e7681;
@@ -1578,20 +1580,24 @@ button {
 .article-audio-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid currentcolor;
+  border: 2px solid rgb(var(--audio-accent-rgb));
   border-right-color: transparent;
   border-radius: 50%;
   animation: article-audio-spin 700ms linear infinite;
 }
 
 .article-audio-button-ready {
-  border-color: rgb(9 105 218 / 45%);
-  box-shadow: 0 0 0 1px rgb(9 105 218 / 8%), 0 0 8px rgb(9 105 218 / 16%);
+  border-color: rgb(var(--audio-accent-rgb) / 45%);
+  box-shadow:
+    0 0 0 1px rgb(var(--audio-accent-rgb) / 8%),
+    0 0 8px rgb(var(--audio-accent-rgb) / 16%);
 }
 
 :root[data-theme="dark"] .article-audio-button-ready {
-  border-color: rgb(88 166 255 / 55%);
-  box-shadow: 0 0 0 1px rgb(88 166 255 / 10%), 0 0 8px rgb(88 166 255 / 20%);
+  border-color: rgb(var(--audio-accent-rgb) / 55%);
+  box-shadow:
+    0 0 0 1px rgb(var(--audio-accent-rgb) / 10%),
+    0 0 8px rgb(var(--audio-accent-rgb) / 20%);
 }
 
 @keyframes article-audio-spin {
@@ -1965,6 +1971,11 @@ button {
 .icon-button:disabled {
   cursor: default;
   opacity: 0.45;
+}
+
+.icon-button[aria-busy="true"]:disabled {
+  cursor: progress;
+  opacity: 1;
 }
 
 .icon-button:disabled:hover {
