@@ -22,6 +22,7 @@ class AuthResult:
     avatar_url: str | None
     key_value: str
     key_prefix: str
+    audio_generation_daily_limit: int | None
 
 
 GITHUB_LOGIN_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
@@ -105,6 +106,7 @@ def session_identity(auth):
         "name": auth.name,
         "key": auth.key_value,
         "key_prefix": auth.key_prefix,
+        "can_generate_audio": auth.audio_generation_daily_limit != 0,
     }
     if auth.github_login:
         body["github_login"] = auth.github_login
@@ -172,7 +174,8 @@ def verify_api_key_value(conn, api_key):
 
     row = conn.execute(
         """
-        select id, name, github_login, avatar_url, key_value, key_prefix
+        select id, name, github_login, avatar_url, key_value, key_prefix,
+               audio_generation_daily_limit
         from api_keys
         where key_prefix = ? and revoked_at is null
         """,
@@ -197,6 +200,7 @@ def verify_api_key_value(conn, api_key):
             avatar_url=row["avatar_url"],
             key_value=row["key_value"],
             key_prefix=row["key_prefix"],
+            audio_generation_daily_limit=row["audio_generation_daily_limit"],
         ),
         None,
     )
@@ -252,7 +256,8 @@ def verify_web_session(conn, token):
             api_keys.github_login,
             api_keys.avatar_url,
             api_keys.key_value,
-            api_keys.key_prefix
+            api_keys.key_prefix,
+            api_keys.audio_generation_daily_limit
         from web_sessions
         join api_keys on api_keys.id = web_sessions.api_key_id
         where web_sessions.token_hash = ?
@@ -279,6 +284,7 @@ def verify_web_session(conn, token):
             avatar_url=row["avatar_url"],
             key_value=row["key_value"],
             key_prefix=row["key_prefix"],
+            audio_generation_daily_limit=row["audio_generation_daily_limit"],
         ),
         None,
     )
@@ -303,6 +309,7 @@ def list_api_keys(conn):
         """
         select
             id, name, github_login, avatar_url, key_prefix,
+            audio_generation_daily_limit,
             created_at, last_used_at, revoked_at
         from api_keys
         order by id
@@ -316,6 +323,9 @@ def list_api_keys(conn):
             "github_login": row["github_login"],
             "avatar_url": row["avatar_url"],
             "key_prefix": row["key_prefix"],
+            "audio_generation_daily_limit": row[
+                "audio_generation_daily_limit"
+            ],
             "created_at": row["created_at"],
             "last_used_at": row["last_used_at"],
             "revoked_at": row["revoked_at"],
@@ -350,6 +360,29 @@ def revoke_api_key(conn, key_prefix_or_id):
                 "delete from push_subscriptions where api_key_id = ?",
                 (row["id"],),
             )
+
+
+def set_audio_generation_daily_limit(conn, key_prefix_or_id, limit):
+    if limit is not None:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+            raise ValueError("audio generation limit must be zero or a positive integer")
+    row = _api_key_row(conn, key_prefix_or_id)
+    with conn:
+        cursor = conn.execute(
+            """
+            update api_keys
+            set audio_generation_daily_limit = ?
+            where id = ?
+            """,
+            (limit, row["id"]),
+        )
+    if cursor.rowcount != 1:
+        raise RuntimeError("audio generation limit update changed an unexpected row count")
+    return {
+        "id": row["id"],
+        "key_prefix": row["key_prefix"],
+        "audio_generation_daily_limit": limit,
+    }
 
 
 def _api_key_row(conn, key_prefix_or_id):

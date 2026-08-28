@@ -19,6 +19,7 @@ import {
   type RevisionHistoryItem
 } from "../lib/gists";
 import type { SiteChromeConfig } from "../lib/site-config";
+import { ArticleAudio } from "./ArticleAudio";
 import { LocalTimestamp } from "./LocalTimestamp";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
 import { ThemeToggle } from "./ThemeToggle";
@@ -31,6 +32,7 @@ type GistViewerProps = {
   customContent?: ReactNode;
   customDiffFromRevisionNumber?: number;
   customView?: "diff";
+  canUseNarration?: boolean;
 };
 
 const MINUTE_MS = 60 * 1000;
@@ -199,6 +201,7 @@ function GistFilePanel({
 }
 
 export function GistViewer({
+  canUseNarration = false,
   chrome,
   gist,
   customContent = null,
@@ -219,6 +222,7 @@ export function GistViewer({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const files = orderedGistFiles(gist);
   const singleFile = files.length === 1 ? files[0] : null;
+  const primaryFile = gist.files[gist.primary_file];
 
   useEffect(() => {
     if (!copiedFilename) {
@@ -433,6 +437,11 @@ export function GistViewer({
   );
   const customDiffIsCurrent = viewMode === "custom" && customView === "diff";
   const rawIsVisible = viewMode === "raw" && Boolean(singleFile);
+  const narrationIsActive =
+    canUseNarration &&
+    !customContent &&
+    viewMode === "files" &&
+    primaryFile?.kind === "markdown";
 
   function historyDiffUrl(item: RevisionHistoryItem) {
     const gistUrl = item.url
@@ -495,7 +504,11 @@ export function GistViewer({
             </div>
           </div>
         </div>
-        <div className="toolbar" aria-label="Display controls">
+        <ArticleAudio
+          active={narrationIsActive}
+          gistId={gist.id}
+          revisionNumber={gist.revision_number}
+        >
           {customContent ? (
             <button
               type="button"
@@ -606,7 +619,7 @@ export function GistViewer({
             ) : null}
           </div>
           <ThemeToggle />
-        </div>
+        </ArticleAudio>
       </header>
 
       {viewMode === "custom" && customContent ? (

@@ -11,7 +11,7 @@ from .errors import GistError
 
 EVENT_GIST_PUBLISHED = "gist.published"
 EVENT_GIST_UPDATED = "gist.updated"
-EVENT_TYPES = frozenset({EVENT_GIST_PUBLISHED, EVENT_GIST_UPDATED})
+EVENT_NARRATION_READY = "narration.ready"
 MAX_PUSH_SUBSCRIPTIONS_PER_ACCOUNT = 10
 MAX_ENDPOINT_BYTES = 2048
 MAX_P256DH_CHARS = 100
@@ -408,7 +408,7 @@ def enqueue_push_deliveries(
     gist_revision_id,
     created_at,
 ):
-    if event_type not in EVENT_TYPES:
+    if event_type not in {EVENT_GIST_PUBLISHED, EVENT_GIST_UPDATED}:
         raise ValueError("unsupported notification event")
     settings = _settings_row(conn, api_key_id)
     enabled = (
@@ -428,7 +428,7 @@ def enqueue_push_deliveries(
         select id, ?, ?, 'pending', 0, ?, null, ?, null
         from push_subscriptions
         where api_key_id = ?
-        on conflict(subscription_id, event_type, gist_revision_id) do nothing
+        on conflict do nothing
         """,
         (
             event_type,
@@ -436,6 +436,44 @@ def enqueue_push_deliveries(
             created_at,
             created_at,
             api_key_id,
+        ),
+    )
+    return cursor.rowcount
+
+
+def enqueue_narration_ready_deliveries(
+    conn,
+    *,
+    narration_id,
+    gist_revision_id,
+    created_at,
+):
+    cursor = conn.execute(
+        """
+        insert into push_deliveries(
+            subscription_id, event_type, gist_revision_id, narration_id,
+            status, attempt_count, next_attempt_at,
+            last_result, created_at, completed_at
+        )
+        select
+            subscriptions.id, ?, ?, ?,
+            'pending', 0, ?, null, ?, null
+        from narration_watchers watchers
+        join api_keys keys on keys.id = watchers.api_key_id
+        join push_subscriptions subscriptions
+          on subscriptions.api_key_id = watchers.api_key_id
+        where watchers.narration_id = ?
+          and keys.revoked_at is null
+          and keys.audio_generation_daily_limit is not 0
+        on conflict do nothing
+        """,
+        (
+            EVENT_NARRATION_READY,
+            gist_revision_id,
+            narration_id,
+            created_at,
+            created_at,
+            narration_id,
         ),
     )
     return cursor.rowcount
@@ -478,6 +516,7 @@ def load_pending_delivery(app, delivery_id):
             select
                 push_deliveries.id,
                 push_deliveries.event_type,
+                push_deliveries.narration_id,
                 push_deliveries.attempt_count,
                 push_deliveries.created_at,
                 push_subscriptions.id as subscription_id,
@@ -486,6 +525,7 @@ def load_pending_delivery(app, delivery_id):
                 push_subscriptions.p256dh,
                 push_subscriptions.auth,
                 api_keys.revoked_at,
+                api_keys.audio_generation_daily_limit,
                 notification_settings.new_gist_enabled,
                 notification_settings.edited_gist_enabled,
                 gists.external_id,
@@ -493,7 +533,8 @@ def load_pending_delivery(app, delivery_id):
                 gist_revisions.revision_number,
                 gist_revisions.title,
                 lead_file.filename as lead_filename,
-                lead_file.rendered_html as lead_rendered_html
+                lead_file.rendered_html as lead_rendered_html,
+                narrations.status as narration_status
             from push_deliveries
             join push_subscriptions
               on push_subscriptions.id = push_deliveries.subscription_id
@@ -520,6 +561,8 @@ def load_pending_delivery(app, delivery_id):
                       candidate.filename
                   limit 1
               )
+            left join narrations
+              on narrations.id = push_deliveries.narration_id
             where push_deliveries.id = ?
               and push_deliveries.status = 'pending'
             """,

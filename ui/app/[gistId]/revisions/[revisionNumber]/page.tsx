@@ -8,6 +8,7 @@ import {
   fetchPublicGistPayload
 } from "../../../../lib/gists";
 import { buildGistMetadata } from "../../../../lib/gist-metadata";
+import { fetchCurrentSession } from "../../../../lib/auth";
 import { getSiteChromeConfig } from "../../../../lib/site-config";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function GistRevisionPage({ params }: PageProps) {
   const { gistId, revisionNumber } = await params;
-  const gist = await fetchPublicGist(gistId, revisionNumber);
+  const [gist, session] = await Promise.all([
+    fetchPublicGist(gistId, revisionNumber),
+    fetchCurrentSession()
+  ]);
   const chrome = getSiteChromeConfig();
   const hasMultipleFiles = Object.keys(gist.files).length > 1;
 
@@ -52,7 +56,11 @@ export default async function GistRevisionPage({ params }: PageProps) {
     <main
       className={hasMultipleFiles ? "page-shell page-shell-gist" : "page-shell"}
     >
-      <GistViewer chrome={chrome} gist={gist} />
+      <GistViewer
+        canUseNarration={session?.can_generate_audio === true}
+        chrome={chrome}
+        gist={gist}
+      />
       <MathRenderer gistId={gist.id} revisionNumber={gist.revision_number} />
       <MermaidRenderer gistId={gist.id} revisionNumber={gist.revision_number} />
     </main>

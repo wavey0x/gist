@@ -107,6 +107,33 @@ def test_admin_key_list_revoke_and_rotate(monkeypatch, tmp_path, capsys):
     assert revoked == {"revoked": True}
 
 
+def test_admin_key_audio_limit_supports_unlimited_and_disabled(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    monkeypatch.setenv("SQLITE_DB_PATH", str(tmp_path / "admin.sqlite3"))
+    admin_main(["keys", "create", "--name", "Alice"])
+    created = _admin_json(capsys.readouterr().out)
+
+    admin_main(["keys", "audio-limit", created["key_prefix"], "unlimited"])
+    unlimited = json.loads(capsys.readouterr().out)
+    assert unlimited == {
+        "id": unlimited["id"],
+        "key_prefix": created["key_prefix"],
+        "audio_generation_daily_limit": None,
+    }
+    assert "key" not in unlimited
+
+    admin_main(["keys", "audio-limit", created["key_prefix"], "0"])
+    disabled = json.loads(capsys.readouterr().out)
+    assert disabled["audio_generation_daily_limit"] == 0
+
+    admin_main(["keys", "list"])
+    listed = json.loads(capsys.readouterr().out)
+    assert listed[0]["audio_generation_daily_limit"] == 0
+
+
 def test_admin_key_update_can_store_avatar_without_returning_secret(
     monkeypatch,
     tmp_path,

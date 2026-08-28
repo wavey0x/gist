@@ -53,6 +53,47 @@ uv run push-worker
 Use `uv run push-worker --once` to drain rows that are currently due and exit.
 Run only one worker process.
 
+## Article Audio
+
+Article audio is generated on demand from the canonical stored Markdown
+revision. It requires an authenticated browser session; callers cannot supply
+text, a voice, a URL, or a filesystem path. Ordinary API keys can start three
+new generations in a rolling 24-hour window. Cache hits do not consume the
+limit. Set a key to unlimited or disabled with:
+
+```sh
+uv run admin keys audio-limit <key_prefix_or_id> unlimited
+uv run admin keys audio-limit <key_prefix_or_id> 0
+```
+
+Install the CPU-only narration dependencies and an `ffmpeg` executable, then
+download and verify the pinned model assets once:
+
+```sh
+uv sync --extra narration --no-dev --frozen
+uv run narration-worker --provision
+```
+
+After provisioning, inference runs locally in offline mode. Run exactly one
+serial narration worker:
+
+```sh
+uv run narration-worker
+```
+
+The default limits are 100,000 extracted narration characters, three queued
+jobs, 128 MiB per MP3, and 2 GiB total narration storage. Generated files are
+private and are served only through the session-authenticated revision route
+with byte-range support. Use `uv run admin narrations prune --target-bytes
+<bytes>` for explicit oldest-first cache pruning. Stop the narration worker
+while running this maintenance command so its atomic publication cannot race
+with orphan cleanup.
+
+The runtime uses [Pocket TTS](https://github.com/kyutai-labs/pocket-tts)
+(MIT), the
+[Pocket TTS model](https://huggingface.co/kyutai/pocket-tts-without-voice-cloning)
+(CC BY 4.0), and the `peter_yearsley` Voice-Zero voice (CC0).
+
 Run the service with `umask 077` so the SQLite database and WAL files are not
 readable by other local users. If a reverse proxy fronts the API, configure it
 to append or overwrite `X-Forwarded-For`; the app trusts forwarded client IPs
@@ -101,6 +142,9 @@ GET    /api/v1/me/notification-settings
 PUT    /api/v1/me/notification-settings
 PUT    /api/v1/me/push-subscriptions
 DELETE /api/v1/me/push-subscriptions
+POST   /api/v1/gists/{gist_id}/revisions/{revision_number}/narration
+GET    /api/v1/gists/{gist_id}/revisions/{revision_number}/narration
+GET    /api/v1/gists/{gist_id}/revisions/{revision_number}/narration/audio
 ```
 
 `/api/v1/me/gists` returns gists owned by the logged-in key plus aggregate

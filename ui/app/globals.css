@@ -1415,6 +1415,27 @@ button {
   min-width: max-content;
 }
 
+.article-audio-row {
+  grid-column: 1 / -1;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.article-audio-row audio {
+  width: min(100%, 420px);
+  height: 36px;
+}
+
+.article-audio-message {
+  color: var(--muted-fg);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .page-header-no-brand {
   grid-template-columns: minmax(0, 1fr) auto;
 }

@@ -16,12 +16,18 @@ from .auth import (
 )
 from .db import gist_connection
 from .errors import GistError, error_response
+from .external_ids import validate_external_id
 from .images import IMAGE_RETRY_HINT, create_image_asset, send_image_asset
 from .notifications import (
     delete_push_subscription,
     get_notification_settings,
     update_notification_settings,
     upsert_push_subscription,
+)
+from .narration import (
+    get_narration_audio,
+    get_narration_status,
+    start_narration,
 )
 from .rate_limits import check_write_rate_limit, record_auth_failure_and_check_limit
 from .service import (
@@ -31,6 +37,7 @@ from .service import (
     get_gist,
     get_public_render,
     list_gists_created_by_key,
+    parse_revision_number,
     patch_gist,
 )
 
@@ -558,6 +565,92 @@ def render_gist(gist_id):
 def render_gist_revision(gist_id, revision_number):
     try:
         return jsonify(get_public_render(current_app, gist_id, revision_number))
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
+
+
+def _validate_narration_target(gist_id, revision_number):
+    if not validate_external_id(gist_id):
+        return error_response("not_found", "Not found", 404)
+    try:
+        parse_revision_number(revision_number)
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
+    return None
+
+
+@gists_api.route(
+    "/api/v1/gists/<gist_id>/revisions/<revision_number>/narration",
+    methods=["POST"],
+)
+def create_gist_revision_narration(gist_id, revision_number):
+    response = _validate_narration_target(gist_id, revision_number)
+    if response:
+        return response
+    auth, response = require_web_session()
+    if response:
+        return response
+    if auth.audio_generation_daily_limit == 0:
+        return error_response("forbidden", "Audio access is disabled", 403)
+    try:
+        parse_json_body(set())
+        body = start_narration(
+            current_app,
+            auth,
+            gist_id,
+            revision_number,
+        )
+        return jsonify(body), 202 if body["status"] in {"pending", "processing"} else 200
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
+
+
+@gists_api.route(
+    "/api/v1/gists/<gist_id>/revisions/<revision_number>/narration",
+    methods=["GET"],
+)
+def read_gist_revision_narration(gist_id, revision_number):
+    response = _validate_narration_target(gist_id, revision_number)
+    if response:
+        return response
+    auth, response = require_web_session()
+    if response:
+        return response
+    if auth.audio_generation_daily_limit == 0:
+        return error_response("forbidden", "Audio access is disabled", 403)
+    try:
+        response = jsonify(
+            get_narration_status(current_app, gist_id, revision_number)
+        )
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
+
+
+@gists_api.route(
+    "/api/v1/gists/<gist_id>/revisions/<revision_number>/narration/audio",
+    methods=["GET", "HEAD"],
+)
+def read_gist_revision_narration_audio(gist_id, revision_number):
+    response = _validate_narration_target(gist_id, revision_number)
+    if response:
+        return response
+    auth, response = require_web_session()
+    if response:
+        return response
+    if auth.audio_generation_daily_limit == 0:
+        return error_response("forbidden", "Audio access is disabled", 403)
+    try:
+        response = send_file(
+            get_narration_audio(current_app, gist_id, revision_number),
+            mimetype="audio/mpeg",
+            conditional=True,
+            etag=True,
+            max_age=0,
+        )
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
     except GistError as error:
         return error_response(error.code, error.message, error.status)
 

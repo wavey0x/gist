@@ -19,6 +19,7 @@ export type SessionIdentity = {
   name: string;
   key: string;
   key_prefix: string;
+  can_generate_audio: boolean;
   github_login?: string;
   avatar_url?: string;
 };
@@ -68,6 +69,7 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
     typeof identity.name === "string" &&
     typeof identity.key === "string" &&
     typeof identity.key_prefix === "string" &&
+    typeof identity.can_generate_audio === "boolean" &&
     (identity.github_login === undefined ||
       typeof identity.github_login === "string") &&
     (identity.avatar_url === undefined || typeof identity.avatar_url === "string")
@@ -351,7 +353,7 @@ function isSameOriginJsonMutation(request: NextRequest) {
 export async function proxyJsonMutationWithSession(
   request: NextRequest,
   path: string,
-  method: "PUT" | "DELETE"
+  method: "POST" | "PUT" | "DELETE"
 ) {
   if (!isSameOriginJsonMutation(request)) {
     return NextResponse.json(

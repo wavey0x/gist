@@ -40,6 +40,25 @@ def load_settings():
         ),
         "AVATAR_STORAGE_DIR": os.getenv("AVATAR_STORAGE_DIR"),
         "IMAGE_STORAGE_DIR": os.getenv("GIST_IMAGE_STORAGE_DIR"),
+        "NARRATION_STORAGE_DIR": os.getenv("GIST_NARRATION_STORAGE_DIR"),
+        "NARRATION_STORAGE_LIMIT_BYTES": _int_env(
+            "GIST_NARRATION_STORAGE_LIMIT_BYTES",
+            2 * 1024 * 1024 * 1024,
+        ),
+        "NARRATION_FILE_LIMIT_BYTES": _int_env(
+            "GIST_NARRATION_FILE_LIMIT_BYTES",
+            128 * 1024 * 1024,
+        ),
+        "NARRATION_TEXT_LIMIT_CHARS": _int_env(
+            "GIST_NARRATION_TEXT_LIMIT_CHARS",
+            100000,
+        ),
+        "NARRATION_QUEUE_LIMIT": _int_env("GIST_NARRATION_QUEUE_LIMIT", 3),
+        "NARRATION_FFMPEG_PATH": os.getenv("GIST_NARRATION_FFMPEG_PATH"),
+        "NARRATION_WORKER_POLL_SECONDS": _int_env(
+            "GIST_NARRATION_WORKER_POLL_SECONDS",
+            2,
+        ),
         "IMAGE_STORAGE_LIMIT_BYTES": _int_env(
             "GIST_IMAGE_STORAGE_LIMIT_BYTES",
             5 * 1024 * 1024 * 1024,

@@ -1,4 +1,8 @@
-const SUPPORTED_TYPES = new Set(["gist.published", "gist.updated"]);
+const SUPPORTED_TYPES = new Set([
+  "gist.published",
+  "gist.updated",
+  "narration.ready"
+]);
 const FALLBACK_NOTIFICATION = {
   title: "waveygist alert",
   body: "Open waveygist to view the update.",

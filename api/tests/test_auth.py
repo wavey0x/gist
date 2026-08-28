@@ -217,6 +217,7 @@ def test_key_creation_and_rotation_can_set_custom_avatar_url(app):
         "key": preserved["key"],
         "key_prefix": preserved["key_prefix"],
         "avatar_url": avatar_url,
+        "can_generate_audio": True,
     }
 
 
@@ -384,6 +385,7 @@ def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
         "key_prefix": created["key_prefix"],
         "github_login": "wavey0x",
         "avatar_url": "https://github.com/wavey0x.png?size=64",
+        "can_generate_audio": True,
     }
     assert "token" not in body
     assert set(body) == {
@@ -392,6 +394,7 @@ def test_auth_session_routes_mint_safe_cookie_identity_and_logout(client, app):
         "key_prefix",
         "github_login",
         "avatar_url",
+        "can_generate_audio",
     }
 
     cookie = response.headers["Set-Cookie"]

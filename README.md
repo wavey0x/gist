@@ -20,6 +20,7 @@ gists; anyone with a random gist URL can read the rendered files and raw text.
 - Home-page tabs for browser-local recent views and the logged-in key's gists.
 - Owner-scoped title, filename, and latest-file-content search.
 - Account settings for browser Web Push enrollment and publication alerts.
+- On-demand, session-authenticated Markdown article audio with completion push.
 - Gist API keys with owner-scoped mutation.
 - SQLite persistence by default.
 
@@ -167,6 +168,16 @@ curl -sSG http://localhost:3001/api/v1/gists \
 The response contains compact summaries and offset pagination, never gist file
 content. Search covers active gists' latest revisions only.
 
+## Article Audio
+
+Logged-in accounts can request cached MP3 audio for an immutable Markdown
+revision. Generation is on demand and runs locally with
+[Pocket TTS](https://github.com/kyutai-labs/pocket-tts); publishing and editing
+never queue audio. Install the API's `narration` dependency extra, provision
+the pinned model once, and run one serial narration worker as described in
+[api/README.md](api/README.md). The selected Pocket TTS model is CC BY 4.0 and
+the fixed `peter_yearsley` Voice-Zero voice is CC0.
+
 ## Configuration
 
 Backend environment variables:
@@ -182,6 +193,12 @@ Backend environment variables:
 | `GIST_IMAGE_MAX_BYTES` | `20971520` | Maximum size for one uploaded image. |
 | `GIST_IMAGE_MAX_DIMENSION` | `4096` | Maximum image width or height. |
 | `GIST_IMAGE_MAX_PER_REQUEST` | `10` | Maximum images accepted in one multipart request. |
+| `GIST_NARRATION_STORAGE_DIR` | sibling `narrations/` directory next to SQLite | Private generated MP3 directory. |
+| `GIST_NARRATION_STORAGE_LIMIT_BYTES` | `2147483648` | Global narration storage cap. |
+| `GIST_NARRATION_FILE_LIMIT_BYTES` | `134217728` | Maximum size for one narration MP3. |
+| `GIST_NARRATION_TEXT_LIMIT_CHARS` | `100000` | Maximum normalized narration characters. |
+| `GIST_NARRATION_QUEUE_LIMIT` | `3` | Maximum pending and processing narration jobs. |
+| `GIST_NARRATION_FFMPEG_PATH` | PATH lookup for `ffmpeg` | MP3 encoder executable. |
 | `MAX_MULTIPART_REQUEST_BYTES` | text plus image upload limits | Maximum multipart request body size accepted by Flask. |
 | `MAX_GIST_TEXT_BYTES` | `1048576` | Maximum aggregate UTF-8 bytes across a gist snapshot. |
 | `MAX_GIST_FILES` | `32` | Maximum files in one gist snapshot. |
@@ -223,7 +240,10 @@ uv run admin keys update <key_prefix_or_id> --avatar-file <path_to_image>
 uv run admin keys rotate <key_prefix_or_id> --name <new_name>
 uv run admin keys rotate <key_prefix_or_id> --github-login <github_login>
 uv run admin keys rotate <key_prefix_or_id> --avatar-url <https_url>
+uv run admin keys audio-limit <key_prefix_or_id> unlimited
+uv run admin keys audio-limit <key_prefix_or_id> 0
 uv run admin gists rerender --all
+uv run admin narrations prune --target-bytes <bytes>
 ```
 
 A gist API key can create gists, read authenticated API metadata, and
@@ -253,6 +273,9 @@ POST   /api/v1/gists
 GET    /api/v1/gists/{gist_id}
 GET    /api/v1/gists/{gist_id}/render
 GET    /api/v1/gists/{gist_id}/revisions/{revision_number}/render
+POST   /api/v1/gists/{gist_id}/revisions/{revision_number}/narration
+GET    /api/v1/gists/{gist_id}/revisions/{revision_number}/narration
+GET    /api/v1/gists/{gist_id}/revisions/{revision_number}/narration/audio
 PATCH  /api/v1/gists/{gist_id}
 DELETE /api/v1/gists/{gist_id}
 ```

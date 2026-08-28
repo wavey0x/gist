@@ -52,7 +52,7 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
             )
         }
 
-    assert versions == [1, 8, 9, 10, 11]
+    assert versions == [1, 8, 9, 10, 11, 12]
     assert api_key_columns == [
         "id",
         "name",
@@ -63,6 +63,7 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
         "last_used_at",
         "revoked_at",
         "avatar_url",
+        "audio_generation_daily_limit",
     ]
     assert "web_sessions" in tables
     assert "api_write_events" in tables
@@ -72,11 +73,18 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
     assert "notification_settings" in tables
     assert "push_subscriptions" in tables
     assert "push_deliveries" in tables
+    assert "narrations" in tables
+    assert "narration_watchers" in tables
     assert "gist_revision_files" in tables
     assert "idx_gist_revisions_creator_revision" in indexes
     assert "idx_image_assets_public_id" in indexes
     assert "idx_push_subscriptions_api_key" in indexes
     assert "idx_push_deliveries_due" in indexes
+    assert "idx_narrations_status_created" in indexes
+    assert "idx_narrations_requester_created" in indexes
+    assert "idx_narration_watchers_key" in indexes
+    assert "idx_push_deliveries_gist_event" in indexes
+    assert "idx_push_deliveries_narration_event" in indexes
 
 
 def test_migrations_ignore_current_working_directory(monkeypatch, tmp_path):
@@ -198,12 +206,16 @@ def test_migration_10_seeds_existing_api_keys(tmp_path):
             limit 1
             """
         ).fetchone()["version"]
+        audio_limit = migrated.execute(
+            "select audio_generation_daily_limit from api_keys"
+        ).fetchone()["audio_generation_daily_limit"]
 
     assert dict(settings) == {
         "new_gist_enabled": 1,
         "edited_gist_enabled": 0,
     }
-    assert version == 11
+    assert version == 12
+    assert audio_limit == 3
 
 
 def test_multifile_migration_preserves_all_legacy_history_and_references(tmp_path):
@@ -334,7 +346,10 @@ def test_multifile_migration_preserves_all_legacy_history_and_references(tmp_pat
             "select * from gist_revision_files order by gist_revision_id"
         ).fetchall()
         delivery_rows = migrated.execute(
-            "select id, gist_revision_id, status from push_deliveries order by id"
+            """
+            select id, gist_revision_id, narration_id, status
+            from push_deliveries order by id
+            """
         ).fetchall()
         old_gist_columns = {
             row["name"] for row in migrated.execute("pragma table_info(gists)")
@@ -359,6 +374,7 @@ def test_multifile_migration_preserves_all_legacy_history_and_references(tmp_pat
     assert [row["content"] for row in file_rows] == [contents[10], contents[11], contents[20]]
     assert [row["id"] for row in delivery_rows] == [31, 32, 33]
     assert [row["gist_revision_id"] for row in delivery_rows] == [10, 11, 20]
+    assert [row["narration_id"] for row in delivery_rows] == [None, None, None]
     assert revision_rows[0]["snapshot_sha256"] != revision_rows[1]["snapshot_sha256"]
     for revision, file_row in zip(revision_rows, file_rows, strict=True):
         normalized = NormalizedFile(

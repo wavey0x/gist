@@ -19,6 +19,7 @@ from requests.exceptions import RequestException
 from .app import create_app
 from .notifications import (
     EVENT_GIST_PUBLISHED,
+    EVENT_NARRATION_READY,
     cleanup_terminal_deliveries,
     delete_pending_delivery,
     delete_subscription_by_id,
@@ -123,6 +124,16 @@ def build_payload(row):
             external_id,
         ).split()
     )[:160]
+    if row["event_type"] == EVENT_NARRATION_READY:
+        return {
+            "type": EVENT_NARRATION_READY,
+            "title": "Audio ready",
+            "body": body,
+            "path": (
+                f"/{external_id}/revisions/{revision_number}?audio=ready"
+            ),
+            "tag": f"narration:{external_id}:{revision_number}",
+        }
     if row["event_type"] == EVENT_GIST_PUBLISHED:
         return {
             "type": EVENT_GIST_PUBLISHED,
@@ -204,22 +215,36 @@ def process_delivery(app, delivery_id, vapid, *, sender=webpush, now=None):
     if row is None:
         return "missing"
 
-    event_enabled = (
-        row["new_gist_enabled"]
-        if row["event_type"] == EVENT_GIST_PUBLISHED
-        else row["edited_gist_enabled"]
-    )
+    if row["event_type"] == EVENT_NARRATION_READY:
+        event_enabled = row["audio_generation_daily_limit"] != 0
+    else:
+        event_enabled = (
+            row["new_gist_enabled"]
+            if row["event_type"] == EVENT_GIST_PUBLISHED
+            else row["edited_gist_enabled"]
+        )
     if row["revoked_at"]:
         delete_subscriptions_for_key(app, row["api_key_id"])
         result = "account_revoked"
         next_attempt_at = None
     elif not event_enabled:
         delete_pending_delivery(app, row["id"])
-        result = "setting_disabled"
+        result = (
+            "audio_disabled"
+            if row["event_type"] == EVENT_NARRATION_READY
+            else "setting_disabled"
+        )
         next_attempt_at = None
     elif row["deleted_at"]:
         delete_pending_delivery(app, row["id"])
         result = "gist_deleted"
+        next_attempt_at = None
+    elif (
+        row["event_type"] == EVENT_NARRATION_READY
+        and row["narration_status"] != "ready"
+    ):
+        delete_pending_delivery(app, row["id"])
+        result = "narration_unavailable"
         next_attempt_at = None
     elif now >= _parse_timestamp(row["created_at"]) + timedelta(
         seconds=PUSH_TTL_SECONDS

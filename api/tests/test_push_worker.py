@@ -116,6 +116,27 @@ def test_build_payload_reuses_tag_for_newer_gist_event():
     assert updated["path"] == "/AbCdEf0123456789"
 
 
+def test_build_payload_for_audio_ready_deep_links_to_immutable_revision():
+    payload = build_payload(
+        {
+            "event_type": "narration.ready",
+            "external_id": "AbCdEf0123456789",
+            "revision_number": 4,
+            "title": "A useful title",
+            "lead_filename": "README.md",
+            "lead_rendered_html": "<h1>A useful title</h1>",
+        }
+    )
+
+    assert payload == {
+        "type": "narration.ready",
+        "title": "Audio ready",
+        "body": "A useful title",
+        "path": "/AbCdEf0123456789/revisions/4?audio=ready",
+        "tag": "narration:AbCdEf0123456789:4",
+    }
+
+
 def test_worker_success_sends_safe_payload_and_marks_delivery(client, app):
     _key, gist_id, delivery_id = _prepare_delivery(client, app)
     sent = {}
@@ -310,6 +331,68 @@ def test_worker_rechecks_disabled_setting_and_deleted_gist(client, app):
 
     assert process_delivery(app, row["id"], object()) == "gist_deleted"
     assert gist_id != second_id
+
+
+def test_worker_drops_audio_ready_delivery_when_audio_is_disabled(client, app):
+    _key, _gist_id, delivery_id = _prepare_delivery(client, app)
+    with gist_connection(app) as conn:
+        row = conn.execute(
+            """
+            select push_deliveries.gist_revision_id,
+                   push_subscriptions.api_key_id
+            from push_deliveries
+            join push_subscriptions
+              on push_subscriptions.id = push_deliveries.subscription_id
+            where push_deliveries.id = ?
+            """,
+            (delivery_id,),
+        ).fetchone()
+        with conn:
+            cursor = conn.execute(
+                """
+                insert into narrations(
+                    gist_revision_id, requested_by_key_id, recipe_version,
+                    source_render_version, text_sha256, status, attempt_count,
+                    audio_filename, mime_type, byte_size, duration_ms,
+                    created_at, updated_at, finished_at
+                ) values (?, ?, 'recipe', 'render', ?, 'ready', 1,
+                          'narration-test.mp3', 'audio/mpeg', 10, 1000,
+                          ?, ?, ?)
+                """,
+                (
+                    row["gist_revision_id"],
+                    row["api_key_id"],
+                    "a" * 64,
+                    "2026-08-28T12:00:00.000Z",
+                    "2026-08-28T12:00:00.000Z",
+                    "2026-08-28T12:00:00.000Z",
+                ),
+            )
+            conn.execute(
+                """
+                update push_deliveries
+                set event_type = 'narration.ready', narration_id = ?
+                where id = ?
+                """,
+                (cursor.lastrowid, delivery_id),
+            )
+            conn.execute(
+                "update api_keys set audio_generation_daily_limit = 0 where id = ?",
+                (row["api_key_id"],),
+            )
+
+    sent = False
+
+    def sender(**_kwargs):
+        nonlocal sent
+        sent = True
+
+    assert process_delivery(app, delivery_id, object(), sender=sender) == "audio_disabled"
+    assert sent is False
+    with gist_connection(app) as conn:
+        assert conn.execute(
+            "select count(*) from push_deliveries where id = ?", (delivery_id,)
+        ).fetchone()[0] == 0
 
 
 def test_worker_configuration_requires_matching_private_key(tmp_path, app):
