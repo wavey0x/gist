@@ -2,17 +2,20 @@ const SHELL_CACHE = "waveygist-shell";
 const CONTENT_CACHE = "waveygist-content-v1";
 const AUDIO_CACHE = "waveygist-audio-v1";
 const SHELL_URL = "/offline-shell.html";
-const SHELL_ASSETS = [
-  SHELL_URL,
+const SHARED_SHELL_ASSETS = [
   "/github-markdown.css",
   "/markdown-theme.css",
   "/app.css",
-  "/syntax.css",
+  "/syntax.css"
+];
+const OFFLINE_SHELL_ASSETS = [
+  SHELL_URL,
   "/offline-shell.css",
   "/offline-shell.js",
   "/icons/icon-192.png",
   "/icons/icon-512.png"
 ];
+const SHELL_ASSETS = [...OFFLINE_SHELL_ASSETS, ...SHARED_SHELL_ASSETS];
 const GIST_PATH_RE = /^\/[A-Za-z0-9]{16,64}(?:\/.*)?$/;
 const IMAGE_PATH_RE = /^\/api\/images\/img_[A-Za-z0-9_-]{16,64}$/;
 const AUDIO_PATH_RE =
@@ -87,6 +90,18 @@ function isShellAsset(url) {
       (asset) => new URL(asset, self.location.origin).href === url.href
     )
   );
+}
+
+function shellRequests(assets, cacheMode) {
+  return assets.map(
+    (asset) =>
+      new Request(new URL(asset, self.location.origin), { cache: cacheMode })
+  );
+}
+
+async function refreshShellAssets(assets, cacheMode) {
+  const cache = await caches.open(SHELL_CACHE);
+  await cache.addAll(shellRequests(assets, cacheMode));
 }
 
 function isOfflineNavigation(url) {
@@ -192,15 +207,27 @@ async function networkWithCachedFallback(request, cacheName) {
   }
 }
 
+async function currentShellAsset(request) {
+  const cache = await caches.open(SHELL_CACHE);
+  try {
+    const response = await fetch(new Request(request, { cache: "no-cache" }));
+    if (response.ok) {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    if (cached) {
+      return cached;
+    }
+    throw error;
+  }
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
-      const cache = await caches.open(SHELL_CACHE);
-      const requests = SHELL_ASSETS.map(
-        (asset) =>
-          new Request(new URL(asset, self.location.origin), { cache: "reload" })
-      );
-      await cache.addAll(requests);
+      await refreshShellAssets(SHELL_ASSETS, "reload");
       await self.skipWaiting();
     })()
   );
@@ -228,19 +255,23 @@ self.addEventListener("fetch", (event) => {
     request.mode === "navigate" &&
     isOfflineNavigation(url)
   ) {
+    const networkResponse = fetch(request);
     event.respondWith(
-      fetch(request).catch(async () => {
+      networkResponse.catch(async () => {
         const shell = await (await caches.open(SHELL_CACHE)).match(SHELL_URL);
         return shell ?? Response.error();
       })
+    );
+    event.waitUntil(
+      networkResponse
+        .then(() => refreshShellAssets(OFFLINE_SHELL_ASSETS, "no-cache"))
+        .catch(() => undefined)
     );
     return;
   }
 
   if (request.method === "GET" && isShellAsset(url)) {
-    event.respondWith(
-      caches.match(request).then((response) => response ?? fetch(request))
-    );
+    event.respondWith(currentShellAsset(request));
     return;
   }
 

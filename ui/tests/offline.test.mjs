@@ -24,7 +24,7 @@ const rootLayout = await readFile(
   "utf8"
 );
 
-function workerHarness() {
+function workerHarness(fetchImpl) {
   const listeners = new Map();
   const stores = new Map();
   const addedAssets = [];
@@ -106,9 +106,11 @@ function workerHarness() {
     Uint8Array,
     URL,
     caches,
-    fetch: async () => {
-      throw new TypeError("offline");
-    },
+    fetch:
+      fetchImpl ??
+      (async () => {
+        throw new TypeError("offline");
+      }),
     self: {
       skipWaiting: async () => {
         skipWaitingCalls += 1;
@@ -194,14 +196,14 @@ test("install precaches the complete canonical shell", async () => {
 
   assert.deepEqual(harness.addedAssets, [
     "/offline-shell.html",
-    "/github-markdown.css",
-    "/markdown-theme.css",
-    "/app.css",
-    "/syntax.css",
     "/offline-shell.css",
     "/offline-shell.js",
     "/icons/icon-192.png",
-    "/icons/icon-512.png"
+    "/icons/icon-512.png",
+    "/github-markdown.css",
+    "/markdown-theme.css",
+    "/app.css",
+    "/syntax.css"
   ]);
   assert.deepEqual(
     harness.addedCacheModes,
@@ -243,6 +245,7 @@ test("offline gist navigation falls back to the cached shell", async () => {
   await installCompletion;
 
   let responsePromise;
+  let refreshCompletion;
   harness.listeners.get("fetch")({
     request: {
       method: "GET",
@@ -251,12 +254,77 @@ test("offline gist navigation falls back to the cached shell", async () => {
     },
     respondWith(value) {
       responsePromise = value;
+    },
+    waitUntil(value) {
+      refreshCompletion = value;
     }
   });
 
   const response = await responsePromise;
+  await refreshCompletion;
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "cached:/offline-shell.html");
+});
+
+test("online navigation refreshes unversioned offline-only assets", async () => {
+  const harness = workerHarness(async () => new Response("online"));
+  let responsePromise;
+  let refreshCompletion;
+  harness.listeners.get("fetch")({
+    request: {
+      method: "GET",
+      mode: "navigate",
+      url: "https://gist.wavey.info/AbCdEf0123456789"
+    },
+    respondWith(value) {
+      responsePromise = value;
+    },
+    waitUntil(value) {
+      refreshCompletion = value;
+    }
+  });
+
+  assert.equal(await (await responsePromise).text(), "online");
+  await refreshCompletion;
+  assert.deepEqual(harness.addedAssets, [
+    "/offline-shell.html",
+    "/offline-shell.css",
+    "/offline-shell.js",
+    "/icons/icon-192.png",
+    "/icons/icon-512.png"
+  ]);
+  assert.deepEqual(
+    harness.addedCacheModes,
+    harness.addedAssets.map(() => "no-cache")
+  );
+});
+
+test("shared shell assets revalidate online and fall back offline", async () => {
+  const assetUrl = "https://gist.wavey.info/app.css";
+  const harness = workerHarness(async () => new Response("fresh"));
+  const shellCache = await harness.caches.open("waveygist-shell");
+  await shellCache.put(assetUrl, new Response("cached"));
+
+  let responsePromise;
+  harness.listeners.get("fetch")({
+    request: new Request(assetUrl),
+    respondWith(value) {
+      responsePromise = value;
+    }
+  });
+  assert.equal(await (await responsePromise).text(), "fresh");
+  assert.equal(await (await shellCache.match(assetUrl)).text(), "fresh");
+
+  harness.context.fetch = async () => {
+    throw new TypeError("offline");
+  };
+  harness.listeners.get("fetch")({
+    request: new Request(assetUrl),
+    respondWith(value) {
+      responsePromise = value;
+    }
+  });
+  assert.equal(await (await responsePromise).text(), "fresh");
 });
 
 test("cached audio supports normal, open, suffix, and invalid ranges", async () => {
