@@ -29,6 +29,7 @@ from .narration import (
     get_narration_status,
     start_narration,
 )
+from .offline import get_offline_manifest
 from .rate_limits import check_write_rate_limit, record_auth_failure_and_check_limit
 from .service import (
     create_gist,
@@ -417,6 +418,16 @@ def list_my_gists():
         return response
     except GistError as error:
         return error_response(error.code, error.message, error.status)
+
+
+@gists_api.route("/api/v1/me/offline-manifest", methods=["GET"])
+def read_offline_manifest():
+    auth, response = require_web_session()
+    if response:
+        return response
+    body = jsonify(get_offline_manifest(current_app, auth))
+    body.headers["Cache-Control"] = "private, no-store"
+    return body
 
 
 @gists_api.route("/api/v1/me/gists/export", methods=["GET"])

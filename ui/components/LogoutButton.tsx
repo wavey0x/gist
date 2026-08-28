@@ -1,12 +1,15 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { clearOfflineAccountData } from "../lib/offline-library";
 import { ConfirmModal } from "./ConfirmModal";
 
 export function LogoutButton() {
   const formRef = useRef<HTMLFormElement>(null);
   const confirmedRef = useRef(false);
+  const cleanupCompleteRef = useRef(false);
   const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   function submitLogout() {
     confirmedRef.current = true;
@@ -24,6 +27,15 @@ export function LogoutButton() {
           if (!confirmedRef.current) {
             event.preventDefault();
             setOpen(true);
+          } else if (!cleanupCompleteRef.current) {
+            event.preventDefault();
+            setSubmitting(true);
+            void clearOfflineAccountData()
+              .catch(() => undefined)
+              .finally(() => {
+                cleanupCompleteRef.current = true;
+                formRef.current?.requestSubmit();
+              });
           }
         }}
       >
@@ -35,7 +47,13 @@ export function LogoutButton() {
         open={open}
         title="Log out?"
         confirmLabel="Log out"
-        onCancel={() => setOpen(false)}
+        confirming={submitting}
+        confirmingLabel="Logging out…"
+        onCancel={() => {
+          if (!submitting) {
+            setOpen(false);
+          }
+        }}
         onConfirm={submitLogout}
       >
         <p>End this session?</p>

@@ -120,7 +120,10 @@ function isGistFile(filename: string, value: unknown): value is PublicGistFile {
   );
 }
 
-function normalizePayload(gistId: string, payload: unknown): PublicGistPayload {
+export function normalizePublicGistPayload(
+  gistId: string,
+  payload: unknown
+): PublicGistPayload {
   if (!payload || typeof payload !== "object") {
     throw new Error("Invalid gist payload");
   }
@@ -200,7 +203,7 @@ export async function fetchPublicGistPayload(
   if (!response.ok) {
     throw new Error(`Failed to load gist payload: ${response.status}`);
   }
-  return normalizePayload(gistId, await response.json());
+  return normalizePublicGistPayload(gistId, await response.json());
 }
 
 export async function fetchPublicGist(

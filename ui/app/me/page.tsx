@@ -4,6 +4,7 @@ import { AlertSettings } from "../../components/AlertSettings";
 import { ApiKeyCopyButton } from "../../components/ApiKeyCopyButton";
 import { LocalTimestamp } from "../../components/LocalTimestamp";
 import { LogoutButton } from "../../components/LogoutButton";
+import { OfflineLibrarySettings } from "../../components/OfflineLibrarySettings";
 import {
   fetchCurrentSession,
   fetchMyGists,
@@ -60,6 +61,7 @@ export default async function MePage() {
         <details className="account-section">
           <summary className="account-section-summary">SETTINGS</summary>
           <div className="account-section-body">
+            <OfflineLibrarySettings />
             <AlertSettings initialSettings={notificationSettings} />
           </div>
         </details>

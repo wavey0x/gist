@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0d1117" />
+    <title>Wavey Gist</title>
+    <link rel="icon" href="/icons/icon-192.png" />
+    <link rel="stylesheet" href="/offline-shell.css?v=2" />
+    <script defer src="/offline-shell.js?v=2"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="app-header-inner">
+        <a class="app-brand" href="/" aria-label="waveygist home">
+          <span class="brand-strong">wavey</span><span>gist</span>
+        </a>
+        <span class="offline-status" role="status">Offline</span>
+      </div>
+    </header>
+    <main id="offline-app" class="page-shell" aria-live="polite">
+      <p class="empty-state">Loading saved gists…</p>
+    </main>
+    <noscript>
+      <main class="page-shell">
+        <p class="empty-state">JavaScript is required to open saved gists.</p>
+      </main>
+    </noscript>
+  </body>
+</html>

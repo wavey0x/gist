@@ -76,12 +76,30 @@ export function isStandaloneDisplay() {
   );
 }
 
-export async function registerPushServiceWorker() {
-  const registration = await navigator.serviceWorker.register("/sw.js", {
-    scope: "/"
-  });
-  void registration.update().catch(() => undefined);
-  return registration;
+let registrationPromise: Promise<ServiceWorkerRegistration> | null = null;
+
+export function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return Promise.reject(new Error("Service workers are unsupported"));
+  }
+  registrationPromise ??= navigator.serviceWorker
+    .register("/sw.js", {
+      scope: "/",
+      updateViaCache: "none"
+    })
+    .then((registration) => {
+      void registration.update().catch(() => undefined);
+      return registration;
+    })
+    .catch((error) => {
+      registrationPromise = null;
+      throw error;
+    });
+  return registrationPromise;
+}
+
+export function registerPushServiceWorker() {
+  return registerServiceWorker();
 }
 
 export async function bindExistingSubscription(

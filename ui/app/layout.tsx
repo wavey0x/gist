@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import "github-markdown-css/github-markdown.css";
 import "katex/dist/katex.min.css";
 import { AppHeader } from "../components/AppHeader";
+import { PwaRuntime } from "../components/PwaRuntime";
 import "./markdown-theme.css";
 import "./globals.css";
 import "./syntax.css";
@@ -98,6 +99,7 @@ export default async function RootLayout({
         />
       </head>
       <body>
+        <PwaRuntime />
         <AppHeader />
         {children}
       </body>

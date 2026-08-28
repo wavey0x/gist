@@ -10,6 +10,11 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import {
+  markNarrationPlayed,
+  narrationIsCached,
+  reconcileOfflineLibrary
+} from "../lib/offline-library";
 
 type NarrationStatus = "pending" | "processing" | "ready" | "failed";
 
@@ -473,6 +478,7 @@ export function ArticleAudio({
     setPlayerOpen(revealPlayer);
     setMessage("");
     setRetryable(false);
+    void reconcileOfflineLibrary();
   }
 
   function showFailure(response: Response | null, payload?: NarrationPayload | null) {
@@ -533,7 +539,9 @@ export function ArticleAudio({
     controllerRef.current = controller;
     setViewState("preparing");
     setPlayerOpen(false);
-    setMessage("Preparing article audio…");
+    setMessage(
+      "Preparing audio — it will be saved for offline use when ready."
+    );
     setRetryable(false);
     try {
       const response = await fetch(endpoint, {
@@ -580,6 +588,15 @@ export function ArticleAudio({
     const controller = new AbortController();
     void (async () => {
       try {
+        const cached = await narrationIsCached(gistId, revisionNumber);
+        if (cached) {
+          setCachedAvailable(true);
+          setAudioUrl(`${endpoint}/audio`);
+          setViewState("ready");
+          setPlayerOpen(revealPlayer);
+          setMessage("");
+          setRetryable(false);
+        }
         const response = await fetch(endpoint, {
           cache: "no-store",
           headers: { Accept: "application/json" },
@@ -796,7 +813,11 @@ export function ArticleAudio({
               )
             }
             onTimeUpdate={(event) => handleTimeUpdate(event.currentTarget)}
-            onPlay={() => setPlaying(true)}
+            crossOrigin="anonymous"
+            onPlay={() => {
+              setPlaying(true);
+              void markNarrationPlayed(gistId, revisionNumber);
+            }}
             onPause={() => setPlaying(false)}
             onEnded={() => {
               setPlaying(false);

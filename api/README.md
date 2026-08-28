@@ -136,6 +136,7 @@ POST   /api/v1/auth/session
 GET    /api/v1/auth/session
 DELETE /api/v1/auth/session
 GET    /api/v1/me/gists
+GET    /api/v1/me/offline-manifest
 GET    /api/v1/me/gists/export
 DELETE /api/v1/me/gists/{gist_id}
 GET    /api/v1/me/notification-settings

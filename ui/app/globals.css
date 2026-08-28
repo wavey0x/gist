@@ -8,6 +8,7 @@
   --button-bg-active: #f6f8fa;
   --button-fg: #24292f;
   --focus: #0969da;
+  --danger-fg: #cf222e;
   --switch-on: #1f883d;
   --switch-off: #8c959f;
   --shadow: 0 8px 24px rgb(140 149 159 / 20%);
@@ -24,6 +25,7 @@
   --button-bg-active: #21262d;
   --button-fg: #e6edf3;
   --focus: #2f81f7;
+  --danger-fg: #f85149;
   --switch-on: #3fb950;
   --switch-off: #6e7681;
   --shadow: 0 8px 24px rgb(1 4 9 / 45%);
@@ -196,6 +198,13 @@ button {
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
+}
+
+.app-offline-status {
+  color: var(--muted-fg);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .app-link {
@@ -576,6 +585,141 @@ button {
   color: var(--muted-fg);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.offline-settings {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-fg);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.offline-settings-heading {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.offline-settings-copy {
+  min-width: 0;
+}
+
+.offline-settings h1,
+.offline-settings p {
+  margin: 0;
+}
+
+.offline-settings h1 {
+  color: var(--page-fg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.offline-settings-copy p {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.offline-settings-status {
+  min-height: 17px;
+}
+
+.offline-storage-summary {
+  display: grid;
+  gap: 5px;
+}
+
+.offline-storage-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-fg);
+  font-size: 11px;
+}
+
+.offline-storage-meter {
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--button-bg-active);
+  color: var(--switch-on);
+  appearance: none;
+}
+
+.offline-storage-meter::-webkit-progress-bar {
+  border-radius: 999px;
+  background: var(--button-bg-active);
+}
+
+.offline-storage-meter::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--switch-on);
+}
+
+.offline-storage-meter::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--switch-on);
+}
+
+.offline-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.offline-limit-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.offline-limit-control select {
+  min-height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: var(--button-fg);
+  padding: 2px 24px 2px 7px;
+  font: inherit;
+}
+
+.offline-limit-control select:focus-visible,
+.offline-clear-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.offline-clear-button {
+  border: 0;
+  background: transparent;
+  color: var(--muted-fg);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.offline-clear-button:hover:not(:disabled),
+.offline-clear-button:focus-visible {
+  color: var(--danger-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.offline-clear-button:disabled,
+.offline-limit-control select:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .alert-settings-heading {

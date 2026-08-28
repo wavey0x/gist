@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { fetchCurrentSession } from "../lib/auth";
 import { StandaloneAppControls } from "./StandaloneAppControls";
+import { ConnectivityIndicator } from "./ConnectivityIndicator";
 
 async function getHeaderSession() {
   try {
@@ -21,6 +22,7 @@ export async function AppHeader() {
           <span className="brand-mark-light">gist</span>
         </Link>
         <nav className="app-nav" aria-label="Site">
+          <ConnectivityIndicator />
           {session ? (
             <Link
               className="app-identity app-identity-link"
