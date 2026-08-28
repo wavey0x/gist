@@ -1,6 +1,13 @@
 "use client";
 
-import { Check, Pause, Play, Volume2 } from "lucide-react";
+import {
+  Check,
+  Pause,
+  Play,
+  RotateCcw,
+  RotateCw,
+  Volume2
+} from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
@@ -327,11 +334,11 @@ export function ArticleAudio({
     return isNarrationPayload(payload) ? payload : null;
   }
 
-  function showReady(payload: NarrationPayload) {
+  function showReady(payload: NarrationPayload, revealPlayer = false) {
     setCachedAvailable(true);
     setAudioUrl(payload.audio_url ?? null);
     setViewState("ready");
-    setPlayerOpen(true);
+    setPlayerOpen(revealPlayer);
     setMessage("");
     setRetryable(false);
   }
@@ -450,7 +457,7 @@ export function ArticleAudio({
         if (response.ok && payload?.status === "ready") {
           setCachedAvailable(true);
           if (revealPlayer) {
-            showReady(payload);
+            showReady(payload, true);
           } else {
             setAudioUrl(payload.audio_url ?? null);
             setViewState("ready");
@@ -486,6 +493,21 @@ export function ArticleAudio({
     }
     setMessage("");
     setPlayerOpen(true);
+    void playAudio();
+  }
+
+  async function playAudio() {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+    audio.playbackRate = playbackRate;
+    try {
+      await audio.play();
+      setMessage("");
+    } catch {
+      setMessage("Audio could not be played.");
+    }
   }
 
   async function togglePlayback() {
@@ -498,13 +520,7 @@ export function ArticleAudio({
       persistPosition(true);
       return;
     }
-    audio.playbackRate = playbackRate;
-    try {
-      await audio.play();
-      setMessage("");
-    } catch {
-      setMessage("Audio could not be played.");
-    }
+    await playAudio();
   }
 
   function handleLoadedMetadata(audio: HTMLAudioElement) {
@@ -527,6 +543,18 @@ export function ArticleAudio({
     }
     audio.currentTime = nextTime;
     setCurrentTime(nextTime);
+  }
+
+  function skip(seconds: number) {
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(audio.currentTime)) {
+      return;
+    }
+    const maximum = Number.isFinite(audio.duration) ? audio.duration : Infinity;
+    const nextTime = Math.min(maximum, Math.max(0, audio.currentTime + seconds));
+    audio.currentTime = nextTime;
+    setCurrentTime(nextTime);
+    persistPosition(true);
   }
 
   function selectPlaybackRate(rate: (typeof PLAYBACK_RATES)[number]) {
@@ -564,8 +592,8 @@ export function ArticleAudio({
     buttonLabel = "Retry article audio";
     buttonTitle = "Retry audio";
   } else if (cachedAvailable) {
-    buttonLabel = playerOpen ? "Hide article audio player" : "Show article audio player";
-    buttonTitle = playerOpen ? "Hide audio player" : "Audio ready — show player";
+    buttonLabel = playerOpen ? "Hide article audio player" : "Play article audio";
+    buttonTitle = playerOpen ? "Hide audio player" : "Play article audio";
   }
 
   return (
@@ -652,40 +680,47 @@ export function ArticleAudio({
           role="group"
           aria-label="Article audio player"
         >
-          <span className="article-audio-time" aria-hidden="true">
-            {formatPlaybackTime(currentTime)}
-          </span>
-          <input
-            className="article-audio-seek"
-            type="range"
-            min="0"
-            max={duration > 0 ? duration : 0}
-            step="0.1"
-            value={duration > 0 ? Math.min(currentTime, duration) : 0}
-            disabled={duration <= 0}
-            aria-label="Article audio position"
-            aria-valuetext={`${formatPlaybackTime(currentTime)} of ${formatPlaybackTime(duration)}`}
-            style={seekStyle}
-            onChange={(event) => seek(event.currentTarget.value)}
-            onBlur={() => persistPosition(true)}
-            onPointerUp={() => persistPosition(true)}
-          />
-          <span className="article-audio-time article-audio-duration" aria-hidden="true">
-            {formatPlaybackTime(duration)}
-          </span>
-          <button
-            type="button"
-            className="article-audio-play-button"
-            aria-label={playing ? "Pause article audio" : "Play article audio"}
-            title={playing ? "Pause" : "Play"}
-            onClick={() => void togglePlayback()}
-          >
-            {playing ? (
-              <Pause aria-hidden="true" size={15} strokeWidth={2} />
-            ) : (
-              <Play aria-hidden="true" size={15} strokeWidth={2} />
-            )}
-          </button>
+          <div className="article-audio-transport">
+            <button
+              type="button"
+              className="article-audio-skip-button"
+              aria-label="Skip back 10 seconds"
+              title="Back 10 seconds"
+              disabled={duration <= 0}
+              onClick={() => skip(-10)}
+            >
+              <RotateCcw aria-hidden="true" size={19} strokeWidth={1.8} />
+              <span className="article-audio-skip-label" aria-hidden="true">
+                10
+              </span>
+            </button>
+            <button
+              type="button"
+              className="article-audio-play-button"
+              aria-label={playing ? "Pause article audio" : "Play article audio"}
+              title={playing ? "Pause" : "Play"}
+              onClick={() => void togglePlayback()}
+            >
+              {playing ? (
+                <Pause aria-hidden="true" size={16} strokeWidth={2} />
+              ) : (
+                <Play aria-hidden="true" size={16} strokeWidth={2} />
+              )}
+            </button>
+            <button
+              type="button"
+              className="article-audio-skip-button"
+              aria-label="Skip forward 10 seconds"
+              title="Forward 10 seconds"
+              disabled={duration <= 0}
+              onClick={() => skip(10)}
+            >
+              <RotateCw aria-hidden="true" size={19} strokeWidth={1.8} />
+              <span className="article-audio-skip-label" aria-hidden="true">
+                10
+              </span>
+            </button>
+          </div>
           <div className="article-audio-speed-control" ref={speedControlRef}>
             <button
               ref={speedButtonRef}
@@ -722,6 +757,32 @@ export function ArticleAudio({
                 ))}
               </div>
             ) : null}
+          </div>
+          <div className="article-audio-timeline">
+            <span className="article-audio-time" aria-hidden="true">
+              {formatPlaybackTime(currentTime)}
+            </span>
+            <input
+              className="article-audio-seek"
+              type="range"
+              min="0"
+              max={duration > 0 ? duration : 0}
+              step="0.1"
+              value={duration > 0 ? Math.min(currentTime, duration) : 0}
+              disabled={duration <= 0}
+              aria-label="Article audio position"
+              aria-valuetext={`${formatPlaybackTime(currentTime)} of ${formatPlaybackTime(duration)}`}
+              style={seekStyle}
+              onChange={(event) => seek(event.currentTarget.value)}
+              onBlur={() => persistPosition(true)}
+              onPointerUp={() => persistPosition(true)}
+            />
+            <span
+              className="article-audio-time article-audio-duration"
+              aria-hidden="true"
+            >
+              {formatPlaybackTime(duration)}
+            </span>
           </div>
           {message ? (
             <span className="article-audio-playback-error" role="status">
