@@ -12,6 +12,7 @@ export const OFFLINE_CONTENT_CACHE = "waveygist-content-v1";
 export const OFFLINE_AUDIO_CACHE = "waveygist-audio-v1";
 export const OFFLINE_LIBRARY_EVENT = "waveygist:offline-library-changed";
 export const OFFLINE_CONNECTIVITY_EVENT = "waveygist:connectivity-changed";
+export const OFFLINE_IDENTITY_STORAGE_KEY = "waveygist:offline-identity:v1";
 
 export const OFFLINE_BYTE_LIMITS = [
   250 * 1024 * 1024,

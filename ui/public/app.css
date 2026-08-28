@@ -1962,6 +1962,15 @@ button {
   background: var(--button-bg-active);
 }
 
+.icon-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.icon-button:disabled:hover {
+  background: var(--button-bg);
+}
+
 .icon-button:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
@@ -2055,6 +2064,21 @@ button {
 .history-item-date,
 .history-item-latest {
   color: var(--subtle-fg);
+}
+
+.history-item-availability {
+  color: var(--subtle-fg);
+}
+
+.history-item[aria-disabled="true"],
+.history-diff-link[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.history-item[aria-disabled="true"]:hover,
+.history-item[aria-disabled="true"]:focus-visible {
+  background: transparent;
 }
 
 .markdown-body {
@@ -2541,6 +2565,12 @@ button.gist-file-action {
 
 .raw-viewer {
   position: relative;
+}
+
+.gist-file-raw {
+  border: 0;
+  border-radius: 0;
+  padding: 16px;
 }
 
 .raw-markdown {

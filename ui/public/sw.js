@@ -1,5 +1,5 @@
-const SHELL_VERSION = "v3";
-const SHELL_QUERY = "v=3";
+const SHELL_VERSION = "v4";
+const SHELL_QUERY = "v=4";
 const SHELL_CACHE = `waveygist-shell-${SHELL_VERSION}`;
 const CONTENT_CACHE = "waveygist-content-v1";
 const AUDIO_CACHE = "waveygist-audio-v1";

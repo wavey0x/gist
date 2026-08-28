@@ -4,7 +4,7 @@ import "katex/dist/katex.min.css";
 import { AppHeader } from "../components/AppHeader";
 import { PwaRuntime } from "../components/PwaRuntime";
 
-const STYLE_VERSION = "v3";
+const STYLE_VERSION = "v4";
 
 function resolveMetadataBase() {
   return new URL(

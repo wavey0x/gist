@@ -1,7 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { clearOfflineAccountData } from "../lib/offline-library";
+import {
+  clearOfflineAccountData,
+  OFFLINE_IDENTITY_STORAGE_KEY
+} from "../lib/offline-library";
 import { ConfirmModal } from "./ConfirmModal";
 
 export function LogoutButton() {
@@ -33,6 +36,11 @@ export function LogoutButton() {
             void clearOfflineAccountData()
               .catch(() => undefined)
               .finally(() => {
+                try {
+                  localStorage.removeItem(OFFLINE_IDENTITY_STORAGE_KEY);
+                } catch {
+                  // Logout still proceeds when browser storage is unavailable.
+                }
                 cleanupCompleteRef.current = true;
                 formRef.current?.requestSubmit();
               });

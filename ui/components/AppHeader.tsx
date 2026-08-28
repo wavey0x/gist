@@ -2,6 +2,7 @@ import Link from "next/link";
 import { fetchCurrentSession } from "../lib/auth";
 import { StandaloneAppControls } from "./StandaloneAppControls";
 import { ConnectivityIndicator } from "./ConnectivityIndicator";
+import { OfflineIdentityRecorder } from "./OfflineIdentityRecorder";
 
 async function getHeaderSession() {
   try {
@@ -16,6 +17,17 @@ export async function AppHeader() {
 
   return (
     <header className="app-header">
+      <OfflineIdentityRecorder
+        identity={
+          session
+            ? {
+                name: session.name,
+                avatarUrl: session.avatar_url ?? null,
+                canGenerateAudio: session.can_generate_audio
+              }
+            : null
+        }
+      />
       <div className="app-header-inner">
         <Link className="app-brand" href="/" aria-label="waveygist home">
           <span className="brand-mark-strong">wavey</span>

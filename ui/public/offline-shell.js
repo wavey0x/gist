@@ -10,12 +10,40 @@
   const ROUTE_RE = /^\/([A-Za-z0-9]{16,64})(?:\/revisions\/([1-9][0-9]*))?\/?$/;
   const THEME_KEY = "theme";
   const TAB_KEY = "waveygist:home-tab:v1";
+  const OFFLINE_IDENTITY_KEY = "waveygist:offline-identity:v1";
   const AUDIO_RATE_KEY = "waveygist:audio-rate:v1";
   const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2];
+  const MINUTE_MS = 60 * 1000;
+  const HOUR_MS = 60 * MINUTE_MS;
+  const DAY_MS = 24 * HOUR_MS;
+  const MONTH_MS = 30 * DAY_MS;
+  const YEAR_MS = 365 * DAY_MS;
+  const GITHUB_LOGIN_RE =
+    /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+  const ETH_ENTITY_ID_CLASS_RE = /^eth-id-[a-f0-9]{12}$/;
+  const ETH_ENTITY_GROUP_HOVER_CLASS = "eth-entity-group-hover";
   const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
   const ICON_PATHS = {
     check: ['<path d="m9 11 3 3L22 4" />'],
     chevronDown: ['<path d="m6 9 6 6 6-6" />'],
+    copy: [
+      '<rect width="14" height="14" x="8" y="8" rx="2" ry="2" />',
+      '<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />'
+    ],
+    fileCode: [
+      '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />',
+      '<polyline points="14 2 14 8 20 8" />',
+      '<path d="m10 13-2 2 2 2M14 17l2-2-2-2" />'
+    ],
+    fileDiff: [
+      '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />',
+      '<polyline points="14 2 14 8 20 8" />',
+      '<path d="M10 13H8M16 13h-2M12 11v4M12 17v1" />'
+    ],
+    history: [
+      '<path d="M3 12a9 9 0 1 0 3-6.7L3 8" />',
+      '<path d="M3 3v5h5M12 7v5l3 2" />'
+    ],
     moon: ['<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />'],
     pause: [
       '<rect width="4" height="16" x="6" y="4" rx="1" />',
@@ -30,6 +58,13 @@
       '<path d="M21 12a9 9 0 1 1-3-6.7L21 8" />',
       '<path d="M21 3v5h-5" />'
     ],
+    share: [
+      '<circle cx="18" cy="5" r="3" />',
+      '<circle cx="6" cy="12" r="3" />',
+      '<circle cx="18" cy="19" r="3" />',
+      '<line x1="8.59" x2="15.42" y1="13.51" y2="17.49" />',
+      '<line x1="15.41" x2="8.59" y1="6.51" y2="10.49" />'
+    ],
     sun: [
       '<circle cx="12" cy="12" r="4" />',
       '<path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />'
@@ -38,6 +73,13 @@
       '<path d="M11 5 6 9H2v6h4l5 4V5Z" />',
       '<path d="M15.54 8.46a5 5 0 0 1 0 7.07" />',
       '<path d="M19.07 4.93a10 10 0 0 1 0 14.14" />'
+    ],
+    textSearch: [
+      '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h5" />',
+      '<polyline points="14 2 14 8 20 8" />',
+      '<path d="M8 13h2M8 17h1" />',
+      '<circle cx="16" cy="17" r="3" />',
+      '<path d="m18.5 19.5 2 2" />'
     ]
   };
 
@@ -132,15 +174,57 @@
     button.prepend(icon(name, size, strokeWidth));
   }
 
-  function formatDate(value, compact = false) {
+  function formatDate(value, variant = "long") {
     const date = new Date(value);
     if (Number.isNaN(date.valueOf())) {
       return "saved offline";
     }
-    return new Intl.DateTimeFormat(undefined, compact
-      ? { dateStyle: "medium" }
-      : { dateStyle: "medium", timeStyle: "short" }
-    ).format(date);
+    const dateOptions = variant === "long"
+      ? { month: "long", day: "numeric", year: "numeric" }
+      : variant === "compact"
+        ? { month: "short", day: "numeric", year: "numeric" }
+        : { month: "short", day: "numeric" };
+    const timeOptions = variant === "short"
+      ? { hour: "numeric", minute: "2-digit", hour12: true }
+      : {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZoneName: "short"
+        };
+    const separator = variant === "short" ? " · " : " ";
+    return `${new Intl.DateTimeFormat("en-US", dateOptions).format(date)}${separator}${new Intl.DateTimeFormat("en-US", timeOptions).format(date)}`;
+  }
+
+  function pluralize(value, singular) {
+    return `${value} ${singular}${value === 1 ? "" : "s"} ago`;
+  }
+
+  function formatRelativeDate(value, now = Date.now()) {
+    const date = new Date(value);
+    if (Number.isNaN(date.valueOf())) {
+      return value;
+    }
+    const elapsed = Math.max(0, now - date.valueOf());
+    if (elapsed < MINUTE_MS) return "just now";
+    if (elapsed < HOUR_MS) return pluralize(Math.floor(elapsed / MINUTE_MS), "min");
+    if (elapsed < DAY_MS) return pluralize(Math.floor(elapsed / HOUR_MS), "hour");
+    if (elapsed < MONTH_MS) return pluralize(Math.floor(elapsed / DAY_MS), "day");
+    if (elapsed < YEAR_MS) return pluralize(Math.floor(elapsed / MONTH_MS), "month");
+    return pluralize(Math.floor(elapsed / YEAR_MS), "year");
+  }
+
+  function formatByteSize(byteSize) {
+    if (byteSize < 1024) {
+      return `${byteSize} B`;
+    }
+    return `${(byteSize / 1024).toFixed(byteSize < 10 * 1024 ? 1 : 0)} KB`;
+  }
+
+  function timestamp(value, variant = "long") {
+    const time = element("time", { text: formatDate(value, variant) });
+    time.dateTime = value;
+    return time;
   }
 
   function formatPlaybackRate(rate) {
@@ -229,6 +313,135 @@
     return (value || "?").trim().slice(0, 1).toUpperCase() || "?";
   }
 
+  function fallbackAuthorAvatarUrl(authorName) {
+    return GITHUB_LOGIN_RE.test(authorName || "")
+      ? `https://github.com/${authorName}.png?size=64`
+      : null;
+  }
+
+  function authorAvatar(authorName, avatarUrl, className, size) {
+    const resolvedUrl = avatarUrl || fallbackAuthorAvatarUrl(authorName);
+    const placeholder = () => {
+      const fallback = element("span", {
+        className: `${className} ${className}-placeholder`,
+        text: authorInitial(authorName)
+      });
+      fallback.setAttribute("aria-hidden", "true");
+      return fallback;
+    };
+    if (!resolvedUrl) {
+      return placeholder();
+    }
+    const image = element("img", { className });
+    image.src = resolvedUrl;
+    image.alt = "";
+    image.width = image.height = size;
+    image.addEventListener("error", () => image.replaceWith(placeholder()), {
+      once: true
+    });
+    return image;
+  }
+
+  function readOfflineIdentity() {
+    try {
+      const value = JSON.parse(localStorage.getItem(OFFLINE_IDENTITY_KEY) || "null");
+      if (
+        value &&
+        typeof value.name === "string" &&
+        value.name.length > 0 &&
+        value.name.length <= 100 &&
+        typeof value.canGenerateAudio === "boolean" &&
+        (value.avatarUrl === null ||
+          value.avatarUrl === undefined ||
+          typeof value.avatarUrl === "string")
+      ) {
+        return value;
+      }
+    } catch {
+      // Identity is a visual convenience; invalid state can be ignored.
+    }
+    return null;
+  }
+
+  function showStandaloneNotice(message) {
+    document.querySelector(".standalone-action-notice")?.remove();
+    const notice = element("div", {
+      className: "standalone-action-notice",
+      text: message
+    });
+    notice.setAttribute("role", "status");
+    document.body.append(notice);
+    window.setTimeout(() => notice.remove(), 1600);
+  }
+
+  async function shareCurrentPage(button) {
+    const url = location.href;
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: document.title, url });
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          return;
+        }
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      button.replaceChildren(icon("check", 16, 2));
+      button.setAttribute("aria-label", "Link copied");
+      showStandaloneNotice("Link copied");
+      window.setTimeout(() => {
+        button.replaceChildren(icon("share", 16, 1.9));
+        button.setAttribute("aria-label", "Share this page");
+      }, 1600);
+    } catch {
+      showStandaloneNotice("Unable to share");
+    }
+  }
+
+  function setupOfflineHeader() {
+    const nav = document.querySelector(".app-nav");
+    if (!nav) {
+      return;
+    }
+    const identity = readOfflineIdentity();
+    if (identity) {
+      const link = element("a", {
+        className: "app-identity app-identity-link",
+        href: "/me"
+      });
+      link.setAttribute("aria-label", `${identity.name} account`);
+      if (identity.avatarUrl) {
+        const avatar = element("img", { className: "app-avatar" });
+        avatar.src = identity.avatarUrl;
+        avatar.alt = "";
+        avatar.width = avatar.height = 20;
+        avatar.addEventListener("error", () => avatar.remove(), { once: true });
+        link.append(avatar);
+      }
+      link.append(element("span", { className: "app-name", text: identity.name }));
+      nav.append(link);
+    }
+
+    const shareButton = element("button", {
+      className: "icon-button standalone-share-button"
+    });
+    shareButton.type = "button";
+    shareButton.title = "Share";
+    shareButton.setAttribute("aria-label", "Share this page");
+    shareButton.append(icon("share", 16, 1.9));
+    shareButton.addEventListener("click", () => void shareCurrentPage(shareButton));
+    nav.append(shareButton);
+
+    if (
+      matchMedia("(display-mode: standalone)").matches ||
+      navigator.standalone === true
+    ) {
+      document.documentElement.classList.add("standalone-app");
+    }
+  }
+
   function gistListRow(entry, tab) {
     const item = element("li", { className: "gist-list-item" });
     const row = element("div", { className: "gist-list-row" });
@@ -245,10 +458,12 @@
     const metadata = element("span", { className: "gist-list-meta" });
     const author = element("span", { className: "gist-list-author" });
     author.append(
-      element("span", {
-        className: "gist-list-avatar gist-list-avatar-placeholder",
-        text: authorInitial(entry.authorName)
-      }),
+      authorAvatar(
+        entry.authorName,
+        entry.authorAvatarUrl,
+        "gist-list-avatar",
+        22
+      ),
       element("span", {
         className: "gist-list-author-name",
         text: entry.authorName || "Unknown"
@@ -266,7 +481,7 @@
       author,
       document.createTextNode(" - "),
       revisionLink,
-      document.createTextNode(` - ${tab === "recent" ? "viewed" : "updated"} ${formatDate(dateValue, true)}`)
+      document.createTextNode(` - ${tab === "recent" ? "viewed" : "updated"} ${formatDate(dateValue, "compact")}`)
     );
     content.append(titleLink, metadata);
     row.append(content);
@@ -549,14 +764,148 @@
       : null;
   }
 
-  async function articleToolbar(payload) {
+  async function revisionHistoryControl(payload) {
+    const control = element("div", { className: "history-control" });
+    const button = element("button", { className: "icon-button" });
+    const menu = element("div", { className: "history-menu" });
+    const menuId = `revision-history-${payload.id}-${payload.revision_number}`;
+    const cachedRevisions = new Set(
+      (await backedGistEntries())
+        .filter((entry) => entry.gistId === payload.id)
+        .map((entry) => entry.revisionNumber)
+    );
+    let relativeDateInterval = null;
+
+    button.type = "button";
+    button.title = "History";
+    button.setAttribute("aria-label", "View revision history");
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-controls", menuId);
+    button.append(icon("history"));
+
+    menu.id = menuId;
+    menu.hidden = true;
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "Revision history");
+
+    function paintRelativeDates() {
+      const now = Date.now();
+      for (const time of menu.querySelectorAll("time[data-created-at]")) {
+        time.textContent = formatRelativeDate(time.dataset.createdAt, now);
+      }
+    }
+
+    function closeHistory(focus = false) {
+      menu.hidden = true;
+      button.setAttribute("aria-expanded", "false");
+      if (relativeDateInterval !== null) {
+        window.clearInterval(relativeDateInterval);
+        relativeDateInterval = null;
+      }
+      if (focus) {
+        button.focus();
+      }
+    }
+
+    for (const item of payload.history) {
+      const row = element("div", { className: "history-item-row" });
+      row.setAttribute("role", "none");
+      const revisionIsCached = cachedRevisions.has(item.revision_number);
+      const revision = element(revisionIsCached ? "a" : "span", {
+        className: "history-item",
+        ...(revisionIsCached
+          ? { href: `/${payload.id}/revisions/${item.revision_number}` }
+          : {})
+      });
+      revision.setAttribute("role", "menuitem");
+      if (item.revision_number === payload.revision_number) {
+        revision.setAttribute("aria-current", "page");
+      }
+      if (!revisionIsCached) {
+        revision.setAttribute("aria-disabled", "true");
+        revision.title = "This revision isn’t saved offline";
+      }
+      revision.append(element("span", {
+        className: "history-item-title",
+        text: `Revision ${item.revision_number}`
+      }));
+      const metadata = element("span", { className: "history-item-meta" });
+      metadata.append(document.createTextNode(item.author_name));
+      const date = element("span", { className: "history-item-date" });
+      const time = element("time");
+      time.dateTime = item.created_at;
+      time.dataset.createdAt = item.created_at;
+      date.append(document.createTextNode(" · "), time);
+      metadata.append(date);
+      if (item.is_latest) {
+        metadata.append(element("span", {
+          className: "history-item-latest",
+          text: " · latest"
+        }));
+      }
+      if (!revisionIsCached) {
+        metadata.append(element("span", {
+          className: "history-item-availability",
+          text: " · not saved"
+        }));
+      }
+      revision.append(metadata);
+      row.append(revision);
+
+      if (item.revision_number > 1) {
+        const diff = element("span", { className: "history-diff-link" });
+        diff.setAttribute("role", "menuitem");
+        diff.setAttribute("aria-disabled", "true");
+        diff.setAttribute(
+          "aria-label",
+          `Compare revision ${item.revision_number} with previous revision (requires a connection)`
+        );
+        diff.title = "Diff requires a connection";
+        diff.append(icon("fileDiff", 16));
+        row.append(diff);
+      }
+      menu.append(row);
+    }
+    paintRelativeDates();
+
+    button.addEventListener("click", () => {
+      const open = menu.hidden;
+      if (!open) {
+        closeHistory(false);
+        return;
+      }
+      menu.hidden = false;
+      button.setAttribute("aria-expanded", "true");
+      paintRelativeDates();
+      relativeDateInterval = window.setInterval(paintRelativeDates, MINUTE_MS);
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!menu.hidden && !control.contains(event.target)) {
+        closeHistory(false);
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (!menu.hidden && event.key === "Escape") {
+        closeHistory(true);
+      }
+    });
+    control.append(button, menu);
+    return control;
+  }
+
+  async function articleToolbar(payload, singleFile, onRawToggle) {
     const group = element("div", { className: "article-audio-toolbar-group" });
     const toolbar = element("div", { className: "toolbar" });
     toolbar.setAttribute("aria-label", "Display controls");
     const audioEntry = await cachedAudioEntry(payload);
+    const narrationEligible = payload.files[payload.primary_file]?.kind === "markdown";
+    let audio = null;
+    let audioButton = null;
+    let overlay = null;
+    let updateDocked = () => undefined;
 
-    if (audioEntry) {
-      const audioButton = element("button", {
+    if (audioEntry && narrationEligible) {
+      audioButton = element("button", {
         className: "icon-button article-audio-button-ready"
       });
       audioButton.type = "button";
@@ -566,14 +915,14 @@
       audioButton.setAttribute("aria-pressed", "false");
       audioButton.append(icon("volume"));
 
-      const audio = document.createElement("audio");
+      audio = document.createElement("audio");
       audio.className = "article-audio-engine";
       audio.preload = "metadata";
       audio.crossOrigin = "anonymous";
       audio.src = audioEntry.cacheKey;
       audio.setAttribute("aria-hidden", "true");
 
-      const overlay = element("div", { className: "article-audio-overlay" });
+      overlay = element("div", { className: "article-audio-overlay" });
       overlay.hidden = true;
       overlay.setAttribute("role", "group");
       overlay.setAttribute("aria-label", "Article audio player");
@@ -695,7 +1044,12 @@
       });
       duration.setAttribute("aria-hidden", "true");
       timeline.append(current, seek, duration);
-      overlay.append(transport, speedControl, timeline);
+      const playbackError = element("span", {
+        className: "article-audio-playback-error"
+      });
+      playbackError.hidden = true;
+      playbackError.setAttribute("role", "status");
+      overlay.append(transport, speedControl, timeline, playbackError);
 
       const storageKey = positionKey(payload.id, payload.revision_number);
       let lastSaved = 0;
@@ -759,6 +1113,17 @@
         }
       }
 
+      async function playAudio() {
+        try {
+          await audio.play();
+          playbackError.hidden = true;
+          playbackError.textContent = "";
+        } catch {
+          playbackError.textContent = "Audio could not be played.";
+          playbackError.hidden = false;
+        }
+      }
+
       audioButton.addEventListener("click", () => {
         const open = overlay.hidden;
         overlay.hidden = !open;
@@ -770,10 +1135,18 @@
         );
         audioButton.title = open ? "Hide audio player" : "Play article audio";
         audioButton.classList.toggle("article-audio-button-ready", !open);
+        if (open) {
+          void playAudio();
+        } else {
+          audio.pause();
+          closeSpeedMenu(false);
+          savePosition(true);
+        }
+        updateDocked();
       });
       play.addEventListener("click", () => {
         if (audio.paused) {
-          void audio.play().catch(() => undefined);
+          void playAudio();
         } else {
           audio.pause();
         }
@@ -825,12 +1198,91 @@
       window.addEventListener("pagehide", () => savePosition(true), { once: true });
 
       toolbar.append(audioButton);
-      group.append(toolbar, audio, overlay);
-    } else {
-      group.append(toolbar);
+    } else if (narrationEligible && readOfflineIdentity()?.canGenerateAudio === true) {
+      audioButton = element("button", { className: "icon-button" });
+      audioButton.type = "button";
+      audioButton.disabled = true;
+      audioButton.title = "Audio isn’t saved offline";
+      audioButton.setAttribute("aria-label", "Article audio isn’t saved offline");
+      audioButton.append(icon("volume"));
+      toolbar.append(audioButton);
     }
 
-    toolbar.append(themeButton());
+    let rawVisible = false;
+    let rawButton = null;
+    if (singleFile) {
+      rawButton = element("button", { className: "icon-button" });
+      rawButton.type = "button";
+      rawButton.addEventListener("click", () => {
+        rawVisible = !rawVisible;
+        setRawVisible(rawVisible);
+        onRawToggle(rawVisible);
+      });
+      setRawVisible(false);
+      toolbar.append(rawButton);
+    }
+    toolbar.append(await revisionHistoryControl(payload), themeButton());
+
+    const dockSentinel = element("span", {
+      className: "article-audio-dock-sentinel"
+    });
+    const dockTopProbe = element("span", {
+      className: "article-audio-dock-top-probe"
+    });
+    dockSentinel.setAttribute("aria-hidden", "true");
+    dockTopProbe.setAttribute("aria-hidden", "true");
+    group.append(toolbar, dockSentinel, dockTopProbe);
+    if (audio && overlay) {
+      group.append(audio, overlay);
+      let dockFrame = null;
+      updateDocked = () => {
+        if (dockFrame !== null) {
+          return;
+        }
+        dockFrame = window.requestAnimationFrame(() => {
+          dockFrame = null;
+          const docked =
+            !overlay.hidden &&
+            dockSentinel.getBoundingClientRect().top <=
+              dockTopProbe.getBoundingClientRect().top;
+          overlay.classList.toggle("article-audio-overlay-docked", docked);
+        });
+      };
+      window.addEventListener("scroll", updateDocked, { passive: true });
+      window.addEventListener("resize", updateDocked);
+      window.visualViewport?.addEventListener("scroll", updateDocked, {
+        passive: true
+      });
+      window.visualViewport?.addEventListener("resize", updateDocked);
+    }
+
+    function setRawVisible(visible) {
+      rawVisible = visible;
+      if (rawButton) {
+        rawButton.title = visible ? "Rendered" : "Raw";
+        rawButton.setAttribute(
+          "aria-label",
+          visible ? "View rendered file" : "View raw file"
+        );
+        rawButton.replaceChildren(icon(visible ? "textSearch" : "fileCode"));
+      }
+      if (audioButton) {
+        audioButton.hidden = visible;
+      }
+      if (visible && audio && overlay) {
+        audio.pause();
+        overlay.hidden = true;
+        overlay.classList.remove("article-audio-overlay-docked");
+        audioButton?.setAttribute("aria-expanded", "false");
+        audioButton?.setAttribute("aria-pressed", "false");
+        audioButton?.setAttribute("aria-label", "Play article audio");
+        if (audioButton) {
+          audioButton.title = "Play article audio";
+        }
+        audioButton?.classList.add("article-audio-button-ready");
+      }
+    }
+
     return group;
   }
 
@@ -864,23 +1316,111 @@
     return codeView;
   }
 
+  function rawFileContent(file, panel = false) {
+    const pre = element("pre", {
+      className: panel ? "raw-markdown gist-file-raw" : "raw-markdown"
+    });
+    pre.setAttribute("aria-label", "Raw file");
+    pre.append(element("code", { text: file.content || "" }));
+    return pre;
+  }
+
+  async function copyFileContent(file, button, compact = false) {
+    try {
+      await navigator.clipboard.writeText(file.content || "");
+      button.setAttribute("aria-label", `${file.filename} copied`);
+      button.title = "Copied";
+      button.replaceChildren(icon("check", compact ? 14 : 17, 1.9));
+      if (compact) {
+        button.append(element("span", { text: "Copied" }));
+      }
+      window.setTimeout(() => {
+        button.setAttribute("aria-label", `Copy ${file.filename}`);
+        button.title = compact ? "" : "Copy";
+        button.replaceChildren(icon("copy", compact ? 14 : 17, 1.9));
+        if (compact) {
+          button.append(element("span", { text: "Copy" }));
+        }
+      }, 1500);
+    } catch {
+      // Clipboard access can be unavailable in some embedded browsers.
+    }
+  }
+
+  function singleRawViewer(file) {
+    const viewer = element("div", { className: "raw-viewer gist-single-file" });
+    const copy = element("button", {
+      className: "icon-button raw-copy-button"
+    });
+    copy.type = "button";
+    copy.title = "Copy";
+    copy.setAttribute("aria-label", `Copy ${file.filename}`);
+    copy.append(icon("copy", 17));
+    copy.addEventListener("click", () => void copyFileContent(file, copy));
+    viewer.append(copy, rawFileContent(file));
+    return viewer;
+  }
+
   function filePanel(file) {
     const panel = element("section", { className: "gist-file-panel" });
+    const safeId = file.content_sha256?.slice(0, 12) || Math.random().toString(36).slice(2);
+    const headingId = `offline-file-heading-${safeId}`;
+    const bodyId = `offline-file-body-${safeId}`;
+    panel.dataset.gistFilename = file.filename;
     panel.dataset.collapsed = "false";
+    panel.setAttribute("aria-labelledby", headingId);
     const header = element("header", { className: "gist-file-header" });
     const disclosure = element("button", { className: "gist-file-disclosure" });
     disclosure.type = "button";
     disclosure.setAttribute("aria-expanded", "true");
+    disclosure.setAttribute("aria-controls", bodyId);
     disclosure.setAttribute("aria-label", `Collapse ${file.filename}`);
     const identity = element("span", { className: "gist-file-identity" });
-    identity.append(element("span", { className: "gist-file-name", text: file.filename }));
-    if (file.language) {
-      identity.append(element("span", { className: "gist-file-meta", text: file.language }));
-    }
-    disclosure.append(icon("chevronDown", 15, 1.9), identity);
-    header.append(disclosure);
+    const filename = element("span", {
+      className: "gist-file-name",
+      text: file.filename
+    });
+    filename.id = headingId;
+    const metadata = [file.language, formatByteSize(file.byte_size)]
+      .filter(Boolean)
+      .join(" · ");
+    identity.append(
+      filename,
+      element("span", { className: "gist-file-meta", text: metadata })
+    );
+    const chevron = icon("chevronDown", 15, 1.9);
+    chevron.classList.add("gist-file-chevron");
+    disclosure.append(chevron, identity);
+
+    const actions = element("div", { className: "gist-file-actions" });
+    const raw = element("button", { className: "gist-file-action", text: "Raw" });
+    const copy = element("button", {
+      className: "gist-file-action gist-file-copy"
+    });
+    raw.type = copy.type = "button";
+    raw.setAttribute("aria-label", `View raw ${file.filename}`);
+    copy.setAttribute("aria-label", `Copy ${file.filename}`);
+    copy.append(icon("copy", 14, 1.9), element("span", { text: "Copy" }));
+    actions.append(raw, copy);
+    header.append(disclosure, actions);
     const body = element("div", { className: "gist-file-body" });
+    body.id = bodyId;
     body.append(fileContent(file, true));
+    let rawVisible = false;
+
+    function paintBody() {
+      body.replaceChildren(
+        rawVisible
+          ? rawFileContent(file, true)
+          : fileContent(file, true)
+      );
+      raw.textContent = rawVisible ? "Rendered" : "Raw";
+      raw.setAttribute(
+        "aria-label",
+        `${rawVisible ? "View rendered" : "View raw"} ${file.filename}`
+      );
+    }
+
     disclosure.addEventListener("click", () => {
       const collapsed = panel.dataset.collapsed !== "true";
       panel.dataset.collapsed = String(collapsed);
@@ -891,6 +1431,11 @@
         `${collapsed ? "Expand" : "Collapse"} ${file.filename}`
       );
     });
+    raw.addEventListener("click", () => {
+      rawVisible = !rawVisible;
+      paintBody();
+    });
+    copy.addEventListener("click", () => void copyFileContent(file, copy, true));
     panel.append(header, body);
     return panel;
   }
@@ -909,35 +1454,50 @@
 
     const metadata = element("div", { className: "gist-meta" });
     const dateRow = element("div", { className: "gist-date-row" });
-    const dateLine = element("span", { className: "gist-date-line" });
-    const edited = payload.revision_number > 1;
-    const dateValue = payload.updated_at || payload.created_at;
+    const dateLine = element("span", {
+      className: "gist-date-line gist-date-line-with-tooltip"
+    });
+    const latestRevision = payload.history.find((item) => item.is_latest);
+    const edited = payload.latest_revision_number > 1;
+    const lastEditedAt = edited
+      ? latestRevision?.created_at || payload.updated_at
+      : null;
+    const dateValue = lastEditedAt || payload.created_at;
+    const desktopDate = element("span", { className: "gist-date-desktop" });
+    const mobileDate = element("span", { className: "gist-date-mobile" });
+    desktopDate.append(timestamp(dateValue));
+    mobileDate.append(timestamp(dateValue, "short"));
     dateLine.append(
       element("span", {
         className: "gist-date-label",
         text: edited ? "edited:" : "created:"
       }),
       document.createTextNode(" "),
-      element("span", {
-        className: "gist-date-desktop",
-        text: formatDate(dateValue)
-      }),
-      element("span", {
-        className: "gist-date-mobile",
-        text: formatDate(dateValue, true)
-      })
+      desktopDate,
+      mobileDate
     );
+    const tooltip = element("span", { className: "gist-date-tooltip" });
+    tooltip.setAttribute("aria-hidden", "true");
+    const createdRow = element("span", { className: "gist-date-tooltip-row" });
+    createdRow.append(document.createTextNode("created: "), timestamp(payload.created_at));
+    tooltip.append(createdRow);
+    if (lastEditedAt) {
+      const editedRow = element("span", { className: "gist-date-tooltip-row" });
+      editedRow.append(document.createTextNode("edited: "), timestamp(lastEditedAt));
+      tooltip.append(editedRow);
+    }
+    dateLine.append(tooltip);
     dateRow.append(dateLine);
 
     const authorRow = element("div", { className: "gist-author-row" });
     const authorLine = element("span", { className: "gist-author-line" });
-    const avatar = element("span", {
-      className: "gist-author-avatar gist-author-avatar-placeholder",
-      text: authorInitial(payload.author_name)
-    });
-    avatar.setAttribute("aria-hidden", "true");
     authorLine.append(
-      avatar,
+      authorAvatar(
+        payload.author_name,
+        payload.author_avatar_url,
+        "gist-author-avatar",
+        18
+      ),
       document.createTextNode("by "),
       element("span", {
         className: "gist-author-name",
@@ -954,6 +1514,75 @@
     return header;
   }
 
+  function setupEntityGroupHover(root) {
+    let activeEntityId = null;
+
+    function entityIdForTarget(target) {
+      if (!(target instanceof Element)) {
+        return null;
+      }
+      const entity = target.closest(".eth-entity");
+      if (!entity || !root.contains(entity)) {
+        return null;
+      }
+      return Array.from(entity.classList).find((className) =>
+        ETH_ENTITY_ID_CLASS_RE.test(className)
+      ) || null;
+    }
+
+    function clearGroupHover() {
+      if (!activeEntityId) {
+        return;
+      }
+      root.querySelectorAll(`.${activeEntityId}`).forEach((node) => {
+        node.classList.remove(ETH_ENTITY_GROUP_HOVER_CLASS);
+      });
+      activeEntityId = null;
+    }
+
+    function setGroupHover(entityId) {
+      if (!entityId || entityId === activeEntityId) {
+        return;
+      }
+      clearGroupHover();
+      activeEntityId = entityId;
+      root.querySelectorAll(`.${entityId}`).forEach((node) => {
+        node.classList.add(ETH_ENTITY_GROUP_HOVER_CLASS);
+      });
+    }
+
+    function relatedTargetHasEntityId(target, entityId) {
+      return target instanceof Element &&
+        root.contains(target) &&
+        Boolean(target.closest(`.${entityId}`));
+    }
+
+    root.addEventListener("pointerover", (event) => {
+      setGroupHover(entityIdForTarget(event.target));
+    });
+    root.addEventListener("pointerout", (event) => {
+      if (
+        activeEntityId &&
+        entityIdForTarget(event.target) === activeEntityId &&
+        !relatedTargetHasEntityId(event.relatedTarget, activeEntityId)
+      ) {
+        clearGroupHover();
+      }
+    });
+    root.addEventListener("focusin", (event) => {
+      setGroupHover(entityIdForTarget(event.target));
+    });
+    root.addEventListener("focusout", (event) => {
+      if (
+        activeEntityId &&
+        entityIdForTarget(event.target) === activeEntityId &&
+        !relatedTargetHasEntityId(event.relatedTarget, activeEntityId)
+      ) {
+        clearGroupHover();
+      }
+    });
+  }
+
   async function renderGist(gistId, revisionNumber) {
     const entry = await cachedGistEntry(gistId, revisionNumber);
     if (!entry) {
@@ -966,29 +1595,52 @@
       return;
     }
     await putEntry({ ...entry, lastViewedAt: new Date().toISOString() });
-    document.title = `${payload.display_title || payload.id} - Wavey Gist`;
-    app.className = "page-shell page-shell-gist";
-    app.replaceChildren();
-
-    const toolbar = await articleToolbar(payload);
-    app.append(gistHeading(payload, toolbar));
-
+    document.title = `gist: ${payload.display_title || "untitled"}`;
     const files = Object.values(payload.files);
-    if (files.length === 1) {
-      const content = element("div", { className: "gist-single-file" });
-      content.append(fileContent(files[0]));
-      app.append(content);
-      return;
-    }
-
-    const container = element("div", { className: "gist-files" });
     files.sort((left, right) => {
       if (left.filename === payload.primary_file) return -1;
       if (right.filename === payload.primary_file) return 1;
       return left.filename.localeCompare(right.filename);
     });
-    container.append(...files.map(filePanel));
-    app.append(container);
+    const singleFile = files.length === 1 ? files[0] : null;
+    app.className = files.length > 1 ? "page-shell page-shell-gist" : "page-shell";
+    app.replaceChildren();
+
+    let currentContent = null;
+    let rawVisible = false;
+
+    function paintContent() {
+      let nextContent;
+      if (singleFile && rawVisible) {
+        nextContent = singleRawViewer(singleFile);
+      } else if (singleFile) {
+        nextContent = element("div", { className: "gist-single-file" });
+        nextContent.append(fileContent(singleFile));
+      } else {
+        nextContent = element("div", { className: "gist-files" });
+        nextContent.append(...files.map(filePanel));
+      }
+      if (currentContent) {
+        currentContent.replaceWith(nextContent);
+      } else {
+        app.append(nextContent);
+      }
+      currentContent = nextContent;
+      if (!rawVisible) {
+        setupEntityGroupHover(nextContent);
+      }
+    }
+
+    const toolbar = await articleToolbar(payload, singleFile, (visible) => {
+      rawVisible = visible;
+      paintContent();
+    });
+    app.append(gistHeading(payload, toolbar));
+    paintContent();
+
+    if (new URL(location.href).searchParams.get("audio") === "ready") {
+      toolbar.querySelector(".article-audio-button-ready")?.click();
+    }
   }
 
   function renderUnavailable(message) {
@@ -1061,6 +1713,7 @@
 
   async function start() {
     applyTheme(readTheme());
+    setupOfflineHeader();
     showOffline();
     connectionStatus?.addEventListener("click", () => {
       if (reconnectVerified) {
