@@ -626,171 +626,175 @@ export function ArticleAudio({
           ) : null}
           {children}
         </div>
-      </div>
-      <span
-        ref={dockSentinelRef}
-        className="article-audio-dock-sentinel"
-        aria-hidden="true"
-      />
-      <span
-        ref={dockTopProbeRef}
-        className="article-audio-dock-top-probe"
-        aria-hidden="true"
-      />
-      {active && viewState === "preparing" && message ? (
-        <div
-          className={`article-audio-overlay article-audio-preparing-overlay${
-            docked ? " article-audio-overlay-docked" : ""
-          }`}
-          role="status"
-        >
-          {message}
-        </div>
-      ) : null}
-      {active && audioUrl ? (
-        <audio
-          ref={audioRef}
-          className="article-audio-engine"
-          preload="metadata"
-          src={audioUrl}
-          onLoadedMetadata={(event) => handleLoadedMetadata(event.currentTarget)}
-          onDurationChange={(event) =>
-            setDuration(
-              Number.isFinite(event.currentTarget.duration)
-                ? event.currentTarget.duration
-                : 0
-            )
-          }
-          onTimeUpdate={(event) => handleTimeUpdate(event.currentTarget)}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onEnded={() => {
-            setPlaying(false);
-            clearStoredPosition();
-          }}
+        <span
+          ref={dockSentinelRef}
+          className="article-audio-dock-sentinel"
           aria-hidden="true"
         />
-      ) : null}
-      {active && viewState === "ready" && audioUrl && playerOpen ? (
-        <div
-          id={playerId}
-          className={`article-audio-overlay${
-            docked ? " article-audio-overlay-docked" : ""
-          }`}
-          role="group"
-          aria-label="Article audio player"
-        >
-          <div className="article-audio-transport">
-            <button
-              type="button"
-              className="article-audio-skip-button"
-              aria-label="Skip back 10 seconds"
-              title="Back 10 seconds"
-              disabled={duration <= 0}
-              onClick={() => skip(-10)}
-            >
-              <RotateCcw aria-hidden="true" size={19} strokeWidth={1.8} />
-              <span className="article-audio-skip-label" aria-hidden="true">
-                10
-              </span>
-            </button>
-            <button
-              type="button"
-              className="article-audio-play-button"
-              aria-label={playing ? "Pause article audio" : "Play article audio"}
-              title={playing ? "Pause" : "Play"}
-              onClick={() => void togglePlayback()}
-            >
-              {playing ? (
-                <Pause aria-hidden="true" size={16} strokeWidth={2} />
-              ) : (
-                <Play aria-hidden="true" size={16} strokeWidth={2} />
-              )}
-            </button>
-            <button
-              type="button"
-              className="article-audio-skip-button"
-              aria-label="Skip forward 10 seconds"
-              title="Forward 10 seconds"
-              disabled={duration <= 0}
-              onClick={() => skip(10)}
-            >
-              <RotateCw aria-hidden="true" size={19} strokeWidth={1.8} />
-              <span className="article-audio-skip-label" aria-hidden="true">
-                10
-              </span>
-            </button>
+        <span
+          ref={dockTopProbeRef}
+          className="article-audio-dock-top-probe"
+          aria-hidden="true"
+        />
+        {active && viewState === "preparing" && message ? (
+          <div
+            className={`article-audio-overlay article-audio-preparing-overlay${
+              docked ? " article-audio-overlay-docked" : ""
+            }`}
+            role="status"
+          >
+            {message}
           </div>
-          <div className="article-audio-speed-control" ref={speedControlRef}>
-            <button
-              ref={speedButtonRef}
-              type="button"
-              className="article-audio-speed-button"
-              aria-label={`Playback speed ${formatPlaybackRate(playbackRate)}`}
-              aria-controls={speedMenuOpen ? speedOptionsId : undefined}
-              aria-expanded={speedMenuOpen}
-              title="Playback speed"
-              onClick={() => setSpeedMenuOpen((open) => !open)}
-            >
-              {formatPlaybackRate(playbackRate)}
-            </button>
-            {speedMenuOpen ? (
-              <div
-                id={speedOptionsId}
-                className="article-audio-speed-menu"
-                role="group"
-                aria-label="Playback speed"
+        ) : null}
+        {active && audioUrl ? (
+          <audio
+            ref={audioRef}
+            className="article-audio-engine"
+            preload="metadata"
+            src={audioUrl}
+            onLoadedMetadata={(event) =>
+              handleLoadedMetadata(event.currentTarget)
+            }
+            onDurationChange={(event) =>
+              setDuration(
+                Number.isFinite(event.currentTarget.duration)
+                  ? event.currentTarget.duration
+                  : 0
+              )
+            }
+            onTimeUpdate={(event) => handleTimeUpdate(event.currentTarget)}
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onEnded={() => {
+              setPlaying(false);
+              clearStoredPosition();
+            }}
+            aria-hidden="true"
+          />
+        ) : null}
+        {active && viewState === "ready" && audioUrl && playerOpen ? (
+          <div
+            id={playerId}
+            className={`article-audio-overlay${
+              docked ? " article-audio-overlay-docked" : ""
+            }`}
+            role="group"
+            aria-label="Article audio player"
+          >
+            <div className="article-audio-transport">
+              <button
+                type="button"
+                className="article-audio-skip-button"
+                aria-label="Skip back 10 seconds"
+                title="Back 10 seconds"
+                disabled={duration <= 0}
+                onClick={() => skip(-10)}
               >
-                {PLAYBACK_RATES.map((rate) => (
-                  <button
-                    type="button"
-                    className="article-audio-speed-option"
-                    aria-pressed={rate === playbackRate}
-                    key={rate}
-                    onClick={() => selectPlaybackRate(rate)}
-                  >
-                    <span>{formatPlaybackRate(rate)}</span>
-                    {rate === playbackRate ? (
-                      <Check aria-hidden="true" size={13} strokeWidth={2} />
-                    ) : null}
-                  </button>
-                ))}
-              </div>
+                <RotateCcw aria-hidden="true" size={19} strokeWidth={1.8} />
+                <span className="article-audio-skip-label" aria-hidden="true">
+                  10
+                </span>
+              </button>
+              <button
+                type="button"
+                className="article-audio-play-button"
+                aria-label={
+                  playing ? "Pause article audio" : "Play article audio"
+                }
+                title={playing ? "Pause" : "Play"}
+                onClick={() => void togglePlayback()}
+              >
+                {playing ? (
+                  <Pause aria-hidden="true" size={16} strokeWidth={2} />
+                ) : (
+                  <Play aria-hidden="true" size={16} strokeWidth={2} />
+                )}
+              </button>
+              <button
+                type="button"
+                className="article-audio-skip-button"
+                aria-label="Skip forward 10 seconds"
+                title="Forward 10 seconds"
+                disabled={duration <= 0}
+                onClick={() => skip(10)}
+              >
+                <RotateCw aria-hidden="true" size={19} strokeWidth={1.8} />
+                <span className="article-audio-skip-label" aria-hidden="true">
+                  10
+                </span>
+              </button>
+            </div>
+            <div className="article-audio-speed-control" ref={speedControlRef}>
+              <button
+                ref={speedButtonRef}
+                type="button"
+                className="article-audio-speed-button"
+                aria-label={`Playback speed ${formatPlaybackRate(playbackRate)}`}
+                aria-controls={speedMenuOpen ? speedOptionsId : undefined}
+                aria-expanded={speedMenuOpen}
+                title="Playback speed"
+                onClick={() => setSpeedMenuOpen((open) => !open)}
+              >
+                {formatPlaybackRate(playbackRate)}
+              </button>
+              {speedMenuOpen ? (
+                <div
+                  id={speedOptionsId}
+                  className="article-audio-speed-menu"
+                  role="group"
+                  aria-label="Playback speed"
+                >
+                  {PLAYBACK_RATES.map((rate) => (
+                    <button
+                      type="button"
+                      className="article-audio-speed-option"
+                      aria-pressed={rate === playbackRate}
+                      key={rate}
+                      onClick={() => selectPlaybackRate(rate)}
+                    >
+                      <span>{formatPlaybackRate(rate)}</span>
+                      {rate === playbackRate ? (
+                        <Check aria-hidden="true" size={13} strokeWidth={2} />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="article-audio-timeline">
+              <span className="article-audio-time" aria-hidden="true">
+                {formatPlaybackTime(currentTime)}
+              </span>
+              <input
+                className="article-audio-seek"
+                type="range"
+                min="0"
+                max={duration > 0 ? duration : 0}
+                step="0.1"
+                value={duration > 0 ? Math.min(currentTime, duration) : 0}
+                disabled={duration <= 0}
+                aria-label="Article audio position"
+                aria-valuetext={`${formatPlaybackTime(currentTime)} of ${formatPlaybackTime(duration)}`}
+                style={seekStyle}
+                onChange={(event) => seek(event.currentTarget.value)}
+                onBlur={() => persistPosition(true)}
+                onPointerUp={() => persistPosition(true)}
+              />
+              <span
+                className="article-audio-time article-audio-duration"
+                aria-hidden="true"
+              >
+                {formatPlaybackTime(duration)}
+              </span>
+            </div>
+            {message ? (
+              <span className="article-audio-playback-error" role="status">
+                {message}
+              </span>
             ) : null}
           </div>
-          <div className="article-audio-timeline">
-            <span className="article-audio-time" aria-hidden="true">
-              {formatPlaybackTime(currentTime)}
-            </span>
-            <input
-              className="article-audio-seek"
-              type="range"
-              min="0"
-              max={duration > 0 ? duration : 0}
-              step="0.1"
-              value={duration > 0 ? Math.min(currentTime, duration) : 0}
-              disabled={duration <= 0}
-              aria-label="Article audio position"
-              aria-valuetext={`${formatPlaybackTime(currentTime)} of ${formatPlaybackTime(duration)}`}
-              style={seekStyle}
-              onChange={(event) => seek(event.currentTarget.value)}
-              onBlur={() => persistPosition(true)}
-              onPointerUp={() => persistPosition(true)}
-            />
-            <span
-              className="article-audio-time article-audio-duration"
-              aria-hidden="true"
-            >
-              {formatPlaybackTime(duration)}
-            </span>
-          </div>
-          {message ? (
-            <span className="article-audio-playback-error" role="status">
-              {message}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       {active && viewState === "failed" && message ? (
         <div className="article-audio-row" aria-live="polite">
           <span className="article-audio-message">{message}</span>

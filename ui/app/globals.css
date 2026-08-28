@@ -1417,6 +1417,7 @@ button {
 }
 
 .article-audio-toolbar-group {
+  position: relative;
   grid-column: 3;
   justify-self: end;
   min-width: max-content;
@@ -1490,18 +1491,18 @@ button {
   z-index: 20;
   top: calc(100% + 6px);
   right: 0;
-  width: min(100%, 340px);
+  width: min(300px, calc(100vw - 32px));
   min-width: 0;
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) 38px;
   align-items: center;
-  gap: 2px 7px;
+  gap: 1px 6px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--page-bg);
   background: color-mix(in srgb, var(--page-bg) 94%, transparent);
   box-shadow: 0 5px 18px rgb(31 35 40 / 14%);
-  padding: 6px 7px 7px;
+  padding: 5px 6px 6px;
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   transition: box-shadow 140ms ease;
@@ -1513,7 +1514,7 @@ button {
 }
 
 .article-audio-preparing-overlay {
-  width: min(100%, 230px);
+  width: min(230px, calc(100vw - 32px));
   min-height: 42px;
   grid-template-columns: minmax(0, 1fr);
   color: var(--muted-fg);
@@ -1526,7 +1527,7 @@ button {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 10px);
   right: max(32px, calc((100vw - 1040px) / 2 + 32px));
-  width: min(340px, calc(100vw - 64px));
+  width: min(300px, calc(100vw - 64px));
   box-shadow: 0 7px 22px rgb(31 35 40 / 18%);
 }
 
@@ -1542,7 +1543,7 @@ button {
 .article-audio-skip-button,
 .article-audio-speed-button {
   display: inline-grid;
-  height: 28px;
+  height: 26px;
   place-items: center;
   border: 0;
   border-radius: 5px;
@@ -1553,7 +1554,7 @@ button {
 }
 
 .article-audio-play-button {
-  width: 30px;
+  width: 28px;
 }
 
 .article-audio-transport {
@@ -1567,7 +1568,7 @@ button {
 
 .article-audio-skip-button {
   position: relative;
-  width: 30px;
+  width: 28px;
 }
 
 .article-audio-skip-label {
@@ -1611,9 +1612,9 @@ button {
   grid-column: 1 / -1;
   min-width: 0;
   display: grid;
-  grid-template-columns: auto minmax(60px, 1fr) auto;
+  grid-template-columns: auto minmax(52px, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
 }
 
 .article-audio-time {
@@ -1632,7 +1633,7 @@ button {
 .article-audio-seek {
   width: 100%;
   min-width: 0;
-  height: 16px;
+  height: 14px;
   margin: 0;
   appearance: none;
   border-radius: 999px;
@@ -2865,7 +2866,7 @@ button.gist-file-action {
 
   .article-audio-overlay-docked {
     right: 16px;
-    width: min(340px, calc(100vw - 32px));
+    width: min(300px, calc(100vw - 32px));
   }
 
   .article-audio-preparing-overlay.article-audio-overlay-docked {
