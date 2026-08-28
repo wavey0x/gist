@@ -1325,6 +1325,10 @@ button {
   min-width: 0;
 }
 
+.gist-date-mobile {
+  display: none;
+}
+
 .gist-date-label {
   color: var(--subtle-fg);
 }
@@ -2856,12 +2860,31 @@ button.gist-file-action {
   }
 
   .page-header-no-brand .gist-heading {
+    display: contents;
+  }
+
+  .page-header-no-brand .gist-meta {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .page-header-no-brand .gist-title {
     grid-column: 1 / -1;
     grid-row: 2;
   }
 
   .page-header-no-brand .article-audio-toolbar-group {
     grid-row: 1;
+    align-self: center;
+  }
+
+  .gist-date-desktop {
+    display: none;
+  }
+
+  .gist-date-mobile {
+    display: inline;
   }
 
   .article-audio-overlay-docked {

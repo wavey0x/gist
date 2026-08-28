@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { getGistHeaderTitle } from "../lib/gist-title";
+import { getGistHeaderTitle, getTopLevelHeading } from "../lib/gist-title";
 import {
   orderedGistFiles,
   type PublicGistFile,
@@ -414,6 +414,8 @@ export function GistViewer({
   }
 
   const headerTitle = getGistHeaderTitle(gist);
+  const articleAudioTitle =
+    getTopLevelHeading(gist) ?? headerTitle ?? gist.display_title;
   const avatarUrl =
     gist.author_avatar_url ?? fallbackAuthorAvatarUrl(gist.author_name);
   const visibleAvatarUrl =
@@ -473,7 +475,15 @@ export function GistViewer({
                 <span className="gist-date-label">
                   {lastEditedAt ? "edited:" : "created:"}
                 </span>{" "}
-                <LocalTimestamp value={lastEditedAt ?? gist.created_at} />
+                <span className="gist-date-desktop">
+                  <LocalTimestamp value={lastEditedAt ?? gist.created_at} />
+                </span>
+                <span className="gist-date-mobile">
+                  <LocalTimestamp
+                    value={lastEditedAt ?? gist.created_at}
+                    variant="short"
+                  />
+                </span>
                 {dateTooltip}
               </span>
             </div>
@@ -506,6 +516,8 @@ export function GistViewer({
         </div>
         <ArticleAudio
           active={narrationIsActive}
+          articleTitle={articleAudioTitle}
+          authorName={gist.author_name}
           gistId={gist.id}
           revisionNumber={gist.revision_number}
         >

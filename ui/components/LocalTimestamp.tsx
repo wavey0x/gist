@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type LocalTimestampProps = {
   value: string;
-  variant?: "long" | "compact";
+  variant?: "long" | "compact" | "short";
 };
 
 const DATE_FORMATTERS = {
@@ -17,23 +17,41 @@ const DATE_FORMATTERS = {
     month: "short",
     day: "numeric",
     year: "numeric"
+  }),
+  short: new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric"
   })
 };
 
-const TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-  timeZoneName: "short"
-});
+const TIME_FORMATTERS = {
+  full: new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short"
+  }),
+  short: new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  })
+};
 
-function formatLocalTimestamp(value: string, variant: "long" | "compact") {
+function formatLocalTimestamp(
+  value: string,
+  variant: "long" | "compact" | "short"
+) {
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) {
     return value;
   }
 
-  return `${DATE_FORMATTERS[variant].format(date)} ${TIME_FORMATTER.format(date)}`;
+  const separator = variant === "short" ? " · " : " ";
+  const time = TIME_FORMATTERS[variant === "short" ? "short" : "full"].format(
+    date
+  );
+  return `${DATE_FORMATTERS[variant].format(date)}${separator}${time}`;
 }
 
 export function LocalTimestamp({

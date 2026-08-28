@@ -21,12 +21,20 @@ type NarrationPayload = {
 
 type ArticleAudioProps = {
   active: boolean;
+  articleTitle: string | null;
+  authorName: string;
   children: ReactNode;
   gistId: string;
   revisionNumber: number;
 };
 
 type ViewState = "idle" | "preparing" | "ready" | "failed";
+
+type NavigatorWithAudioSession = Navigator & {
+  audioSession?: {
+    type: string;
+  };
+};
 
 const POLL_DELAYS_MS = [1500, 2500, 4000, 6000, 8000];
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2] as const;
@@ -37,6 +45,18 @@ const PLAYER_DOCK_TOP_PX = 10;
 
 function positionStorageKey(gistId: string, revisionNumber: number) {
   return `waveygist:audio-position:v1:${gistId}:${revisionNumber}`;
+}
+
+function requestPlaybackAudioSession() {
+  const audioSession = (navigator as NavigatorWithAudioSession).audioSession;
+  if (!audioSession) {
+    return;
+  }
+  try {
+    audioSession.type = "playback";
+  } catch {
+    // The Audio Session API is still experimental outside WebKit.
+  }
 }
 
 function isPlaybackRate(value: number): value is (typeof PLAYBACK_RATES)[number] {
@@ -104,6 +124,8 @@ function wait(milliseconds: number, signal: AbortSignal) {
 
 export function ArticleAudio({
   active,
+  articleTitle,
+  authorName,
   children,
   gistId,
   revisionNumber
@@ -246,6 +268,116 @@ export function ArticleAudio({
   useEffect(() => {
     setPlaybackRate(readStoredPlaybackRate());
   }, []);
+
+  useEffect(() => {
+    if (!active || !audioUrl || !("mediaSession" in navigator)) {
+      return;
+    }
+
+    const session = navigator.mediaSession;
+    if ("MediaMetadata" in window) {
+      session.metadata = new MediaMetadata({
+        title: articleTitle?.trim() || "Article audio",
+        artist: authorName,
+        album: "waveygist",
+        artwork: [
+          {
+            src: new URL("/icons/icon-192.png", window.location.origin).href,
+            sizes: "192x192",
+            type: "image/png"
+          },
+          {
+            src: new URL("/icons/icon-512.png", window.location.origin).href,
+            sizes: "512x512",
+            type: "image/png"
+          }
+        ]
+      });
+    }
+
+    const actionHandlers: Array<[
+      MediaSessionAction,
+      MediaSessionActionHandler
+    ]> = [
+      [
+        "play",
+        () => {
+          const audio = audioRef.current;
+          if (audio) {
+            requestPlaybackAudioSession();
+            void audio.play().catch(() => {
+              setMessage("Audio playback was blocked. Tap play to continue.");
+            });
+          }
+        }
+      ],
+      [
+        "pause",
+        () => {
+          audioRef.current?.pause();
+          persistPosition(true);
+        }
+      ],
+      [
+        "seekbackward",
+        (details) => skip(-(details.seekOffset ?? 10))
+      ],
+      ["seekforward", (details) => skip(details.seekOffset ?? 10)],
+      [
+        "seekto",
+        (details) => {
+          if (typeof details.seekTime === "number") {
+            seek(String(details.seekTime));
+            persistPosition(true);
+          }
+        }
+      ]
+    ];
+
+    const installedActions: MediaSessionAction[] = [];
+    for (const [action, handler] of actionHandlers) {
+      try {
+        session.setActionHandler(action, handler);
+        installedActions.push(action);
+      } catch {
+        // Media Session actions vary by Safari release.
+      }
+    }
+
+    return () => {
+      for (const action of installedActions) {
+        try {
+          session.setActionHandler(action, null);
+        } catch {
+          // The action may no longer be supported.
+        }
+      }
+      session.metadata = null;
+      session.playbackState = "none";
+    };
+    // Handlers resolve the current audio element through refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, articleTitle, audioUrl, authorName, positionKey]);
+
+  useEffect(() => {
+    if (!active || !audioUrl || !("mediaSession" in navigator)) {
+      return;
+    }
+    const session = navigator.mediaSession;
+    session.playbackState = playing ? "playing" : "paused";
+    if (duration <= 0) {
+      return;
+    }
+    try {
+      session.setPositionState({
+        duration,
+        playbackRate,
+        position: Math.min(duration, Math.max(0, currentTime))
+      });
+    } catch {
+      // Position state is optional on older Safari releases.
+    }
+  }, [active, audioUrl, currentTime, duration, playbackRate, playing]);
 
   useEffect(() => {
     const savePosition = () => persistPosition(true);
@@ -501,6 +633,7 @@ export function ArticleAudio({
     if (!audio) {
       return;
     }
+    requestPlaybackAudioSession();
     audio.playbackRate = playbackRate;
     try {
       await audio.play();
@@ -686,7 +819,6 @@ export function ArticleAudio({
                 type="button"
                 className="article-audio-skip-button"
                 aria-label="Skip back 10 seconds"
-                title="Back 10 seconds"
                 disabled={duration <= 0}
                 onClick={() => skip(-10)}
               >
@@ -701,7 +833,6 @@ export function ArticleAudio({
                 aria-label={
                   playing ? "Pause article audio" : "Play article audio"
                 }
-                title={playing ? "Pause" : "Play"}
                 onClick={() => void togglePlayback()}
               >
                 {playing ? (
@@ -714,7 +845,6 @@ export function ArticleAudio({
                 type="button"
                 className="article-audio-skip-button"
                 aria-label="Skip forward 10 seconds"
-                title="Forward 10 seconds"
                 disabled={duration <= 0}
                 onClick={() => skip(10)}
               >
@@ -732,7 +862,6 @@ export function ArticleAudio({
                 aria-label={`Playback speed ${formatPlaybackRate(playbackRate)}`}
                 aria-controls={speedMenuOpen ? speedOptionsId : undefined}
                 aria-expanded={speedMenuOpen}
-                title="Playback speed"
                 onClick={() => setSpeedMenuOpen((open) => !open)}
               >
                 {formatPlaybackRate(playbackRate)}
