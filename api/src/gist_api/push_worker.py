@@ -127,7 +127,7 @@ def build_payload(row):
     if row["event_type"] == EVENT_NARRATION_READY:
         return {
             "type": EVENT_NARRATION_READY,
-            "title": "Audio ready",
+            "title": "🔊 Audio ready",
             "body": body,
             "path": (
                 f"/{external_id}/revisions/{revision_number}?audio=ready"

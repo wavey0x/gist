@@ -217,7 +217,7 @@ def test_successful_worker_publication_is_atomic_with_ready_push(client, app):
     ) == "accepted"
     assert json.loads(sent["data"]) == {
         "type": "narration.ready",
-        "title": "Audio ready",
+        "title": "🔊 Audio ready",
         "body": "Article",
         "path": f"/{gist_id}/revisions/1?audio=ready",
         "tag": f"narration:{gist_id}:1",

@@ -1420,7 +1420,7 @@ button {
   justify-self: end;
   display: grid;
   justify-items: start;
-  gap: 6px;
+  gap: 4px;
   min-width: max-content;
 }
 
@@ -1445,13 +1445,13 @@ button {
 }
 
 .article-audio-button-ready {
-  border-color: rgb(9 105 218 / 55%);
-  box-shadow: 0 0 0 2px rgb(9 105 218 / 10%), 0 0 12px rgb(9 105 218 / 22%);
+  border-color: rgb(9 105 218 / 45%);
+  box-shadow: 0 0 0 1px rgb(9 105 218 / 8%), 0 0 8px rgb(9 105 218 / 16%);
 }
 
 :root[data-theme="dark"] .article-audio-button-ready {
-  border-color: rgb(88 166 255 / 65%);
-  box-shadow: 0 0 0 2px rgb(88 166 255 / 12%), 0 0 12px rgb(88 166 255 / 26%);
+  border-color: rgb(88 166 255 / 55%);
+  box-shadow: 0 0 0 1px rgb(88 166 255 / 10%), 0 0 8px rgb(88 166 255 / 20%);
 }
 
 @keyframes article-audio-spin {
