@@ -4,8 +4,6 @@ import "katex/dist/katex.min.css";
 import { AppHeader } from "../components/AppHeader";
 import { PwaRuntime } from "../components/PwaRuntime";
 
-const STYLE_VERSION = "v4";
-
 function resolveMetadataBase() {
   return new URL(
     process.env.GIST_SITE_BASE_URL ??
@@ -90,13 +88,10 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {nonce ? <meta name="csp-nonce" content={nonce} /> : null}
-        <link
-          rel="stylesheet"
-          href={`/github-markdown.css?${STYLE_VERSION}`}
-        />
-        <link rel="stylesheet" href={`/markdown-theme.css?${STYLE_VERSION}`} />
-        <link rel="stylesheet" href={`/app.css?${STYLE_VERSION}`} />
-        <link rel="stylesheet" href={`/syntax.css?${STYLE_VERSION}`} />
+        <link rel="stylesheet" href="/github-markdown.css" />
+        <link rel="stylesheet" href="/markdown-theme.css" />
+        <link rel="stylesheet" href="/app.css" />
+        <link rel="stylesheet" href="/syntax.css" />
         <script
           nonce={nonce}
           suppressHydrationWarning

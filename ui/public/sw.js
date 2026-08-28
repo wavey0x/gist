@@ -1,17 +1,15 @@
-const SHELL_VERSION = "v4";
-const SHELL_QUERY = "v=4";
-const SHELL_CACHE = `waveygist-shell-${SHELL_VERSION}`;
+const SHELL_CACHE = "waveygist-shell";
 const CONTENT_CACHE = "waveygist-content-v1";
 const AUDIO_CACHE = "waveygist-audio-v1";
-const SHELL_URL = `/offline-shell.html?${SHELL_QUERY}`;
+const SHELL_URL = "/offline-shell.html";
 const SHELL_ASSETS = [
   SHELL_URL,
-  `/github-markdown.css?${SHELL_QUERY}`,
-  `/markdown-theme.css?${SHELL_QUERY}`,
-  `/app.css?${SHELL_QUERY}`,
-  `/syntax.css?${SHELL_QUERY}`,
-  `/offline-shell.css?${SHELL_QUERY}`,
-  `/offline-shell.js?${SHELL_QUERY}`,
+  "/github-markdown.css",
+  "/markdown-theme.css",
+  "/app.css",
+  "/syntax.css",
+  "/offline-shell.css",
+  "/offline-shell.js",
   "/icons/icon-192.png",
   "/icons/icon-512.png"
 ];
@@ -196,7 +194,15 @@ async function networkWithCachedFallback(request, cacheName) {
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS))
+    (async () => {
+      const cache = await caches.open(SHELL_CACHE);
+      const requests = SHELL_ASSETS.map(
+        (asset) =>
+          new Request(new URL(asset, self.location.origin), { cache: "reload" })
+      );
+      await cache.addAll(requests);
+      await self.skipWaiting();
+    })()
   );
 });
 
@@ -204,7 +210,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       for (const name of await caches.keys()) {
-        if (name.startsWith("waveygist-shell-") && name !== SHELL_CACHE) {
+        if (name.startsWith("waveygist-shell") && name !== SHELL_CACHE) {
           await caches.delete(name);
         }
       }
