@@ -118,9 +118,11 @@ export function ArticleAudio({
   const lastSavedTimeRef = useRef(0);
   const restoredPositionKeyRef = useRef<string | null>(null);
   const speedControlRef = useRef<HTMLDivElement | null>(null);
+  const speedButtonRef = useRef<HTMLButtonElement | null>(null);
   const dockSentinelRef = useRef<HTMLSpanElement | null>(null);
   const dockTopProbeRef = useRef<HTMLSpanElement | null>(null);
   const playerId = useId();
+  const speedOptionsId = useId();
   const endpoint = `/api/gists/${encodeURIComponent(gistId)}/revisions/${revisionNumber}/narration`;
   const positionKey = positionStorageKey(gistId, revisionNumber);
 
@@ -139,7 +141,12 @@ export function ArticleAudio({
 
   function persistPosition(force = false) {
     const audio = audioRef.current;
-    if (!audio || !Number.isFinite(audio.currentTime) || audio.currentTime <= 0) {
+    if (!audio || !Number.isFinite(audio.currentTime)) {
+      return;
+    }
+    if (audio.currentTime <= 0.5) {
+      clearStoredPosition();
+      lastSavedTimeRef.current = 0;
       return;
     }
     if (
@@ -160,8 +167,7 @@ export function ArticleAudio({
       window.localStorage.setItem(
         positionKey,
         JSON.stringify({
-          position: Math.round(audio.currentTime * 10) / 10,
-          updatedAt: Date.now()
+          position: Math.round(audio.currentTime * 10) / 10
         })
       );
       lastSavedTimeRef.current = audio.currentTime;
@@ -260,6 +266,7 @@ export function ArticleAudio({
     const closeFromKeyboard = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setSpeedMenuOpen(false);
+        speedButtonRef.current?.focus();
       }
     };
     window.addEventListener("pointerdown", closeFromPointer);
@@ -533,6 +540,7 @@ export function ArticleAudio({
       // Playback preferences are best effort.
     }
     setSpeedMenuOpen(false);
+    window.requestAnimationFrame(() => speedButtonRef.current?.focus());
   }
 
   const seekProgress =
@@ -644,19 +652,6 @@ export function ArticleAudio({
           role="group"
           aria-label="Article audio player"
         >
-          <button
-            type="button"
-            className="article-audio-play-button"
-            aria-label={playing ? "Pause article audio" : "Play article audio"}
-            title={playing ? "Pause" : "Play"}
-            onClick={() => void togglePlayback()}
-          >
-            {playing ? (
-              <Pause aria-hidden="true" size={15} strokeWidth={2} />
-            ) : (
-              <Play aria-hidden="true" size={15} strokeWidth={2} />
-            )}
-          </button>
           <span className="article-audio-time" aria-hidden="true">
             {formatPlaybackTime(currentTime)}
           </span>
@@ -678,12 +673,26 @@ export function ArticleAudio({
           <span className="article-audio-time article-audio-duration" aria-hidden="true">
             {formatPlaybackTime(duration)}
           </span>
+          <button
+            type="button"
+            className="article-audio-play-button"
+            aria-label={playing ? "Pause article audio" : "Play article audio"}
+            title={playing ? "Pause" : "Play"}
+            onClick={() => void togglePlayback()}
+          >
+            {playing ? (
+              <Pause aria-hidden="true" size={15} strokeWidth={2} />
+            ) : (
+              <Play aria-hidden="true" size={15} strokeWidth={2} />
+            )}
+          </button>
           <div className="article-audio-speed-control" ref={speedControlRef}>
             <button
+              ref={speedButtonRef}
               type="button"
               className="article-audio-speed-button"
               aria-label={`Playback speed ${formatPlaybackRate(playbackRate)}`}
-              aria-haspopup="menu"
+              aria-controls={speedMenuOpen ? speedOptionsId : undefined}
               aria-expanded={speedMenuOpen}
               title="Playback speed"
               onClick={() => setSpeedMenuOpen((open) => !open)}
@@ -692,16 +701,16 @@ export function ArticleAudio({
             </button>
             {speedMenuOpen ? (
               <div
+                id={speedOptionsId}
                 className="article-audio-speed-menu"
-                role="menu"
+                role="group"
                 aria-label="Playback speed"
               >
                 {PLAYBACK_RATES.map((rate) => (
                   <button
                     type="button"
                     className="article-audio-speed-option"
-                    role="menuitemradio"
-                    aria-checked={rate === playbackRate}
+                    aria-pressed={rate === playbackRate}
                     key={rate}
                     onClick={() => selectPlaybackRate(rate)}
                   >
