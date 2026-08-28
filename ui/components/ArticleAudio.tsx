@@ -26,6 +26,7 @@ const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 const PLAYBACK_RATE_STORAGE_KEY = "waveygist:audio-rate:v1";
 const POSITION_SAVE_INTERVAL_SECONDS = 5;
 const POSITION_END_THRESHOLD_SECONDS = 10;
+const PLAYER_DOCK_TOP_PX = 10;
 
 function positionStorageKey(gistId: string, revisionNumber: number) {
   return `waveygist:audio-position:v1:${gistId}:${revisionNumber}`;
@@ -111,11 +112,14 @@ export function ArticleAudio({
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
+  const [docked, setDocked] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSavedTimeRef = useRef(0);
   const restoredPositionKeyRef = useRef<string | null>(null);
   const speedControlRef = useRef<HTMLDivElement | null>(null);
+  const dockSentinelRef = useRef<HTMLSpanElement | null>(null);
+  const dockTopProbeRef = useRef<HTMLSpanElement | null>(null);
   const playerId = useId();
   const endpoint = `/api/gists/${encodeURIComponent(gistId)}/revisions/${revisionNumber}/narration`;
   const positionKey = positionStorageKey(gistId, revisionNumber);
@@ -207,6 +211,7 @@ export function ArticleAudio({
     setCurrentTime(0);
     setDuration(0);
     setSpeedMenuOpen(false);
+    setDocked(false);
     lastSavedTimeRef.current = 0;
     restoredPositionKeyRef.current = null;
   }
@@ -264,6 +269,51 @@ export function ArticleAudio({
       window.removeEventListener("keydown", closeFromKeyboard);
     };
   }, [speedMenuOpen]);
+
+  useEffect(() => {
+    const surfaceVisible =
+      active &&
+      (viewState === "preparing" ||
+        (viewState === "ready" && playerOpen && Boolean(audioUrl)));
+    if (!surfaceVisible) {
+      setDocked(false);
+      return;
+    }
+    let frame: number | null = null;
+    const updateDocked = () => {
+      if (frame !== null) {
+        return;
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        const sentinel = dockSentinelRef.current;
+        if (sentinel) {
+          const dockTop =
+            dockTopProbeRef.current?.getBoundingClientRect().top ??
+            PLAYER_DOCK_TOP_PX;
+          setDocked(
+            sentinel.getBoundingClientRect().top <= dockTop
+          );
+        }
+      });
+    };
+    updateDocked();
+    window.addEventListener("scroll", updateDocked, { passive: true });
+    window.addEventListener("resize", updateDocked);
+    window.visualViewport?.addEventListener("scroll", updateDocked, {
+      passive: true
+    });
+    window.visualViewport?.addEventListener("resize", updateDocked);
+    return () => {
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+      window.removeEventListener("scroll", updateDocked);
+      window.removeEventListener("resize", updateDocked);
+      window.visualViewport?.removeEventListener("scroll", updateDocked);
+      window.visualViewport?.removeEventListener("resize", updateDocked);
+    };
+  }, [active, audioUrl, playerOpen, viewState]);
 
   async function readPayload(response: Response) {
     const payload: unknown = await response.json().catch(() => null);
@@ -541,9 +591,21 @@ export function ArticleAudio({
           {children}
         </div>
       </div>
+      <span
+        ref={dockSentinelRef}
+        className="article-audio-dock-sentinel"
+        aria-hidden="true"
+      />
+      <span
+        ref={dockTopProbeRef}
+        className="article-audio-dock-top-probe"
+        aria-hidden="true"
+      />
       {active && viewState === "preparing" && message ? (
         <div
-          className="article-audio-overlay article-audio-preparing-overlay"
+          className={`article-audio-overlay article-audio-preparing-overlay${
+            docked ? " article-audio-overlay-docked" : ""
+          }`}
           role="status"
         >
           {message}
@@ -576,7 +638,9 @@ export function ArticleAudio({
       {active && viewState === "ready" && audioUrl && playerOpen ? (
         <div
           id={playerId}
-          className="article-audio-overlay"
+          className={`article-audio-overlay${
+            docked ? " article-audio-overlay-docked" : ""
+          }`}
           role="group"
           aria-label="Article audio player"
         >
