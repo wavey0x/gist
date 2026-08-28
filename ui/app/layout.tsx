@@ -1,12 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import "github-markdown-css/github-markdown.css";
 import "katex/dist/katex.min.css";
 import { AppHeader } from "../components/AppHeader";
 import { PwaRuntime } from "../components/PwaRuntime";
-import "./markdown-theme.css";
-import "./globals.css";
-import "./syntax.css";
+
+const STYLE_VERSION = "v3";
 
 function resolveMetadataBase() {
   return new URL(
@@ -92,6 +90,13 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {nonce ? <meta name="csp-nonce" content={nonce} /> : null}
+        <link
+          rel="stylesheet"
+          href={`/github-markdown.css?${STYLE_VERSION}`}
+        />
+        <link rel="stylesheet" href={`/markdown-theme.css?${STYLE_VERSION}`} />
+        <link rel="stylesheet" href={`/app.css?${STYLE_VERSION}`} />
+        <link rel="stylesheet" href={`/syntax.css?${STYLE_VERSION}`} />
         <script
           nonce={nonce}
           suppressHydrationWarning

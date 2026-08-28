@@ -15,6 +15,10 @@ const shellScript = await readFile(
   new URL("../public/offline-shell.js", import.meta.url),
   "utf8"
 );
+const shellStyles = await readFile(
+  new URL("../public/offline-shell.css", import.meta.url),
+  "utf8"
+);
 
 function workerHarness() {
   const listeners = new Map();
@@ -111,9 +115,30 @@ test("the static offline shell has syntax-valid external assets", () => {
   assert.doesNotThrow(
     () => new vm.Script(shellScript, { filename: "offline-shell.js" })
   );
-  assert.match(shellHtml, /href="\/offline-shell\.css\?v=2"/);
-  assert.match(shellHtml, /src="\/offline-shell\.js\?v=2"/);
+  assert.match(shellHtml, /href="\/github-markdown\.css\?v=3"/);
+  assert.match(shellHtml, /href="\/markdown-theme\.css\?v=3"/);
+  assert.match(shellHtml, /href="\/app\.css\?v=3"/);
+  assert.match(shellHtml, /href="\/syntax\.css\?v=3"/);
+  assert.match(shellHtml, /href="\/offline-shell\.css\?v=3"/);
+  assert.match(shellHtml, /src="\/offline-shell\.js\?v=3"/);
   assert.doesNotMatch(shellHtml, /<script(?![^>]*\bsrc=)/);
+});
+
+test("online and offline readers share product styles and player markup", () => {
+  assert.doesNotMatch(shellStyles, /\.article-audio-overlay\s*\{/);
+  assert.doesNotMatch(shellStyles, /\.app-header\s*\{/);
+  assert.doesNotMatch(shellStyles, /:root(?:\[[^\]]+\])?\s*\{/);
+  assert.doesNotMatch(shellScript, /\.controls\s*=\s*true/);
+  assert.match(shellScript, /className: "article-audio-overlay"/);
+  assert.match(shellScript, /className\s*=\s*"article-audio-engine"/);
+  assert.match(shellScript, /className: "page-header page-header-no-brand"/);
+});
+
+test("reconnection is verified and never interrupts active audio", () => {
+  assert.match(shellScript, /method: "HEAD"/);
+  assert.match(shellScript, /cache: "no-store"/);
+  assert.match(shellScript, /if \(!audioIsPlaying\(\)\) \{\s*location\.reload\(\)/);
+  assert.match(shellHtml, /class="app-offline-status offline-status"[^>]*disabled/);
 });
 
 test("install precaches the complete, version-matched shell", async () => {
@@ -127,9 +152,13 @@ test("install precaches the complete, version-matched shell", async () => {
   await completion;
 
   assert.deepEqual(harness.addedAssets, [
-    "/offline-shell.html?v=2",
-    "/offline-shell.css?v=2",
-    "/offline-shell.js?v=2",
+    "/offline-shell.html?v=3",
+    "/github-markdown.css?v=3",
+    "/markdown-theme.css?v=3",
+    "/app.css?v=3",
+    "/syntax.css?v=3",
+    "/offline-shell.css?v=3",
+    "/offline-shell.js?v=3",
     "/icons/icon-192.png",
     "/icons/icon-512.png"
   ]);
@@ -140,6 +169,7 @@ test("activation replaces only old shell caches", async () => {
   const harness = workerHarness();
   await harness.caches.open("waveygist-shell-v1");
   await harness.caches.open("waveygist-shell-v2");
+  await harness.caches.open("waveygist-shell-v3");
   await harness.caches.open("waveygist-content-v1");
   await harness.caches.open("waveygist-audio-v1");
 
@@ -154,7 +184,7 @@ test("activation replaces only old shell caches", async () => {
   assert.deepEqual((await harness.caches.keys()).sort(), [
     "waveygist-audio-v1",
     "waveygist-content-v1",
-    "waveygist-shell-v2"
+    "waveygist-shell-v3"
   ]);
 });
 
@@ -182,7 +212,7 @@ test("offline gist navigation falls back to the cached shell", async () => {
 
   const response = await responsePromise;
   assert.equal(response.status, 200);
-  assert.equal(await response.text(), "cached:/offline-shell.html?v=2");
+  assert.equal(await response.text(), "cached:/offline-shell.html?v=3");
 });
 
 test("cached audio supports normal, open, suffix, and invalid ranges", async () => {

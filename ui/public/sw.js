@@ -1,11 +1,15 @@
-const SHELL_VERSION = "v2";
-const SHELL_QUERY = "v=2";
+const SHELL_VERSION = "v3";
+const SHELL_QUERY = "v=3";
 const SHELL_CACHE = `waveygist-shell-${SHELL_VERSION}`;
 const CONTENT_CACHE = "waveygist-content-v1";
 const AUDIO_CACHE = "waveygist-audio-v1";
 const SHELL_URL = `/offline-shell.html?${SHELL_QUERY}`;
 const SHELL_ASSETS = [
   SHELL_URL,
+  `/github-markdown.css?${SHELL_QUERY}`,
+  `/markdown-theme.css?${SHELL_QUERY}`,
+  `/app.css?${SHELL_QUERY}`,
+  `/syntax.css?${SHELL_QUERY}`,
   `/offline-shell.css?${SHELL_QUERY}`,
   `/offline-shell.js?${SHELL_QUERY}`,
   "/icons/icon-192.png",

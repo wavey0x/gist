@@ -792,7 +792,7 @@ def test_ethereum_entity_sanitizer_allows_only_expected_classes():
 
 def test_markdown_theme_uses_strict_grayscale_for_transaction_hashes():
     theme_css = (
-        Path(__file__).resolve().parents[2] / "ui/app/markdown-theme.css"
+        Path(__file__).resolve().parents[2] / "ui/public/markdown-theme.css"
     ).read_text(encoding="utf-8")
 
     assert "eth-tx-color-" not in theme_css
@@ -819,7 +819,7 @@ def test_markdown_theme_uses_strict_grayscale_for_transaction_hashes():
 
 def test_markdown_theme_uses_generated_party_color_palette():
     theme_css = (
-        Path(__file__).resolve().parents[2] / "ui/app/markdown-theme.css"
+        Path(__file__).resolve().parents[2] / "ui/public/markdown-theme.css"
     ).read_text(encoding="utf-8")
 
     assert "--eth-party-color-" not in theme_css

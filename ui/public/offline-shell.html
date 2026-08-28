@@ -7,16 +7,20 @@
     <meta name="theme-color" content="#0d1117" />
     <title>Wavey Gist</title>
     <link rel="icon" href="/icons/icon-192.png" />
-    <link rel="stylesheet" href="/offline-shell.css?v=2" />
-    <script defer src="/offline-shell.js?v=2"></script>
+    <link rel="stylesheet" href="/github-markdown.css?v=3" />
+    <link rel="stylesheet" href="/markdown-theme.css?v=3" />
+    <link rel="stylesheet" href="/app.css?v=3" />
+    <link rel="stylesheet" href="/syntax.css?v=3" />
+    <link rel="stylesheet" href="/offline-shell.css?v=3" />
+    <script defer src="/offline-shell.js?v=3"></script>
   </head>
-  <body>
+  <body class="offline-shell">
     <header class="app-header">
       <div class="app-header-inner">
         <a class="app-brand" href="/" aria-label="waveygist home">
-          <span class="brand-strong">wavey</span><span>gist</span>
+          <span class="brand-mark-strong">wavey</span><span class="brand-mark-light">gist</span>
         </a>
-        <span class="offline-status" role="status">Offline</span>
+        <button class="app-offline-status offline-status" type="button" disabled>Offline</button>
       </div>
     </header>
     <main id="offline-app" class="page-shell" aria-live="polite">
