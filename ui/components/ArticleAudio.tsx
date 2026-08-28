@@ -61,6 +61,7 @@ export function ArticleAudio({
 }: ArticleAudioProps) {
   const [viewState, setViewState] = useState<ViewState>("idle");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [cachedAvailable, setCachedAvailable] = useState(false);
   const [message, setMessage] = useState("");
   const [retryable, setRetryable] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
@@ -80,6 +81,7 @@ export function ArticleAudio({
     audioRef.current?.load();
     setViewState("idle");
     setAudioUrl(null);
+    setCachedAvailable(false);
     setMessage("");
     setRetryable(false);
     playWhenReadyRef.current = false;
@@ -114,6 +116,7 @@ export function ArticleAudio({
 
   function showReady(payload: NarrationPayload, playNow: boolean) {
     playWhenReadyRef.current = playNow;
+    setCachedAvailable(true);
     setAudioUrl(payload.audio_url ?? null);
     setViewState("ready");
     setMessage(playNow ? "" : "Ready — tap to play");
@@ -215,15 +218,12 @@ export function ArticleAudio({
   }
 
   useEffect(() => {
-    if (
-      !active ||
-      typeof window === "undefined" ||
-      new URL(window.location.href).searchParams.get("audio") !== "ready"
-    ) {
+    if (!active || typeof window === "undefined") {
       return;
     }
+    const revealPlayer =
+      new URL(window.location.href).searchParams.get("audio") === "ready";
     const controller = new AbortController();
-    controllerRef.current = controller;
     void (async () => {
       try {
         const response = await fetch(endpoint, {
@@ -233,15 +233,17 @@ export function ArticleAudio({
         });
         const payload = await readPayload(response);
         if (response.ok && payload?.status === "ready") {
-          showReady(payload, false);
+          setCachedAvailable(true);
+          if (revealPlayer) {
+            showReady(payload, false);
+          }
         }
       } catch (error) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
+        if (
+          revealPlayer &&
+          !(error instanceof DOMException && error.name === "AbortError")
+        ) {
           setMessage("");
-        }
-      } finally {
-        if (controllerRef.current === controller) {
-          controllerRef.current = null;
         }
       }
     })();
@@ -253,26 +255,56 @@ export function ArticleAudio({
   const showButton =
     active &&
     (viewState === "idle" || viewState === "preparing" || retryable);
-  const buttonLabel = retryable ? "Retry article audio" : "Listen to article";
+  let buttonLabel = "Listen to article";
+  let buttonTitle = "Listen";
+  if (viewState === "preparing") {
+    buttonLabel = "Preparing article audio";
+    buttonTitle = "Preparing audio";
+  } else if (retryable) {
+    buttonLabel = "Retry article audio";
+    buttonTitle = "Retry audio";
+  } else if (cachedAvailable) {
+    buttonLabel = "Listen to available article audio";
+    buttonTitle = "Audio ready — listen";
+  }
 
   return (
     <>
-      <div className="toolbar" aria-label="Display controls">
-        {showButton ? (
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={buttonLabel}
-            title={retryable ? "Retry audio" : "Listen"}
-            disabled={viewState === "preparing"}
-            onClick={() => void start()}
+      <div className="article-audio-toolbar-group">
+        <div className="toolbar" aria-label="Display controls">
+          {showButton ? (
+            <button
+              type="button"
+              className={
+                cachedAvailable && viewState === "idle"
+                  ? "icon-button article-audio-button-ready"
+                  : "icon-button"
+              }
+              aria-busy={viewState === "preparing"}
+              aria-label={buttonLabel}
+              title={buttonTitle}
+              disabled={viewState === "preparing"}
+              onClick={() => void start()}
+            >
+              {viewState === "preparing" ? (
+                <span className="article-audio-spinner" aria-hidden="true" />
+              ) : (
+                <Volume2 aria-hidden="true" size={18} strokeWidth={1.8} />
+              )}
+            </button>
+          ) : null}
+          {children}
+        </div>
+        {viewState === "preparing" && message ? (
+          <span
+            className="article-audio-preparing-message"
+            role="status"
           >
-            <Volume2 aria-hidden="true" size={18} strokeWidth={1.8} />
-          </button>
+            {message}
+          </span>
         ) : null}
-        {children}
       </div>
-      {active && viewState !== "idle" ? (
+      {active && viewState !== "idle" && viewState !== "preparing" ? (
         <div className="article-audio-row" aria-live="polite">
           {viewState === "ready" && audioUrl ? (
             <audio

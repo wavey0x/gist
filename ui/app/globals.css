@@ -1415,6 +1415,57 @@ button {
   min-width: max-content;
 }
 
+.article-audio-toolbar-group {
+  grid-column: 3;
+  justify-self: end;
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  min-width: max-content;
+}
+
+.article-audio-toolbar-group .toolbar {
+  grid-column: auto;
+}
+
+.article-audio-preparing-message {
+  max-width: 160px;
+  color: var(--muted-fg);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.article-audio-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentcolor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: article-audio-spin 700ms linear infinite;
+}
+
+.article-audio-button-ready {
+  border-color: rgb(9 105 218 / 55%);
+  box-shadow: 0 0 0 2px rgb(9 105 218 / 10%), 0 0 12px rgb(9 105 218 / 22%);
+}
+
+:root[data-theme="dark"] .article-audio-button-ready {
+  border-color: rgb(88 166 255 / 65%);
+  box-shadow: 0 0 0 2px rgb(88 166 255 / 12%), 0 0 12px rgb(88 166 255 / 26%);
+}
+
+@keyframes article-audio-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .article-audio-spinner {
+    animation: none;
+  }
+}
+
 .article-audio-row {
   grid-column: 1 / -1;
   display: flex;
@@ -1445,6 +1496,10 @@ button {
 }
 
 .page-header-no-brand .toolbar {
+  grid-column: 2;
+}
+
+.page-header-no-brand .article-audio-toolbar-group {
   grid-column: 2;
 }
 
@@ -2500,6 +2555,10 @@ button.gist-file-action {
   .toolbar {
     grid-column: 2;
     justify-content: flex-end;
+  }
+
+  .article-audio-toolbar-group {
+    grid-column: 2;
   }
 
   .page-header-no-brand .gist-heading {
