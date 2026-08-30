@@ -2,7 +2,6 @@ import os
 
 from .external_ids import DEFAULT_EXTERNAL_ID_LENGTH
 
-
 DEFAULT_WEB_PUSH_ALLOWED_ENDPOINT_HOSTS = (
     "fcm.googleapis.com",
     "updates.push.services.mozilla.com",
@@ -53,12 +52,8 @@ def load_settings():
             "GIST_NARRATION_TEXT_LIMIT_CHARS",
             100000,
         ),
-        "NARRATION_QUEUE_LIMIT": _int_env("GIST_NARRATION_QUEUE_LIMIT", 3),
-        "NARRATION_FFMPEG_PATH": os.getenv("GIST_NARRATION_FFMPEG_PATH"),
-        "NARRATION_WORKER_POLL_SECONDS": _int_env(
-            "GIST_NARRATION_WORKER_POLL_SECONDS",
-            2,
-        ),
+        "NARRATION_SERVICE_ORIGIN": os.getenv("NARRATION_SERVICE_ORIGIN"),
+        "NARRATION_SERVICE_TOKEN": os.getenv("NARRATION_SERVICE_TOKEN"),
         "IMAGE_STORAGE_LIMIT_BYTES": _int_env(
             "GIST_IMAGE_STORAGE_LIMIT_BYTES",
             5 * 1024 * 1024 * 1024,

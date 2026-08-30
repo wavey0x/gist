@@ -1,3 +1,5 @@
+import hashlib
+
 from gist_api.db import gist_connection
 from gist_api.narration import narration_storage_dir
 
@@ -27,17 +29,17 @@ def _mark_only_narration_ready(app, audio=b"ID3offline-audio"):
             conn.execute(
                 """
                 update narrations
-                set status = 'ready', attempt_count = 1,
-                    audio_filename = ?, mime_type = 'audio/mpeg',
+                set status = 'ready', engine_fingerprint = 'test-engine',
+                    audio_filename = ?, audio_sha256 = ?, mime_type = 'audio/mpeg',
                     byte_size = ?, duration_ms = 1200, error_code = null,
-                    updated_at = ?, started_at = ?, finished_at = ?
+                    updated_at = ?, finished_at = ?
                 where id = ?
                 """,
                 (
                     filename,
+                    hashlib.sha256(audio).hexdigest(),
                     len(audio),
                     "2026-08-28T12:00:00.000Z",
-                    "2026-08-28T11:59:00.000Z",
                     "2026-08-28T12:00:00.000Z",
                     row["id"],
                 ),
@@ -54,9 +56,7 @@ def test_offline_manifest_requires_web_session(client):
     assert response.status_code == 401
 
 
-def test_offline_manifest_projects_owned_latest_and_watched_ready_audio(
-    client, app
-):
+def test_offline_manifest_projects_owned_latest_and_watched_ready_audio(client, app):
     owner_key = make_key(app, "owner")
     reader_key = make_key(app, "reader")
     owned = create_gist(client, reader_key, markdown="# Mine", title="Mine")
@@ -88,8 +88,7 @@ def test_offline_manifest_projects_owned_latest_and_watched_ready_audio(
     assert reader_key not in response.get_data(as_text=True)
     assert payload["generated_at"].endswith("Z")
     identities = [
-        (item["display_title"], item["revision_number"])
-        for item in payload["gists"]
+        (item["display_title"], item["revision_number"]) for item in payload["gists"]
     ]
     assert identities == [
         ("Mine updated", 2),
@@ -104,9 +103,9 @@ def test_offline_manifest_projects_owned_latest_and_watched_ready_audio(
     marker = payload["account_marker"]
     client.delete("/api/v1/auth/session")
     _login(client, reader_key)
-    assert client.get("/api/v1/me/offline-manifest").get_json()[
-        "account_marker"
-    ] == marker
+    assert (
+        client.get("/api/v1/me/offline-manifest").get_json()["account_marker"] == marker
+    )
 
 
 def test_offline_manifest_skips_missing_ready_audio_and_deleted_gists(client, app):

@@ -4,7 +4,6 @@ from ipaddress import ip_address
 
 from flask import Blueprint, current_app, jsonify, request, send_file
 
-from .avatars import AVATAR_FILE_RE, send_avatar_file
 from .auth import (
     WEB_SESSION_COOKIE_NAME,
     WEB_SESSION_TTL_DAYS,
@@ -14,20 +13,21 @@ from .auth import (
     verify_api_key,
     verify_web_session,
 )
+from .avatars import AVATAR_FILE_RE, send_avatar_file
 from .db import gist_connection
 from .errors import GistError, error_response
 from .external_ids import validate_external_id
 from .images import IMAGE_RETRY_HINT, create_image_asset, send_image_asset
+from .narration import (
+    get_narration_audio,
+    get_narration_status,
+    start_narration,
+)
 from .notifications import (
     delete_push_subscription,
     get_notification_settings,
     update_notification_settings,
     upsert_push_subscription,
-)
-from .narration import (
-    get_narration_audio,
-    get_narration_status,
-    start_narration,
 )
 from .offline import get_offline_manifest
 from .rate_limits import check_write_rate_limit, record_auth_failure_and_check_limit
@@ -41,7 +41,6 @@ from .service import (
     parse_revision_number,
     patch_gist,
 )
-
 
 gists_api = Blueprint("gists_api", __name__)
 AVATAR_ROUTE_RE = re.compile(f"^{AVATAR_FILE_RE}$")
@@ -611,7 +610,7 @@ def create_gist_revision_narration(gist_id, revision_number):
             gist_id,
             revision_number,
         )
-        return jsonify(body), 202 if body["status"] in {"pending", "processing"} else 200
+        return jsonify(body), 202 if body["status"] == "pending" else 200
     except GistError as error:
         return error_response(error.code, error.message, error.status)
 
@@ -653,14 +652,18 @@ def read_gist_revision_narration_audio(gist_id, revision_number):
     if auth.audio_generation_daily_limit == 0:
         return error_response("forbidden", "Audio access is disabled", 403)
     try:
+        path, audio_sha256 = get_narration_audio(
+            current_app, gist_id, revision_number
+        )
         response = send_file(
-            get_narration_audio(current_app, gist_id, revision_number),
+            path,
             mimetype="audio/mpeg",
             conditional=True,
-            etag=True,
+            etag=audio_sha256,
             max_age=0,
         )
         response.headers["Cache-Control"] = "private, no-store"
+        response.headers["X-Content-SHA256"] = audio_sha256
         return response
     except GistError as error:
         return error_response(error.code, error.message, error.status)

@@ -234,7 +234,9 @@ def test_worker_removes_expired_provider_endpoint(client, app, status):
 
     assert result == "endpoint_expired"
     with gist_connection(app) as conn:
-        assert conn.execute("select count(*) from push_subscriptions").fetchone()[0] == 0
+        assert (
+            conn.execute("select count(*) from push_subscriptions").fetchone()[0] == 0
+        )
         assert conn.execute("select count(*) from push_deliveries").fetchone()[0] == 0
 
 
@@ -291,17 +293,13 @@ def test_worker_rechecks_disabled_setting_and_deleted_gist(client, app):
     _key, gist_id, delivery_id = _prepare_delivery(client, app)
     with gist_connection(app) as conn:
         with conn:
-            conn.execute(
-                "update notification_settings set new_gist_enabled = 0"
-            )
+            conn.execute("update notification_settings set new_gist_enabled = 0")
 
     assert process_delivery(app, delivery_id, object()) == "setting_disabled"
     with gist_connection(app) as conn:
         assert conn.execute("select count(*) from push_deliveries").fetchone()[0] == 0
         with conn:
-            conn.execute(
-                "update notification_settings set new_gist_enabled = 1"
-            )
+            conn.execute("update notification_settings set new_gist_enabled = 1")
 
     key = make_key(app, "second")
     _login(client, key)
@@ -351,18 +349,20 @@ def test_worker_drops_audio_ready_delivery_when_audio_is_disabled(client, app):
             cursor = conn.execute(
                 """
                 insert into narrations(
-                    gist_revision_id, requested_by_key_id, recipe_version,
-                    source_render_version, text_sha256, status, attempt_count,
-                    audio_filename, mime_type, byte_size, duration_ms,
+                    gist_revision_id, requested_by_key_id, service_job_id,
+                    text_sha256, status, retry_count, engine_fingerprint,
+                    audio_filename, audio_sha256, mime_type, byte_size, duration_ms,
                     created_at, updated_at, finished_at
-                ) values (?, ?, 'recipe', 'render', ?, 'ready', 1,
-                          'narration-test.mp3', 'audio/mpeg', 10, 1000,
+                ) values (?, ?, '00000000-0000-4000-8000-000000000001',
+                          ?, 'ready', 0, 'test-engine',
+                          'narration-test.mp3', ?, 'audio/mpeg', 10, 1000,
                           ?, ?, ?)
                 """,
                 (
                     row["gist_revision_id"],
                     row["api_key_id"],
                     "a" * 64,
+                    "b" * 64,
                     "2026-08-28T12:00:00.000Z",
                     "2026-08-28T12:00:00.000Z",
                     "2026-08-28T12:00:00.000Z",
@@ -387,12 +387,17 @@ def test_worker_drops_audio_ready_delivery_when_audio_is_disabled(client, app):
         nonlocal sent
         sent = True
 
-    assert process_delivery(app, delivery_id, object(), sender=sender) == "audio_disabled"
+    assert (
+        process_delivery(app, delivery_id, object(), sender=sender) == "audio_disabled"
+    )
     assert sent is False
     with gist_connection(app) as conn:
-        assert conn.execute(
-            "select count(*) from push_deliveries where id = ?", (delivery_id,)
-        ).fetchone()[0] == 0
+        assert (
+            conn.execute(
+                "select count(*) from push_deliveries where id = ?", (delivery_id,)
+            ).fetchone()[0]
+            == 0
+        )
 
 
 def test_worker_configuration_requires_matching_private_key(tmp_path, app):
@@ -401,12 +406,16 @@ def test_worker_configuration_requires_matching_private_key(tmp_path, app):
     private_path = tmp_path / "vapid-private.pem"
     vapid.save_key(str(private_path))
     private_path.chmod(0o600)
-    public_key = base64.urlsafe_b64encode(
-        vapid.public_key.public_bytes(
-            Encoding.X962,
-            PublicFormat.UncompressedPoint,
+    public_key = (
+        base64.urlsafe_b64encode(
+            vapid.public_key.public_bytes(
+                Encoding.X962,
+                PublicFormat.UncompressedPoint,
+            )
         )
-    ).rstrip(b"=").decode("ascii")
+        .rstrip(b"=")
+        .decode("ascii")
+    )
     app.config.update(
         WEB_PUSH_VAPID_PUBLIC_KEY=public_key,
         WEB_PUSH_VAPID_PRIVATE_KEY_FILE=str(private_path),

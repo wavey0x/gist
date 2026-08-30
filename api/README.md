@@ -44,14 +44,16 @@ Web Push is optional. Configure the API and worker with
 `WEB_PUSH_VAPID_SUBJECT`. Keep the private key file outside the repository with
 mode `0600`.
 
-Run the single delivery worker separately from Gunicorn:
+Run the single background worker separately from Gunicorn:
 
 ```sh
 uv run push-worker
 ```
 
-Use `uv run push-worker --once` to drain rows that are currently due and exit.
-Run only one worker process.
+The worker delivers Web Push, reconciles narration jobs with the independent
+private narration service, publishes verified MP3s, and drains narration
+cleanup. Use `uv run push-worker --once` to drain work that is currently due
+and exit. Run only one worker process.
 
 ## Article Audio
 
@@ -66,33 +68,18 @@ uv run admin keys audio-limit <key_prefix_or_id> unlimited
 uv run admin keys audio-limit <key_prefix_or_id> 0
 ```
 
-Install the CPU-only narration dependencies and an `ffmpeg` executable, then
-download and verify the pinned model assets once:
+Configure `NARRATION_SERVICE_ORIGIN` with the service's HTTPS base path and
+`NARRATION_SERVICE_TOKEN` with Wavey Gist's tenant credential. The API sends
+only final normalized plaintext, its SHA-256, and a random job UUID. It does
+not send gist URLs, user identity, browser credentials, callbacks, or push
+subscriptions.
 
-```sh
-uv sync --extra narration --no-dev --frozen
-uv run narration-worker --provision
-```
-
-After provisioning, inference runs locally in offline mode. Run exactly one
-serial narration worker:
-
-```sh
-uv run narration-worker
-```
-
-The default limits are 100,000 extracted narration characters, three queued
-jobs, 128 MiB per MP3, and 2 GiB total narration storage. Generated files are
-private and are served only through the session-authenticated revision route
-with byte-range support. Use `uv run admin narrations prune --target-bytes
-<bytes>` for explicit oldest-first cache pruning. Stop the narration worker
-while running this maintenance command so its atomic publication cannot race
-with orphan cleanup.
-
-The runtime uses [Pocket TTS](https://github.com/kyutai-labs/pocket-tts)
-(MIT), the
-[Pocket TTS model](https://huggingface.co/kyutai/pocket-tts-without-voice-cloning)
-(CC BY 4.0), and the `peter_yearsley` Voice-Zero voice (CC0).
+The default limits are 100,000 extracted narration characters, 128 MiB per
+MP3, and 2 GiB total narration storage. Generated files are private and are
+served only through the session-authenticated revision route with byte-range
+support and an exact SHA-256 ETag. Use `uv run admin narrations prune
+--target-bytes <bytes>` for explicit oldest-first pruning. Publication and
+cleanup are idempotent, so the command does not require a worker shutdown.
 
 Run the service with `umask 077` so the SQLite database and WAL files are not
 readable by other local users. If a reverse proxy fronts the API, configure it

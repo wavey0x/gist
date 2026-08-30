@@ -44,7 +44,6 @@ from .notifications import (
     enqueue_push_deliveries,
 )
 
-
 REVISION_RE = re.compile(r"^[1-9][0-9]*$")
 SHA_RE = re.compile(r"^[a-f0-9]{64}$")
 FIRST_H1_RE = re.compile(r"<h1(?:\s[^>]*)?>([\s\S]*?)</h1>", re.IGNORECASE)
@@ -1054,6 +1053,15 @@ def delete_gist_created_by_key(app, key_id, external_id):
                 (now, current["id"]),
             )
             delete_pending_deliveries_for_gist(conn, current["id"])
+            conn.execute(
+                """
+                delete from narrations
+                where gist_revision_id in (
+                    select id from gist_revisions where gist_id = ?
+                )
+                """,
+                (current["id"],),
+            )
 
 
 def rerender_gists(app, *, external_id=None, dry_run=False):

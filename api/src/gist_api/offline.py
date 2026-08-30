@@ -77,6 +77,7 @@ def get_offline_manifest(app, auth):
                 author_key.avatar_url as author_avatar_url,
                 n.id as narration_id,
                 n.audio_filename,
+                n.audio_sha256,
                 n.byte_size,
                 n.mime_type,
                 n.status,
@@ -104,12 +105,7 @@ def get_offline_manifest(app, auth):
             if not _ready_audio_is_valid(app, row):
                 continue
             narration = {
-                "etag": hashlib.sha256(
-                    (
-                        f"{row['narration_id']}\0{row['narration_updated_at']}\0"
-                        f"{row['byte_size']}"
-                    ).encode("utf-8")
-                ).hexdigest(),
+                "etag": row["audio_sha256"],
                 "byte_size": row["byte_size"],
             }
             key = (row["external_id"], row["revision_number"])

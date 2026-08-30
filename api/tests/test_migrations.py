@@ -1,13 +1,15 @@
-import importlib
 import hashlib
+import importlib
+import shutil
 import sqlite3
 from pathlib import Path
 
 import pytest
 
-from gist_api.app import create_app
-from gist_api.db import gist_connection
 from gist_api import migrations as migration_module
+from gist_api.app import create_app
+from gist_api.auth import create_api_key
+from gist_api.db import gist_connection
 from gist_api.gist_files import NormalizedFile, snapshot_sha256
 
 
@@ -52,7 +54,7 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
             )
         }
 
-    assert versions == [1, 8, 9, 10, 11, 12]
+    assert versions == [1, 8, 9, 10, 11, 12, 13]
     assert api_key_columns == [
         "id",
         "name",
@@ -75,14 +77,16 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
     assert "push_deliveries" in tables
     assert "narrations" in tables
     assert "narration_watchers" in tables
+    assert "narration_cleanup_jobs" in tables
     assert "gist_revision_files" in tables
     assert "idx_gist_revisions_creator_revision" in indexes
     assert "idx_image_assets_public_id" in indexes
     assert "idx_push_subscriptions_api_key" in indexes
     assert "idx_push_deliveries_due" in indexes
-    assert "idx_narrations_status_created" in indexes
+    assert "idx_narrations_status_updated" in indexes
     assert "idx_narrations_requester_created" in indexes
     assert "idx_narration_watchers_key" in indexes
+    assert "idx_narration_cleanup_due" in indexes
     assert "idx_push_deliveries_gist_event" in indexes
     assert "idx_push_deliveries_narration_event" in indexes
 
@@ -100,6 +104,93 @@ def test_migrations_ignore_current_working_directory(monkeypatch, tmp_path):
 
     assert reloaded.MIGRATIONS_DIR.name == "migrations"
     assert reloaded.MIGRATIONS_DIR.parent.name == "api"
+
+
+def test_shared_service_cutover_retains_ready_audio_without_runtime_fallback(
+    monkeypatch, tmp_path
+):
+    current_migrations = Path(__file__).resolve().parents[1] / "migrations"
+    old_migrations = tmp_path / "old-migrations"
+    old_migrations.mkdir()
+    for source in current_migrations.iterdir():
+        if source.name[:3].isdigit() and int(source.name[:3]) <= 12:
+            shutil.copy2(source, old_migrations / source.name)
+    monkeypatch.setattr(migration_module, "MIGRATIONS_DIR", old_migrations)
+
+    database_path = tmp_path / "retained.sqlite3"
+    config = {
+        "SQLITE_DB_PATH": str(database_path),
+        "PUBLIC_GIST_BASE_URL": "https://gist.example.com",
+        "PUBLIC_API_BASE_URL": "https://api.example.com",
+    }
+    old_app = create_app(config)
+    with gist_connection(old_app) as conn:
+        key = create_api_key(conn, "owner")
+    created = old_app.test_client().post(
+        "/api/v1/gists",
+        headers={"Authorization": f"Bearer {key['key']}"},
+        json={"title": "Article", "files": {"README.md": {"content": "# Article"}}},
+    )
+    assert created.status_code == 201
+    audio = b"ID3-retained-ready-audio"
+    storage = tmp_path / "narrations"
+    storage.mkdir()
+    filename = "narration-41.mp3"
+    (storage / filename).write_bytes(audio)
+    with gist_connection(old_app) as conn, conn:
+        key_id = conn.execute(
+            "select id from api_keys where key_value = ?", (key["key"],)
+        ).fetchone()["id"]
+        revision_id = conn.execute("select id from gist_revisions").fetchone()["id"]
+        conn.execute(
+            """
+            insert into narrations(
+                id, gist_revision_id, requested_by_key_id, recipe_version,
+                source_render_version, text_sha256, status, attempt_count,
+                audio_filename, mime_type, byte_size, duration_ms,
+                created_at, updated_at, finished_at
+            ) values (
+                41, ?, ?, 'old-engine', 'old-render', ?, 'ready', 1,
+                ?, 'audio/mpeg', ?, 1200, ?, ?, ?
+            )
+            """,
+            (
+                revision_id,
+                key_id,
+                "a" * 64,
+                filename,
+                len(audio),
+                "2026-08-28T11:00:00.000Z",
+                "2026-08-28T12:00:00.000Z",
+                "2026-08-28T12:00:00.000Z",
+            ),
+        )
+        conn.execute(
+            """
+            insert into narration_watchers(narration_id, api_key_id, created_at)
+            values (41, ?, '2026-08-28T11:00:00.000Z')
+            """,
+            (key_id,),
+        )
+
+    monkeypatch.setattr(migration_module, "MIGRATIONS_DIR", current_migrations)
+    migrated_app = create_app(config)
+    with gist_connection(migrated_app) as conn:
+        row = conn.execute("select * from narrations").fetchone()
+        columns = {
+            item["name"] for item in conn.execute("pragma table_info(narrations)")
+        }
+        watcher_count = conn.execute(
+            "select count(*) from narration_watchers"
+        ).fetchone()[0]
+    assert row["id"] == 41
+    assert row["status"] == "ready"
+    assert row["audio_sha256"] == hashlib.sha256(audio).hexdigest()
+    assert row["engine_fingerprint"] == "old-engine"
+    assert len(row["service_job_id"]) == 36
+    assert watcher_count == 1
+    assert "recipe_version" not in columns
+    assert "source_render_version" not in columns
 
 
 def test_existing_migration_ledger_is_not_replayed(monkeypatch, tmp_path):
@@ -214,7 +305,7 @@ def test_migration_10_seeds_existing_api_keys(tmp_path):
         "new_gist_enabled": 1,
         "edited_gist_enabled": 0,
     }
-    assert version == 12
+    assert version == 13
     assert audio_limit == 3
 
 
@@ -261,14 +352,28 @@ def test_multifile_migration_preserves_all_legacy_history_and_references(tmp_pat
         """,
         [
             (
-                1, "AbCdEf0123456789", "Second title", contents[11],
-                "<h1>First</h1>\n", digests[11], 2,
-                "2026-07-19T01:00:00.000Z", "2026-07-19T02:00:00.000Z", None,
+                1,
+                "AbCdEf0123456789",
+                "Second title",
+                contents[11],
+                "<h1>First</h1>\n",
+                digests[11],
+                2,
+                "2026-07-19T01:00:00.000Z",
+                "2026-07-19T02:00:00.000Z",
+                None,
             ),
             (
-                2, "ZyXwVu9876543210", None, contents[20], "<p>deleted</p>\n",
-                digests[20], 1, "2026-07-19T03:00:00.000Z",
-                "2026-07-19T03:00:00.000Z", "2026-07-20T00:00:00.000Z",
+                2,
+                "ZyXwVu9876543210",
+                None,
+                contents[20],
+                "<p>deleted</p>\n",
+                digests[20],
+                1,
+                "2026-07-19T03:00:00.000Z",
+                "2026-07-19T03:00:00.000Z",
+                "2026-07-20T00:00:00.000Z",
             ),
         ],
     )
@@ -281,9 +386,36 @@ def test_multifile_migration_preserves_all_legacy_history_and_references(tmp_pat
         ) values (?, ?, ?, ?, 'owner', ?, ?, 'render-v1', ?, ?, 7)
         """,
         [
-            (10, 1, 1, "First title", contents[10], "<h1>First</h1>\n", digests[10], "2026-07-19T01:00:00.000Z"),
-            (11, 1, 2, "Second title", contents[11], "<h1>First</h1>\n", digests[11], "2026-07-19T02:00:00.000Z"),
-            (20, 2, 1, None, contents[20], "<p>deleted</p>\n", digests[20], "2026-07-19T03:00:00.000Z"),
+            (
+                10,
+                1,
+                1,
+                "First title",
+                contents[10],
+                "<h1>First</h1>\n",
+                digests[10],
+                "2026-07-19T01:00:00.000Z",
+            ),
+            (
+                11,
+                1,
+                2,
+                "Second title",
+                contents[11],
+                "<h1>First</h1>\n",
+                digests[11],
+                "2026-07-19T02:00:00.000Z",
+            ),
+            (
+                20,
+                2,
+                1,
+                None,
+                contents[20],
+                "<p>deleted</p>\n",
+                digests[20],
+                "2026-07-19T03:00:00.000Z",
+            ),
         ],
     )
     conn.execute(
@@ -320,9 +452,39 @@ def test_multifile_migration_preserves_all_legacy_history_and_references(tmp_pat
         ) values (?, 3, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            (31, "gist.published", 10, "pending", 0, "2026-07-19T04:00:00.000Z", None, "2026-07-19T04:00:00.000Z", None),
-            (32, "gist.updated", 11, "delivered", 1, "2026-07-19T04:00:00.000Z", "201", "2026-07-19T04:00:00.000Z", "2026-07-19T04:01:00.000Z"),
-            (33, "gist.published", 20, "dead", 5, "2026-07-19T04:00:00.000Z", "410", "2026-07-19T04:00:00.000Z", "2026-07-19T04:02:00.000Z"),
+            (
+                31,
+                "gist.published",
+                10,
+                "pending",
+                0,
+                "2026-07-19T04:00:00.000Z",
+                None,
+                "2026-07-19T04:00:00.000Z",
+                None,
+            ),
+            (
+                32,
+                "gist.updated",
+                11,
+                "delivered",
+                1,
+                "2026-07-19T04:00:00.000Z",
+                "201",
+                "2026-07-19T04:00:00.000Z",
+                "2026-07-19T04:01:00.000Z",
+            ),
+            (
+                33,
+                "gist.published",
+                20,
+                "dead",
+                5,
+                "2026-07-19T04:00:00.000Z",
+                "410",
+                "2026-07-19T04:00:00.000Z",
+                "2026-07-19T04:02:00.000Z",
+            ),
         ],
     )
     conn.commit()
@@ -336,9 +498,7 @@ def test_multifile_migration_preserves_all_legacy_history_and_references(tmp_pat
         }
     )
     with gist_connection(app) as migrated:
-        gist_rows = migrated.execute(
-            "select * from gists order by id"
-        ).fetchall()
+        gist_rows = migrated.execute("select * from gists order by id").fetchall()
         revision_rows = migrated.execute(
             "select * from gist_revisions order by id"
         ).fetchall()
@@ -355,8 +515,7 @@ def test_multifile_migration_preserves_all_legacy_history_and_references(tmp_pat
             row["name"] for row in migrated.execute("pragma table_info(gists)")
         }
         old_revision_columns = {
-            row["name"]
-            for row in migrated.execute("pragma table_info(gist_revisions)")
+            row["name"] for row in migrated.execute("pragma table_info(gist_revisions)")
         }
         temp_tables = migrated.execute(
             "select name from sqlite_temp_master where name like '_mf_%'"
@@ -365,13 +524,19 @@ def test_multifile_migration_preserves_all_legacy_history_and_references(tmp_pat
         assert migrated.execute("pragma integrity_check").fetchone()[0] == "ok"
         assert migrated.execute("select count(*) from image_assets").fetchone()[0] == 1
 
-    assert [(row["id"], row["owner_key_id"], row["deleted_at"]) for row in gist_rows] == [
+    assert [
+        (row["id"], row["owner_key_id"], row["deleted_at"]) for row in gist_rows
+    ] == [
         (1, 7, None),
         (2, 7, "2026-07-20T00:00:00.000Z"),
     ]
     assert [row["id"] for row in revision_rows] == [10, 11, 20]
     assert [row["filename"] for row in file_rows] == ["README.md"] * 3
-    assert [row["content"] for row in file_rows] == [contents[10], contents[11], contents[20]]
+    assert [row["content"] for row in file_rows] == [
+        contents[10],
+        contents[11],
+        contents[20],
+    ]
     assert [row["id"] for row in delivery_rows] == [31, 32, 33]
     assert [row["gist_revision_id"] for row in delivery_rows] == [10, 11, 20]
     assert [row["narration_id"] for row in delivery_rows] == [None, None, None]
@@ -407,10 +572,16 @@ def test_failed_python_migration_rolls_back_schema_and_ledger(monkeypatch, tmp_p
         create_app({"SQLITE_DB_PATH": str(database_path)})
 
     conn = sqlite3.connect(database_path)
-    assert conn.execute(
-        "select name from sqlite_master where name = 'should_roll_back'"
-    ).fetchone() is None
-    assert conn.execute(
-        "select count(*) from gist_schema_migrations where version = 11"
-    ).fetchone()[0] == 0
+    assert (
+        conn.execute(
+            "select name from sqlite_master where name = 'should_roll_back'"
+        ).fetchone()
+        is None
+    )
+    assert (
+        conn.execute(
+            "select count(*) from gist_schema_migrations where version = 11"
+        ).fetchone()[0]
+        == 0
+    )
     conn.close()

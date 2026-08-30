@@ -17,6 +17,14 @@ from requests import Session
 from requests.exceptions import RequestException
 
 from .app import create_app
+from .gist_files import file_kind
+from .narration import (
+    CLEANUP_BATCH_SIZE,
+    RECONCILE_BATCH_SIZE,
+    cleanup_narration_jobs,
+    run_narration_pass,
+)
+from .narration_service import narration_service_config
 from .notifications import (
     EVENT_GIST_PUBLISHED,
     EVENT_NARRATION_READY,
@@ -33,8 +41,6 @@ from .notifications import (
     validate_push_endpoint,
 )
 from .service import display_title
-from .gist_files import file_kind
-
 
 logger = logging.getLogger(__name__)
 
@@ -418,12 +424,18 @@ def run_worker(app, vapid, *, once=False, stop_event=None):
             _log_health(app, now)
             next_health_at = now + timedelta(seconds=HEALTH_LOG_INTERVAL_SECONDS)
 
+        reconciled = run_narration_pass(app)
+        cleaned = cleanup_narration_jobs(app)
         processed = run_due_pass(app, vapid, now=now)
         if once:
-            if processed == DELIVERY_BATCH_SIZE:
+            if (
+                processed == DELIVERY_BATCH_SIZE
+                or reconciled == RECONCILE_BATCH_SIZE
+                or cleaned == CLEANUP_BATCH_SIZE
+            ):
                 continue
             return
-        if processed == 0:
+        if processed == 0 and reconciled == 0 and cleaned == 0:
             stop_event.wait(EMPTY_POLL_SECONDS)
 
 
@@ -438,6 +450,7 @@ def main(argv=None):
     )
     app = create_app()
     vapid = validate_worker_config(app)
+    narration_service_config(app)
     stop_event = threading.Event()
 
     def request_stop(_signum, _frame):

@@ -171,12 +171,11 @@ content. Search covers active gists' latest revisions only.
 ## Article Audio
 
 Logged-in accounts can request cached MP3 audio for an immutable Markdown
-revision. Generation is on demand and runs locally with
-[Pocket TTS](https://github.com/kyutai-labs/pocket-tts); publishing and editing
-never queue audio. Install the API's `narration` dependency extra, provision
-the pinned model once, and run one serial narration worker as described in
-[api/README.md](api/README.md). The selected Pocket TTS model is CC BY 4.0 and
-the fixed `peter_yearsley` Voice-Zero voice is CC0.
+revision. Wavey Gist derives the final plaintext, submits it to a separately
+deployed private narration service, and copies the verified MP3 into its own
+private storage. Publishing and editing never queue audio. The existing push
+worker performs bounded service reconciliation, media publication, cleanup,
+and ready notifications; Wavey Gist does not load a model or run an encoder.
 
 ## Configuration
 
@@ -197,8 +196,8 @@ Backend environment variables:
 | `GIST_NARRATION_STORAGE_LIMIT_BYTES` | `2147483648` | Global narration storage cap. |
 | `GIST_NARRATION_FILE_LIMIT_BYTES` | `134217728` | Maximum size for one narration MP3. |
 | `GIST_NARRATION_TEXT_LIMIT_CHARS` | `100000` | Maximum normalized narration characters. |
-| `GIST_NARRATION_QUEUE_LIMIT` | `3` | Maximum pending and processing narration jobs. |
-| `GIST_NARRATION_FFMPEG_PATH` | PATH lookup for `ffmpeg` | MP3 encoder executable. |
+| `NARRATION_SERVICE_ORIGIN` | required by the worker | HTTPS origin of the private narration service. |
+| `NARRATION_SERVICE_TOKEN` | required by the worker | Raw Wavey Gist tenant credential for the narration service. |
 | `MAX_MULTIPART_REQUEST_BYTES` | text plus image upload limits | Maximum multipart request body size accepted by Flask. |
 | `MAX_GIST_TEXT_BYTES` | `1048576` | Maximum aggregate UTF-8 bytes across a gist snapshot. |
 | `MAX_GIST_FILES` | `32` | Maximum files in one gist snapshot. |

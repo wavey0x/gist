@@ -1,3 +1,4 @@
+import hashlib
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -6,7 +7,6 @@ from gist_api.auth import set_audio_generation_daily_limit, verify_api_key_value
 from gist_api.db import gist_connection
 from gist_api.errors import GistError
 from gist_api.narration import (
-    RECIPE_VERSION,
     extract_narration_text,
     narration_storage_dir,
     prune_narrations,
@@ -93,7 +93,10 @@ def test_narration_is_on_demand_and_requires_a_web_session(client, app):
         assert conn.execute("select count(*) from narrations").fetchone()[0] == 0
 
     path = _narration_path(gist_id)
-    assert client.post("/api/v1/gists/bad/revisions/0/narration", json={}).status_code == 404
+    assert (
+        client.post("/api/v1/gists/bad/revisions/0/narration", json={}).status_code
+        == 404
+    )
     assert client.post(path, json={}).status_code == 401
     assert client.post(path, headers=auth_header(key), json={}).status_code == 401
 
@@ -106,10 +109,12 @@ def test_narration_is_on_demand_and_requires_a_web_session(client, app):
 
     with gist_connection(app) as conn:
         row = conn.execute("select * from narrations").fetchone()
-        assert row["recipe_version"] == RECIPE_VERSION
+        assert len(row["service_job_id"]) == 36
         assert row["status"] == "pending"
         assert conn.execute("select count(*) from narrations").fetchone()[0] == 1
-        assert conn.execute("select count(*) from narration_watchers").fetchone()[0] == 1
+        assert (
+            conn.execute("select count(*) from narration_watchers").fetchone()[0] == 1
+        )
 
 
 def test_non_markdown_primary_file_is_not_narratable(client, app):
@@ -128,7 +133,6 @@ def test_non_markdown_primary_file_is_not_narratable(client, app):
 
 
 def test_narration_requests_are_idempotent_under_concurrency(client, app):
-    app.config["NARRATION_QUEUE_LIMIT"] = 10
     key = make_key(app)
     gist_id = _create_markdown_gist(client, key)
     auth = _auth(app, key)
@@ -145,11 +149,12 @@ def test_narration_requests_are_idempotent_under_concurrency(client, app):
     ]
     with gist_connection(app) as conn:
         assert conn.execute("select count(*) from narrations").fetchone()[0] == 1
-        assert conn.execute("select count(*) from narration_watchers").fetchone()[0] == 1
+        assert (
+            conn.execute("select count(*) from narration_watchers").fetchone()[0] == 1
+        )
 
 
 def test_daily_limit_ignores_display_name_and_does_not_count_cache_hits(client, app):
-    app.config["NARRATION_QUEUE_LIMIT"] = 10
     key = make_key(app, "wavey0x")
     gist_ids = [_create_markdown_gist(client, key) for _ in range(4)]
     _login(client, key)
@@ -164,7 +169,6 @@ def test_daily_limit_ignores_display_name_and_does_not_count_cache_hits(client, 
 
 
 def test_audio_limit_zero_disables_capability_and_null_is_unlimited(client, app):
-    app.config["NARRATION_QUEUE_LIMIT"] = 10
     disabled_key = make_key(app, "disabled")
     with gist_connection(app) as conn:
         disabled_id = conn.execute(
@@ -204,17 +208,17 @@ def test_ready_audio_supports_head_and_byte_ranges(client, app):
             conn.execute(
                 """
                 update narrations
-                set status = 'ready', attempt_count = 1,
-                    audio_filename = ?, mime_type = 'audio/mpeg',
+                set status = 'ready', engine_fingerprint = 'test-engine',
+                    audio_filename = ?, audio_sha256 = ?, mime_type = 'audio/mpeg',
                     byte_size = ?, duration_ms = 1200, error_code = null,
-                    updated_at = ?, started_at = ?, finished_at = ?
+                    updated_at = ?, finished_at = ?
                 where id = ?
                 """,
                 (
                     filename,
+                    hashlib.sha256(audio).hexdigest(),
                     len(audio),
                     "2026-08-28T12:00:00.000Z",
-                    "2026-08-28T11:59:00.000Z",
                     "2026-08-28T12:00:00.000Z",
                     row["id"],
                 ),
@@ -254,7 +258,7 @@ def test_failed_job_has_one_explicit_retry(client, app):
             conn.execute(
                 """
                 update narrations
-                set status = 'failed', attempt_count = 1,
+                set status = 'failed', retry_count = 0,
                     error_code = 'generation_failed', finished_at = updated_at
                 """
             )
@@ -270,7 +274,7 @@ def test_failed_job_has_one_explicit_retry(client, app):
             conn.execute(
                 """
                 update narrations
-                set status = 'failed', attempt_count = 2,
+                set status = 'failed', retry_count = 1,
                     error_code = 'generation_failed', finished_at = updated_at
                 """
             )
@@ -299,7 +303,7 @@ def test_source_digest_change_is_rejected(client, app):
     assert response.get_json()["error"]["code"] == "source_mismatch"
 
 
-def test_new_source_render_version_creates_a_new_cache_identity(client, app):
+def test_new_source_render_replaces_the_single_narration_identity(client, app):
     key = make_key(app)
     gist_id = _create_markdown_gist(client, key)
     _login(client, key)
@@ -318,19 +322,15 @@ def test_new_source_render_version_creates_a_new_cache_identity(client, app):
 
     assert client.post(path, json={}).status_code == 202
     with gist_connection(app) as conn:
-        rows = conn.execute(
-            """
-            select source_render_version, text_sha256
-            from narrations order by id
-            """
-        ).fetchall()
-    assert len(rows) == 2
-    assert rows[0]["source_render_version"] != rows[1]["source_render_version"]
-    assert rows[0]["text_sha256"] != rows[1]["text_sha256"]
+        rows = conn.execute("select text_sha256 from narrations").fetchall()
+        cleanup_count = conn.execute(
+            "select count(*) from narration_cleanup_jobs"
+        ).fetchone()[0]
+    assert len(rows) == 1
+    assert cleanup_count == 1
 
 
 def test_admin_prune_deletes_oldest_ready_cache_row_before_file(client, app):
-    app.config["NARRATION_QUEUE_LIMIT"] = 10
     key = make_key(app)
     _login(client, key)
     gist_ids = [_create_markdown_gist(client, key) for _ in range(2)]
@@ -347,14 +347,15 @@ def test_admin_prune_deletes_oldest_ready_cache_row_before_file(client, app):
                 conn.execute(
                     """
                     update narrations
-                    set status = 'ready', attempt_count = 1,
-                        audio_filename = ?, mime_type = 'audio/mpeg',
+                    set status = 'ready', engine_fingerprint = 'test-engine',
+                        audio_filename = ?, audio_sha256 = ?, mime_type = 'audio/mpeg',
                         byte_size = 4, duration_ms = 500,
                         updated_at = ?, finished_at = ?
                     where id = ?
                     """,
                     (
                         filename,
+                        hashlib.sha256(b"four").hexdigest(),
                         f"2026-08-28T12:00:0{index}.000Z",
                         f"2026-08-28T12:00:0{index}.000Z",
                         row["id"],

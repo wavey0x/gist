@@ -12,18 +12,12 @@ dependencies = [
     "lxml>=5.3.0",
     "python-dotenv>=1.0.1",
     "pywebpush>=2.0.3",
+    "requests>=2.32.0",
 ]
 
 [project.scripts]
 admin = "gist_api.admin:main"
-narration-worker = "gist_api.narration_worker:main"
 push-worker = "gist_api.push_worker:main"
-
-[project.optional-dependencies]
-narration = [
-    "pocket-tts==3.0.2",
-    "torch==2.9.1",
-]
 
 [build-system]
 requires = ["setuptools>=75.0"]
@@ -40,11 +34,3 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-
-[tool.uv.sources]
-torch = [{ index = "pytorch-cpu", extra = "narration" }]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true

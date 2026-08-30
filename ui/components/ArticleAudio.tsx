@@ -16,7 +16,7 @@ import {
   reconcileOfflineLibrary
 } from "../lib/offline-library";
 
-type NarrationStatus = "pending" | "processing" | "ready" | "failed";
+type NarrationStatus = "pending" | "ready" | "failed";
 
 type NarrationPayload = {
   status: NarrationStatus;
@@ -104,7 +104,6 @@ function isNarrationPayload(value: unknown): value is NarrationPayload {
   const payload = value as Partial<NarrationPayload>;
   return (
     (payload.status === "pending" ||
-      payload.status === "processing" ||
       payload.status === "ready" ||
       payload.status === "failed") &&
     typeof payload.retryable === "boolean" &&
