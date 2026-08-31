@@ -29,7 +29,7 @@ HIGHLIGHT_GRAMMAR_SET = "all+source.js.regexp"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-HIGHLIGHT_TIMEOUT_SECONDS = float(os.getenv("GIST_HIGHLIGHT_TIMEOUT_SECONDS", "2"))
+HIGHLIGHT_TIMEOUT_SECONDS = float(os.getenv("GIST_HIGHLIGHT_TIMEOUT_SECONDS", "8"))
 MAX_HIGHLIGHT_BLOCK_BYTES = int(
     os.getenv("GIST_MAX_HIGHLIGHT_BLOCK_BYTES", str(200 * 1024))
 )
