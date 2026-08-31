@@ -3,7 +3,11 @@ from pathlib import Path
 
 import gist_api.markdown as markdown_module
 from gist_api.db import gist_connection
-from gist_api.markdown import render_markdown_result, render_version
+from gist_api.markdown import (
+    render_markdown_result,
+    render_source_result,
+    render_version,
+)
 from gist_api.service import rerender_gists
 from lxml import html as html_parser
 
@@ -104,6 +108,19 @@ def test_markdown_rendering_uses_gfm_highlighting_links_and_sanitizer():
     assert "starry-night/" in render_version()
     assert "syntax-css/" in render_version()
     assert "highlight/ok" in result.version
+
+
+def test_javascript_regexp_quotes_do_not_break_following_highlighting():
+    source = "const dms = /\\s*['′]\\s*[\"″]?/i;\nconst after = 1;\n"
+    result = render_source_result(source, "javascript")
+
+    assert 'class="pl-sr"' in result.html
+    assert (
+        '<span class="pl-k">const</span> <span class="pl-c1">after</span>'
+        in result.html
+    )
+    assert html_parser.fromstring(result.html).text_content() == source
+    assert "grammar/all+source.js.regexp" in result.version
 
 
 def test_markdown_rendering_enriches_mermaid_blocks_without_highlighting():

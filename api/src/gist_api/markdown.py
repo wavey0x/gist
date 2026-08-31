@@ -25,7 +25,7 @@ SYNTAX_CSS_VERSION = "2026-06-02.1"
 ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.3"
 MERMAID_RENDER_VERSION = "2026-07-08.2"
 MATH_RENDER_VERSION = "2026-07-27.1"
-HIGHLIGHT_GRAMMAR_SET = "all"
+HIGHLIGHT_GRAMMAR_SET = "all+source.js.regexp"
 HIGHLIGHT_SCRIPT = Path(__file__).with_name("render_highlight.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

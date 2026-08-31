@@ -1,4 +1,5 @@
 import {all, common, createStarryNight} from '@wooorm/starry-night'
+import sourceJsRegexp from '@wooorm/starry-night/source.js.regexp'
 import {toHtml} from 'hast-util-to-html'
 
 const LANGUAGE_ALIASES = new Map([
@@ -60,7 +61,10 @@ if (!payload || !Array.isArray(payload.blocks)) {
   fail('Payload must include a blocks array')
 }
 
-const grammars = payload.grammar_set === 'common' ? common : all
+const grammars = [
+  ...(payload.grammar_set === 'common' ? common : all),
+  sourceJsRegexp
+]
 const starryNight = await createStarryNight(grammars)
 
 const blocks = payload.blocks.map((block) => {
