@@ -2,6 +2,8 @@ import errno
 import io
 import json
 
+import pytest
+
 from gist_api.db import gist_connection
 
 from .conftest import auth_header, create_gist, make_key
@@ -20,6 +22,18 @@ WEBP_1X1 = (
     b"RIFF\x16\x00\x00\x00WEBPVP8X"
     b"\x0a\x00\x00\x00\x00\x00\x00\x00"
     b"\x00\x00\x00\x00\x00\x00"
+)
+SVG_2X1 = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" width="2px" height="1">'
+    b"<style>rect { fill: #123456; }</style>"
+    b'<rect width="2" height="1"/>'
+    b"</svg>"
+)
+SVG_VIEWBOX = (
+    b'<?xml version="1.0" encoding="UTF-8"?>\n'
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12.5 7.2">'
+    b'<path d="M0 0h12.5v7.2H0z"/>'
+    b"</svg>"
 )
 
 
@@ -91,6 +105,77 @@ def test_image_upload_accepts_jpeg_and_webp(client, app):
     assert jpeg.get_json()["mime_type"] == "image/jpeg"
     assert webp.status_code == 201
     assert webp.get_json()["mime_type"] == "image/webp"
+
+
+def test_image_upload_accepts_and_safely_serves_svg(client, app):
+    key = make_key(app)
+
+    uploaded = client.post(
+        "/api/v1/images",
+        headers=auth_header(key),
+        data={"image": _upload_tuple(SVG_2X1, "diagram.svg")},
+    )
+
+    assert uploaded.status_code == 201
+    body = uploaded.get_json()
+    assert body["original_filename"] == "diagram.svg"
+    assert body["mime_type"] == "image/svg+xml"
+    assert body["byte_size"] == len(SVG_2X1)
+    assert body["width"] == 2
+    assert body["height"] == 1
+    assert body["markdown"] == f"![diagram.svg]({body['url']})"
+
+    public = client.get(f"/api/v1/images/{body['id']}")
+    assert public.status_code == 200
+    assert public.content_type == "image/svg+xml; charset=utf-8"
+    assert public.data == SVG_2X1
+    assert public.headers["X-Content-Type-Options"] == "nosniff"
+    assert public.headers["Content-Security-Policy"] == (
+        "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; "
+        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    )
+
+
+def test_svg_dimensions_fall_back_to_viewbox(client, app):
+    key = make_key(app)
+
+    uploaded = client.post(
+        "/api/v1/images",
+        headers=auth_header(key),
+        data={"image": _upload_tuple(SVG_VIEWBOX, "viewbox.svg")},
+    )
+
+    assert uploaded.status_code == 201
+    body = uploaded.get_json()
+    assert body["width"] == 13
+    assert body["height"] == 8
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">',
+        b'<html xmlns="http://www.w3.org/1999/xhtml" width="1" height="1"/>',
+        b'<svg xmlns="http://www.w3.org/2000/svg"/>',
+        b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4097 1"/>',
+        (
+            b'<!DOCTYPE svg [<!ENTITY example "expanded">]>'
+            b'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">'
+            b"&example;</svg>"
+        ),
+    ],
+)
+def test_image_upload_rejects_invalid_svg(client, app, data):
+    key = make_key(app)
+
+    response = client.post(
+        "/api/v1/images",
+        headers=auth_header(key),
+        data={"image": _upload_tuple(data, "invalid.svg")},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"]["code"] == "invalid_request"
 
 
 def test_image_upload_rejects_aliases_and_extra_fields(client, app):
@@ -237,6 +322,29 @@ def test_multipart_gist_replaces_attachment_references(client, app):
         f'<img src="{image["url"]}" alt="Revenue" loading="lazy" '
         'decoding="async" referrerpolicy="no-referrer">'
         in public_body["files"]["README.md"]["rendered_html"]
+    )
+
+
+def test_multipart_gist_replaces_svg_attachment_reference(client, app):
+    key = make_key(app)
+
+    created = client.post(
+        "/api/v1/gists",
+        headers=auth_header(key),
+        data={
+            "payload": _gist_payload(
+                "# Diagram\n\n![Flow](attachment:flow.svg)", title="Diagram"
+            ),
+            "images[]": [_upload_tuple(SVG_2X1, "flow.svg")],
+        },
+    )
+
+    assert created.status_code == 201
+    body = created.get_json()
+    image = body["images"][0]
+    assert image["mime_type"] == "image/svg+xml"
+    assert body["files"]["README.md"]["content"] == (
+        f"# Diagram\n\n![Flow]({image['url']})"
     )
 
 

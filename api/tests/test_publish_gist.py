@@ -20,6 +20,11 @@ PNG_1X1 = (
     b"\x00\x00\x00\x01\x00\x00\x00\x01"
     b"\x08\x06\x00\x00\x00\x00\x00\x00\x00"
 )
+SVG_2X1 = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" width="2" height="1">'
+    b'<rect width="2" height="1"/>'
+    b"</svg>"
+)
 FILES = {
     "README.md": "# Plan\n\nSafe changes.\n",
     "check.py": "print('safe')\n",
@@ -280,6 +285,15 @@ def test_multipart_encoder_preserves_payload_and_unicode_image_name():
     assert len(stored) == 1
     assert stored[0].filename == upload.filename
     assert stored[0].read() == upload.content
+
+
+def test_image_reader_preserves_svg_bytes_and_type(tmp_path):
+    image = tmp_path / "diagram.svg"
+    image.write_bytes(SVG_2X1)
+
+    assert publish_gist.read_image_uploads([str(image)]) == [
+        publish_gist.ImageUpload("diagram.svg", SVG_2X1, "image/svg+xml")
+    ]
 
 
 def test_create_passes_images_to_the_api(monkeypatch, capsys, tmp_path):

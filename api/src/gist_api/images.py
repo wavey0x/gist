@@ -1,6 +1,7 @@
 import base64
 import errno
 import hashlib
+import math
 import os
 import re
 import secrets
@@ -10,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from flask import current_app, send_file
+from lxml import etree
 
 from .auth import utc_now
 from .db import get_gist_db_path, gist_connection
@@ -21,7 +23,13 @@ SUPPORTED_IMAGE_TYPES = {
     "png": "image/png",
     "jpg": "image/jpeg",
     "webp": "image/webp",
+    "svg": "image/svg+xml",
 }
+SVG_NAMESPACE = "http://www.w3.org/2000/svg"
+SVG_CONTENT_SECURITY_POLICY = (
+    "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; "
+    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+)
 IMAGE_RETRY_HINT = "Try publishing again without images or with smaller images."
 IMAGE_STORAGE_CAPACITY_ERRNOS = {
     errno.EDQUOT,
@@ -204,12 +212,73 @@ def _webp_metadata(data):
     raise ValueError("invalid WebP image")
 
 
+def _positive_svg_number(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number) or number <= 0:
+        return None
+    return number
+
+
+def _svg_pixel_length(value):
+    value = (value or "").strip().lower()
+    if value.endswith("px"):
+        value = value[:-2].strip()
+    return _positive_svg_number(value)
+
+
+def _svg_dimensions(root):
+    width = _svg_pixel_length(root.get("width"))
+    height = _svg_pixel_length(root.get("height"))
+    if width is not None and height is not None:
+        return math.ceil(width), math.ceil(height)
+
+    values = re.split(r"[\s,]+", (root.get("viewBox") or "").strip())
+    if len(values) != 4:
+        raise ValueError("invalid SVG dimensions")
+    width = _positive_svg_number(values[2])
+    height = _positive_svg_number(values[3])
+    if width is None or height is None:
+        raise ValueError("invalid SVG dimensions")
+    return math.ceil(width), math.ceil(height)
+
+
+def _svg_metadata(data):
+    if not data.lstrip().startswith((b"<", b"\xef\xbb\xbf")):
+        return None
+    parser = etree.XMLParser(
+        resolve_entities=False,
+        no_network=True,
+        load_dtd=False,
+        huge_tree=False,
+    )
+    try:
+        root = etree.fromstring(data, parser=parser)
+    except (etree.XMLSyntaxError, ValueError) as exc:
+        raise ValueError("invalid SVG image") from exc
+
+    try:
+        name = etree.QName(root)
+    except ValueError:
+        return None
+    if name.localname != "svg" or name.namespace not in {None, SVG_NAMESPACE}:
+        return None
+    if root.getroottree().docinfo.doctype:
+        raise ValueError("invalid SVG image")
+
+    width, height = _svg_dimensions(root)
+    return "svg", SUPPORTED_IMAGE_TYPES["svg"], width, height
+
+
 def _image_metadata(data):
     try:
         metadata = (
             _png_metadata(data)
             or _jpeg_metadata(data)
             or _webp_metadata(data)
+            or _svg_metadata(data)
         )
     except ValueError as exc:
         raise GistError("invalid_request", str(exc), 400) from exc
@@ -535,10 +604,13 @@ def get_image_asset(app, public_id):
 
 def send_image_asset(public_id):
     path, mime_type = get_image_asset(current_app, public_id)
-    return send_file(
+    response = send_file(
         path,
         mimetype=mime_type,
         max_age=31536000,
         conditional=True,
         etag=True,
     )
+    if mime_type == SUPPORTED_IMAGE_TYPES["svg"]:
+        response.headers["Content-Security-Policy"] = SVG_CONTENT_SECURITY_POLICY
+    return response

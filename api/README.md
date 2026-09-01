@@ -184,7 +184,8 @@ POST /api/v1/images
 ```
 
 Use `multipart/form-data` field `image`. The response includes a public
-`img_...` URL and Markdown image snippet.
+`img_...` URL and Markdown image snippet. Supported formats are PNG, JPEG,
+WebP, and SVG. SVG uploads are stored and served unchanged as vector images.
 
 Create or update a gist with new images in one request by sending
 `multipart/form-data` to `POST /api/v1/gists` or

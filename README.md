@@ -107,7 +107,8 @@ scripts/publish-gist create README.md example.py
 ```
 
 Attach stable first-party images with `--image`. Reference an upload from
-Markdown as `attachment:<basename>`:
+Markdown as `attachment:<basename>`. PNG, JPEG, WebP, and SVG are supported;
+SVG uploads remain vector images and are not rasterized:
 
 ```sh
 scripts/publish-gist create README.md --image chart.png
