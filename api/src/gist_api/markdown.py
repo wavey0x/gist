@@ -20,7 +20,7 @@ from lxml import etree, html
 
 logger = logging.getLogger(__name__)
 
-SANITIZER_CONFIG_VERSION = "2026-07-29.1"
+SANITIZER_CONFIG_VERSION = "2026-09-01.1"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
 ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.3"
 MERMAID_RENDER_VERSION = "2026-07-08.2"
@@ -741,6 +741,40 @@ def _post_process_links(root):
         }
         rel.add("nofollow")
         element.attrib["rel"] = " ".join(sorted(rel))
+
+
+def _safe_anchor_id(value):
+    return bool(value) and not any(character.isspace() for character in value)
+
+
+def _heading_slug(value):
+    value = re.sub(r"[^\w\s-]", "", value.lower()).strip()
+    return re.sub(r"\s", "-", value)
+
+
+def _add_heading_ids(root):
+    used_ids = {
+        value
+        for element in root.iter()
+        if (value := element.attrib.get("id")) and _safe_anchor_id(value)
+    }
+
+    for element in root.iter("h1", "h2", "h3", "h4", "h5", "h6"):
+        existing_id = element.attrib.get("id")
+        if existing_id and _safe_anchor_id(existing_id):
+            continue
+        element.attrib.pop("id", None)
+
+        base = _heading_slug(element.text_content())
+        if not base:
+            continue
+        candidate = base
+        suffix = 1
+        while candidate in used_ids:
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+        element.attrib["id"] = candidate
+        used_ids.add(candidate)
 
 
 def _ethereum_kind(value):
@@ -1553,10 +1587,15 @@ def _allow_attribute(
     if tag == "a":
         if name in {"href", "title"}:
             return True
+        if name == "id":
+            return _safe_anchor_id(value)
         if name == "rel":
             tokens = value.split()
             return bool(tokens) and all(token in SAFE_REL_TOKENS for token in tokens)
         return False
+
+    if tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+        return name == "id" and _safe_anchor_id(value)
 
     if tag == "img":
         if name == "src":
@@ -1608,6 +1647,7 @@ def render_markdown_result(
     )
     _post_process_links(root)
     _post_process_ethereum_entities(root)
+    _add_heading_ids(root)
     processed_html = _serialize_fragment(root)
 
     cleaned_html = bleach.clean(

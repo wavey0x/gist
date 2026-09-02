@@ -110,6 +110,37 @@ def test_markdown_rendering_uses_gfm_highlighting_links_and_sanitizer():
     assert "highlight/ok" in result.version
 
 
+def test_markdown_rendering_adds_targets_for_heading_fragment_links():
+    result = render_markdown_result(
+        "[Assignment](#assignment)\n\n"
+        "## Assignment\n\n"
+        "## Duplicate!\n\n"
+        "## Duplicate\n"
+    )
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+
+    assert root.xpath('.//a[@href="#assignment"]')
+    assert [heading.attrib["id"] for heading in root.xpath(".//h2")] == [
+        "assignment",
+        "duplicate",
+        "duplicate-1",
+    ]
+
+
+def test_markdown_rendering_preserves_safe_explicit_anchor_targets():
+    result = render_markdown_result(
+        '[The assignment](#assignment)\n\n'
+        '<a id="assignment" name="legacy" onclick="bad()"></a>\n\n'
+        "## The assignment\n"
+    )
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+    anchor = root.xpath('.//a[@id="assignment"]')[0]
+
+    assert anchor.attrib == {"id": "assignment"}
+    assert root.xpath('.//a[@href="#assignment"]')
+    assert root.xpath('.//h2[@id="the-assignment"]')
+
+
 def test_javascript_regexp_quotes_do_not_break_following_highlighting():
     source = "const dms = /\\s*['′]\\s*[\"″]?/i;\nconst after = 1;\n"
     result = render_source_result(source, "javascript")
@@ -1009,7 +1040,7 @@ def test_rerender_gists_activates_external_images_without_changing_source(client
         'loading="lazy" decoding="async" referrerpolicy="no-referrer">'
         in after["rendered_html"]
     )
-    assert "sanitizer/2026-07-29.1" in after["render_version"]
+    assert "sanitizer/2026-09-01.1" in after["render_version"]
 
 
 def test_rerender_gists_uses_current_ethereum_rendering(client, app):

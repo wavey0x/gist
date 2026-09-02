@@ -77,7 +77,7 @@ def test_create_public_render_raw_read_patch_and_delete(client, app):
     assert public_body["revision_number"] == 1
     assert public_body["latest_revision_number"] == 1
     assert public_body["created_at"] == body["created_at"]
-    assert "<h1>Hello</h1>" in readme["rendered_html"]
+    assert '<h1 id="hello">Hello</h1>' in readme["rendered_html"]
     assert "disabled" in readme["rendered_html"]
     assert public_body["url"] == body["url"]
     assert public_body["history"] == [
