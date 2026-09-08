@@ -191,6 +191,7 @@ def _render_files(app, files):
         if kind == "markdown":
             rendered = render_markdown_result(
                 normalized.content,
+                filename=filename,
                 allowed_image_src_prefixes=(image_prefix,),
                 highlight_budget=highlight_budget,
             )
@@ -1108,6 +1109,7 @@ def rerender_gists(app, *, external_id=None, dry_run=False):
             if kind == "markdown":
                 rendered = render_markdown_result(
                     row["content"],
+                    filename=row["filename"],
                     allowed_image_src_prefixes=(_image_prefix(app),),
                     highlight_budget=budget,
                 )

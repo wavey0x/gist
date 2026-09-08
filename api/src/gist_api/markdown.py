@@ -20,7 +20,7 @@ from lxml import etree, html
 
 logger = logging.getLogger(__name__)
 
-SANITIZER_CONFIG_VERSION = "2026-09-01.1"
+SANITIZER_CONFIG_VERSION = "2026-09-08.1"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
 ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.3"
 MERMAID_RENDER_VERSION = "2026-07-08.2"
@@ -71,8 +71,10 @@ ALLOWED_TAGS = {
     "p",
     "pre",
     "s",
+    "section",
     "span",
     "strong",
+    "sup",
     "table",
     "tbody",
     "td",
@@ -270,7 +272,7 @@ def _node_binary():
 def _render_gfm(markdown):
     return cmarkgfm.github_flavored_markdown_to_html(
         markdown,
-        options=Options.CMARK_OPT_UNSAFE,
+        options=Options.CMARK_OPT_UNSAFE | Options.CMARK_OPT_FOOTNOTES,
     )
 
 
@@ -745,6 +747,21 @@ def _post_process_links(root):
 
 def _safe_anchor_id(value):
     return bool(value) and not any(character.isspace() for character in value)
+
+
+def _scope_footnote_ids(root, filename):
+    # Several independently rendered Markdown files can share one HTML page.
+    prefix = "footnote-" + hashlib.sha256(filename.encode("utf-8")).hexdigest()[:16] + "-"
+    targets = root.xpath(
+        ".//section[@data-footnotes]//li[@id] | .//a[@data-footnote-ref][@id]"
+    )
+    ids = {element.attrib["id"]: prefix + element.attrib["id"] for element in targets}
+    for element in targets:
+        element.attrib["id"] = ids[element.attrib["id"]]
+    for link in root.iter("a"):
+        href = link.attrib.get("href", "")
+        if href.startswith("#") and href[1:] in ids:
+            link.attrib["href"] = "#" + ids[href[1:]]
 
 
 def _heading_slug(value):
@@ -1577,6 +1594,12 @@ def _allow_attribute(
     mermaid_placeholder_languages=frozenset(),
 ):
     if name == "class":
+        if (tag, value) in {
+            ("section", "footnotes"),
+            ("sup", "footnote-ref"),
+            ("a", "footnote-backref"),
+        }:
+            return True
         return tag in {"a", "code", "div", "li", "pre", "span", "ul"} and _safe_class_value(
             value
         )
@@ -1584,7 +1607,19 @@ def _allow_attribute(
     if name == "dir":
         return value in SAFE_DIR_VALUES
 
+    if tag == "section":
+        return name == "data-footnotes" and value == ""
+
+    if tag == "li" and name == "id":
+        return _safe_anchor_id(value)
+
     if tag == "a":
+        if name in {"data-footnote-ref", "data-footnote-backref"}:
+            return value == ""
+        if name == "data-footnote-backref-idx":
+            return re.fullmatch(r"[0-9]+(?:-[0-9]+)?", value) is not None
+        if name == "aria-label":
+            return True
         if name in {"href", "title"}:
             return True
         if name == "id":
@@ -1628,6 +1663,7 @@ def _allow_attribute(
 def render_markdown_result(
     markdown,
     *,
+    filename=None,
     allowed_image_src_prefixes=(),
     highlight_budget=None,
 ):
@@ -1647,6 +1683,8 @@ def render_markdown_result(
     )
     _post_process_links(root)
     _post_process_ethereum_entities(root)
+    if filename is not None:
+        _scope_footnote_ids(root, filename)
     _add_heading_ids(root)
     processed_html = _serialize_fragment(root)
 

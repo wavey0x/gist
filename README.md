@@ -11,7 +11,8 @@ gists; anyone with a random gist URL can read the rendered files and raw text.
 
 - Server-rendered public gist pages.
 - GitHub-like multi-file presentation for Markdown, source code, and plain text.
-- GitHub-flavored Markdown rendering.
+- GitHub-flavored Markdown rendering, including the documented GitHub footnote
+  extension (`[^label]` references and `[^label]: ...` definitions).
 - GitHub-style inline, block, and fenced mathematical expressions.
 - GitHub-style Mermaid diagram rendering for Markdown fences.
 - Sanitized stored HTML.

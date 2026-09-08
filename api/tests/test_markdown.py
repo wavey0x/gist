@@ -11,7 +11,7 @@ from gist_api.markdown import (
 from gist_api.service import rerender_gists
 from lxml import html as html_parser
 
-from .conftest import create_gist, make_key
+from .conftest import auth_header, create_gist, make_key
 
 
 FIXTURE_DIR = Path(__file__).with_name("fixtures")
@@ -1040,7 +1040,7 @@ def test_rerender_gists_activates_external_images_without_changing_source(client
         'loading="lazy" decoding="async" referrerpolicy="no-referrer">'
         in after["rendered_html"]
     )
-    assert "sanitizer/2026-09-01.1" in after["render_version"]
+    assert f"sanitizer/{markdown_module.SANITIZER_CONFIG_VERSION}" in after["render_version"]
 
 
 def test_rerender_gists_uses_current_ethereum_rendering(client, app):
@@ -1091,3 +1091,93 @@ def test_rerender_gists_uses_current_ethereum_rendering(client, app):
 
     assert "eth-address" in row["rendered_html"]
     assert "ethereum-entities/on@" in row["render_version"]
+
+
+def _assert_footnote_navigation(rendered):
+    root = html_parser.fragment_fromstring(rendered, create_parent="div")
+    ids = root.xpath(".//*[@id]/@id")
+    assert len(ids) == len(set(ids))
+    links = root.xpath(".//a[@data-footnote-ref or @data-footnote-backref]")
+    assert links
+    for link in links:
+        assert link.attrib["href"].startswith("#")
+        assert link.attrib["href"][1:] in ids
+    return root
+
+
+def test_footnotes_preserve_repeated_references_multiline_content_and_backlinks():
+    source = (
+        "Claim.[^source] Again.[^source] Second.[^other]\n\n"
+        "[^source]: Publisher, [Terms](https://example.org/terms).\n\n"
+        "    A second paragraph with **emphasis**.\n\n"
+        "[^other]: Another source.\n"
+    )
+    rendered = render_markdown_result(source, filename="README.md").html
+    root = _assert_footnote_navigation(rendered)
+    assert "[^source]" not in rendered
+    assert len(root.xpath(".//sup[@class='footnote-ref']/a")) == 3
+    assert len(root.xpath(".//section[@class='footnotes'][@data-footnotes]/ol/li")) == 2
+    refs = root.xpath(".//a[@data-footnote-ref]")
+    assert [a.text for a in refs] == ["1", "1", "2"]
+    assert refs[0].attrib["href"] == refs[1].attrib["href"]
+    backs = root.xpath(".//a[@data-footnote-backref]")
+    assert len(backs) == 3
+    assert all(a.attrib.get("aria-label") for a in backs)
+    assert root.xpath(".//section//strong/text()") == ["emphasis"]
+    assert root.xpath(".//section//a[@href='https://example.org/terms']")
+
+
+def test_footnote_syntax_in_code_and_missing_definitions_stays_literal():
+    rendered = render_markdown_result(
+        "Undefined.[^missing] `[^inline]`\n\n"
+        "```unknownlang\n[^code]: literal\n```\n"
+    ).html
+    root = html_parser.fragment_fromstring(rendered, create_parent="div")
+    assert "[^missing]" in root.text_content()
+    assert root.xpath(".//code/text()") == ["[^inline]", "[^code]: literal\n"]
+    assert not root.xpath(".//section[@data-footnotes]")
+
+
+def test_footnotes_do_not_allow_scriptable_content_or_arbitrary_attributes():
+    rendered = render_markdown_result(
+        "Claim.[^unsafe]\n\n"
+        "[^unsafe]: [bad](javascript:alert%281%29) "
+        '<sup onclick="bad()" style="color:red">x</sup> '
+        '<a href="#x" data-other="bad" onfocus="bad()">x</a>\n\n'
+        '<section class="footnotes" onclick="bad()"><script>bad()</script></section>'
+    ).html
+    root = _assert_footnote_navigation(rendered)
+    assert not root.xpath(".//script | .//*[@onclick or @onfocus or @style or @data-other]")
+    assert "javascript:" not in rendered
+    assert "bad()" not in rendered
+
+
+def test_multifile_footnotes_and_rerender_preserve_source_and_revision(client, app):
+    key = make_key(app, name="footnotes")
+    source = "Claim.[^source] Again.[^source]\n\n[^source]: A source.\n"
+    created = client.post(
+        "/api/v1/gists",
+        headers=auth_header(key),
+        json={"files": {name: {"content": source} for name in ["README.md", "notes.md"]}},
+    )
+    assert created.status_code == 201
+    gist_id = created.get_json()["id"]
+    url = f"/api/v1/gists/{gist_id}/render"
+    before = client.get(url).get_json()
+    fragments = [file["rendered_html"] for file in before["files"].values()]
+    for fragment in fragments:
+        _assert_footnote_navigation(fragment)
+    _assert_footnote_navigation("".join(fragments))
+
+    with gist_connection(app) as conn:
+        with conn:
+            conn.execute(
+                "UPDATE gist_revision_files SET rendered_html = ?, render_version = ?",
+                ("<p>Old rendering</p>", "old"),
+            )
+    rerender_gists(app, external_id=gist_id, dry_run=True)
+    assert all(f["rendered_html"] == "<p>Old rendering</p>"
+               for f in client.get(url).get_json()["files"].values())
+    rerender_gists(app, external_id=gist_id)
+    after = client.get(url).get_json()
+    assert after == before
