@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "test:offline": "node --test tests/offline.test.mjs",
+    "test:mermaid": "node --test tests/mermaid-theme.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

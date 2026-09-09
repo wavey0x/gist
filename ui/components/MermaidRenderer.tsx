@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { mermaidConfig } from "../lib/mermaid-config";
 
 const MARKDOWN_BODY_SELECTOR = "article.markdown-body";
 const MERMAID_RENDER_SELECTOR = ".js-mermaid-render";
@@ -112,34 +113,6 @@ function mermaidRenderId(
 ) {
   const safeGistId = gistId.replace(/[^A-Za-z0-9_-]/g, "-");
   return `wg-mermaid-${safeGistId}-${revisionNumber}-${filenameIdentifier(filename)}-${diagramIndex}`;
-}
-
-function configureMermaid(mermaid: MermaidApi, theme: string) {
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: "strict",
-    secure: [
-      "secure",
-      "securityLevel",
-      "startOnLoad",
-      "maxTextSize",
-      "suppressErrorRendering",
-      "maxEdges",
-      "themeCSS",
-      "themeVariables",
-      "fontFamily",
-      "altFontFamily",
-      "dompurifyConfig"
-    ],
-    suppressErrorRendering: true,
-    maxTextSize: 50000,
-    deterministicIds: true,
-    deterministicIDSeed: "wavey-gist",
-    theme,
-    logLevel: "fatal",
-    fontFamily:
-      'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-  });
 }
 
 function normalizeMermaidSource(source: string) {
@@ -938,7 +911,7 @@ export function MermaidRenderer({
         return;
       }
 
-      configureMermaid(mermaid, theme);
+      mermaid.initialize(mermaidConfig(theme));
       const nonce = cspNonce();
       for (const { container, diagramIndex, filename } of renderableContainers) {
         if (cancelled) {
