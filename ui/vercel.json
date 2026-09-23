@@ -4,7 +4,6 @@
   "env": {
     "GIST_API_BASE_URL": "https://api.wavey.info"
   },
-  "installCommand": "npm ci --prefix ui",
-  "buildCommand": "npm run build --prefix ui",
-  "outputDirectory": "ui/.next"
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build"
 }
