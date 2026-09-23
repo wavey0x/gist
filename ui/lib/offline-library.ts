@@ -5,6 +5,7 @@ import {
   validateGistId,
   type PublicGistPayload
 } from "./gists";
+import { galleryOptions, prepareGalleryImages } from "../public/gallery-model.mjs";
 
 export const OFFLINE_DB_NAME = "waveygist-offline";
 export const OFFLINE_DB_VERSION = 1;
@@ -23,7 +24,6 @@ export const DEFAULT_OFFLINE_BYTE_LIMIT = OFFLINE_BYTE_LIMITS[1];
 
 const SETTINGS_KEY = "library";
 const STALE_RECONCILIATION_MS = 5 * 60 * 1000;
-const IMAGE_PATH_RE = /^\/api\/v1\/images\/(img_[A-Za-z0-9_-]{16,64})$/;
 const SHA256_RE = /^[a-f0-9]{64}$/;
 
 type OfflineEntryKind = "gist" | "image" | "audio";
@@ -55,6 +55,7 @@ export type OfflineEntry = {
   lastViewedAt?: string;
   lastPlayedAt?: string;
   parents?: string[];
+  imageIds?: string[];
 };
 
 export type OfflineLibrarySummary = {
@@ -112,6 +113,7 @@ const runtimeState: RuntimeState = {
 };
 
 let databasePromise: Promise<IDBDatabase> | null = null;
+const pendingCacheWrites = new Set<string>();
 let reconciliationPromise: Promise<void> | null = null;
 let reconciliationController: AbortController | null = null;
 
@@ -427,6 +429,22 @@ async function putResponse(
   }
 }
 
+async function writeCachedEntry(entry: OfflineEntry, bytes: ArrayBuffer, headers: HeadersInit) {
+  const cacheName = cacheNameForEntry(entry);
+  pendingCacheWrites.add(entry.cacheKey);
+  try {
+    await putResponse(cacheName, entry.cacheKey, bytes, headers);
+    try {
+      await writeEntry(entry);
+    } catch (error) {
+      await (await caches.open(cacheName)).delete(entry.cacheKey);
+      throw error;
+    }
+  } finally {
+    pendingCacheWrites.delete(entry.cacheKey);
+  }
+}
+
 function isManifestNarration(value: unknown): value is ManifestNarration {
   if (!value || typeof value !== "object") {
     return false;
@@ -486,41 +504,26 @@ function normalizeManifest(value: unknown): OfflineManifest {
   return manifest as OfflineManifest;
 }
 
-function offlineImageId(value: string) {
-  try {
-    const url = new URL(value, window.location.origin);
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
-      return null;
-    }
-    const match = IMAGE_PATH_RE.exec(url.pathname);
-    return match?.[1] ?? null;
-  } catch {
-    return null;
-  }
-}
-
 function prepareOfflinePayload(gist: PublicGistPayload) {
   const payload = JSON.parse(JSON.stringify(gist)) as PublicGistPayload;
-  const imageIds = new Set<string>();
-  for (const file of Object.values(payload.files)) {
-    if (file.kind !== "markdown" || !file.rendered_html.includes("<img")) {
-      continue;
-    }
-    const document = new DOMParser().parseFromString(
-      `<body>${file.rendered_html}</body>`,
-      "text/html"
+  return prepareGalleryImages(payload, galleryOptions(document), DOMParser);
+}
+
+async function cachedGistIsComplete(entry: OfflineEntry) {
+  const cache = await caches.open(OFFLINE_CONTENT_CACHE);
+  const response = await cache.match(entry.cacheKey);
+  if (!response) return false;
+  if (!entry.imageIds) {
+    // Earlier snapshots discarded image fragments and did not save link-only images.
+    const payload = await response.json() as PublicGistPayload;
+    return !Object.values(payload.files).some((file) =>
+      file.kind === "markdown" && /#wg-(?:gallery|image)/.test(file.content)
     );
-    for (const image of Array.from(document.body.querySelectorAll("img[src]"))) {
-      const imageId = offlineImageId(image.getAttribute("src") ?? "");
-      if (!imageId) {
-        continue;
-      }
-      imageIds.add(imageId);
-      image.setAttribute("src", `/api/images/${imageId}`);
-    }
-    file.rendered_html = document.body.innerHTML;
   }
-  return { payload, imageIds: [...imageIds] };
+  for (const imageId of entry.imageIds) {
+    if (!(await readEntry(imageEntryKey(imageId))) || !(await cache.match(imageCacheKey(imageId)))) return false;
+  }
+  return true;
 }
 
 async function cacheImage(
@@ -532,7 +535,7 @@ async function cacheImage(
   signal?.throwIfAborted();
   const entryKey = imageEntryKey(imageId);
   const existing = await readEntry(entryKey);
-  if (existing) {
+  if (existing && await (await caches.open(OFFLINE_CONTENT_CACHE)).match(existing.cacheKey)) {
     const parents = Array.from(new Set([...(existing.parents ?? []), parentKey]));
     await writeEntry({
       ...existing,
@@ -581,19 +584,13 @@ async function cacheImage(
     entryPriority(entry),
     byteLimit
   );
-  await putResponse(OFFLINE_CONTENT_CACHE, cacheKey, bytes, {
+  await writeCachedEntry(entry, bytes, {
     "Content-Type": contentType,
     ...(response.headers.get("etag")
       ? { ETag: response.headers.get("etag") as string }
       : {}),
     "Content-Length": String(bytes.byteLength)
   });
-  try {
-    await writeEntry(entry);
-  } catch (error) {
-    await (await caches.open(OFFLINE_CONTENT_CACHE)).delete(cacheKey);
-    throw error;
-  }
 }
 
 async function storeGist(
@@ -610,7 +607,7 @@ async function storeGist(
   const entryKey = gistEntryKey(gist.id, gist.revision_number);
   const existing = await readEntry(entryKey);
   const now = new Date().toISOString();
-  if (existing?.identity === gist.snapshot_sha256) {
+  if (existing?.identity === gist.snapshot_sha256 && await cachedGistIsComplete(existing)) {
     await writeEntry({
       ...existing,
       owned: existing.owned || flags.owned,
@@ -640,9 +637,10 @@ async function storeGist(
     cacheKey,
     gistId: gist.id,
     revisionNumber: gist.revision_number,
-    owned: flags.owned,
-    recentlyViewed: flags.recentlyViewed,
-    accountRequested: Boolean(flags.accountRequested),
+    owned: Boolean(existing?.owned || flags.owned),
+    recentlyViewed: Boolean(existing?.recentlyViewed || flags.recentlyViewed),
+    accountRequested: Boolean(existing?.accountRequested || flags.accountRequested),
+    imageIds: prepared.imageIds,
     identity: gist.snapshot_sha256,
     byteSize: bytes.byteLength,
     displayTitle: gist.display_title,
@@ -657,18 +655,11 @@ async function storeGist(
     entryPriority(entry),
     byteLimit
   );
-  await putResponse(OFFLINE_CONTENT_CACHE, cacheKey, bytes, {
+  await writeCachedEntry(entry, bytes, {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": String(bytes.byteLength),
     "X-Waveygist-Snapshot": gist.snapshot_sha256
   });
-  signal?.throwIfAborted();
-  try {
-    await writeEntry(entry);
-  } catch (error) {
-    await (await caches.open(OFFLINE_CONTENT_CACHE)).delete(cacheKey);
-    throw error;
-  }
 
   for (const imageId of prepared.imageIds) {
     try {
@@ -695,7 +686,7 @@ async function fetchAndStoreManifestGist(
   signal.throwIfAborted();
   const entryKey = gistEntryKey(item.id, item.revision_number);
   const existing = await readEntry(entryKey);
-  if (existing?.identity === item.snapshot_sha256) {
+  if (existing?.identity === item.snapshot_sha256 && await cachedGistIsComplete(existing)) {
     await writeEntry({
       ...existing,
       owned: existing.owned || item.owned,
@@ -799,7 +790,7 @@ async function cacheNarration(
     entryPriority(entry),
     byteLimit
   );
-  await putResponse(OFFLINE_AUDIO_CACHE, cacheKey, bytes, {
+  await writeCachedEntry(entry, bytes, {
     "Accept-Ranges": "bytes",
     "Content-Length": String(bytes.byteLength),
     "Content-Type": "audio/mpeg",
@@ -807,12 +798,6 @@ async function cacheNarration(
       ? { ETag: response.headers.get("etag") as string }
       : {})
   });
-  try {
-    await writeEntry(entry);
-  } catch (error) {
-    await (await caches.open(OFFLINE_AUDIO_CACHE)).delete(cacheKey);
-    throw error;
-  }
 }
 
 async function auditOfflineStorage() {
@@ -820,7 +805,7 @@ async function auditOfflineStorage() {
   const indexedCacheKeys = new Set(entries.map((entry) => entry.cacheKey));
   for (const entry of entries) {
     const cache = await caches.open(cacheNameForEntry(entry));
-    if (!(await cache.match(entry.cacheKey))) {
+    if (!pendingCacheWrites.has(entry.cacheKey) && !(await cache.match(entry.cacheKey))) {
       await removeEntryRow(entry.key);
     }
   }
@@ -828,8 +813,11 @@ async function auditOfflineStorage() {
   for (const cacheName of [OFFLINE_CONTENT_CACHE, OFFLINE_AUDIO_CACHE]) {
     const cache = await caches.open(cacheName);
     for (const request of await cache.keys()) {
-      if (!indexedCacheKeys.has(request.url)) {
-        await cache.delete(request);
+      if (!indexedCacheKeys.has(request.url) && !pendingCacheWrites.has(request.url)) {
+        // Saving a viewed article can overlap startup reconciliation. Recheck
+        // metadata before treating a newly written response as an orphan.
+        const exists = (await readEntries()).some((entry) => entry.cacheKey === request.url);
+        if (!exists && !pendingCacheWrites.has(request.url)) await cache.delete(request);
       }
     }
   }
@@ -912,6 +900,21 @@ function manifestTargetCount(
   return targets.size;
 }
 
+async function refreshIncompleteSavedGists(byteLimit: number, signal: AbortSignal) {
+  for (const entry of await readEntries()) {
+    if (entry.kind !== "gist" || !entry.recentlyViewed || await cachedGistIsComplete(entry)) continue;
+    signal.throwIfAborted();
+    const response = await fetch(entry.cacheKey, { cache: "no-store", signal });
+    if (!response.ok) continue;
+    const gist = normalizePublicGistPayload(entry.gistId, await response.json());
+    await storeGist(gist, {
+      owned: entry.owned,
+      recentlyViewed: true,
+      accountRequested: entry.accountRequested
+    }, byteLimit, signal);
+  }
+}
+
 async function performReconciliation(signal: AbortSignal) {
   const settings = await readSettings();
   if (!settings.enabled || signal.aborted) {
@@ -939,6 +942,7 @@ async function performReconciliation(signal: AbortSignal) {
     markConnectivity(true);
     if (response.status === 401) {
       await clearAccountScopedEntries();
+      await refreshIncompleteSavedGists(settings.byteLimit, signal);
       await writeSettings({
         ...(await readSettings()),
         lastReconciledAt: new Date().toISOString(),
@@ -993,6 +997,7 @@ async function performReconciliation(signal: AbortSignal) {
     }
 
     signal.throwIfAborted();
+    await refreshIncompleteSavedGists(refreshedSettings.byteLimit, signal);
     await removeSupersededAccountEntries(manifest);
     await auditOfflineStorage();
     signal.throwIfAborted();

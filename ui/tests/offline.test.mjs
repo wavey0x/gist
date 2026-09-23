@@ -64,9 +64,16 @@ function workerHarness(fetchImpl) {
         async keys() {
           return [...store.keys()].map((url) => new Request(url));
         },
-        async match(value) {
+        async match(value, options = {}) {
           const key = typeof value === "string" ? value : value.url;
-          return store.get(new URL(key, "https://gist.wavey.info").href)?.clone();
+          const url = new URL(key, "https://gist.wavey.info");
+          if (options.ignoreSearch) {
+            for (const [stored, response] of store) {
+              const candidate = new URL(stored);
+              if (candidate.origin === url.origin && candidate.pathname === url.pathname) return response.clone();
+            }
+          }
+          return store.get(url.href)?.clone();
         },
         async put(value, response) {
           const key = typeof value === "string" ? value : value.url;
@@ -203,7 +210,12 @@ test("install precaches the complete canonical shell", async () => {
     "/github-markdown.css",
     "/markdown-theme.css",
     "/app.css",
-    "/syntax.css"
+    "/syntax.css",
+    "/gallery-model.mjs",
+    "/gallery-viewer.mjs",
+    "/gallery-viewer.css",
+    "/vendor/photoswipe/photoswipe.esm.js",
+    "/vendor/photoswipe/photoswipe.css"
   ]);
   assert.deepEqual(
     harness.addedCacheModes,
@@ -325,6 +337,19 @@ test("shared shell assets revalidate online and fall back offline", async () => 
     }
   });
   assert.equal(await (await responsePromise).text(), "fresh");
+});
+
+test("saved immutable images open offline with author query strings", async () => {
+  const harness = workerHarness();
+  const url = "https://gist.wavey.info/api/images/img_1234567890abcdef";
+  const cache = await harness.caches.open("waveygist-content-v1");
+  await cache.put(url, new Response("image bytes"));
+  let responsePromise;
+  harness.listeners.get("fetch")({
+    request: new Request(`${url}?source=report`),
+    respondWith(value) { responsePromise = value; }
+  });
+  assert.equal(await (await responsePromise).text(), "image bytes");
 });
 
 test("cached audio supports normal, open, suffix, and invalid ranges", async () => {

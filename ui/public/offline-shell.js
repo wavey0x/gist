@@ -1,6 +1,22 @@
 (() => {
   "use strict";
 
+  let disposeGallery = () => {};
+  let galleryRender = 0;
+  function refreshGalleries() {
+    const render = ++galleryRender;
+    disposeGallery();
+    disposeGallery = () => {};
+    const roots = [...document.querySelectorAll("article.markdown-body")]
+      .filter((root) => !root.closest("[hidden]"));
+    if (!roots.length) return;
+    void import("/gallery-viewer.mjs").then(({ mountGallery }) => {
+      if (render === galleryRender) disposeGallery = mountGallery(roots);
+    }).catch(() => {});
+  }
+  window.addEventListener("pagehide", () => { ++galleryRender; disposeGallery(); });
+  window.addEventListener("pageshow", (event) => { if (event.persisted) refreshGalleries(); });
+
   const DATABASE_NAME = "waveygist-offline";
   const DATABASE_VERSION = 1;
   const CONTENT_CACHE = "waveygist-content-v1";
@@ -1419,6 +1435,7 @@
         "aria-label",
         `${rawVisible ? "View rendered" : "View raw"} ${file.filename}`
       );
+      refreshGalleries();
     }
 
     disclosure.addEventListener("click", () => {
@@ -1430,6 +1447,7 @@
         "aria-label",
         `${collapsed ? "Expand" : "Collapse"} ${file.filename}`
       );
+      refreshGalleries();
     });
     raw.addEventListener("click", () => {
       rawVisible = !rawVisible;
@@ -1629,6 +1647,7 @@
       if (!rawVisible) {
         setupEntityGroupHover(nextContent);
       }
+      refreshGalleries();
     }
 
     const toolbar = await articleToolbar(payload, singleFile, (visible) => {

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import "katex/dist/katex.min.css";
 import { AppHeader } from "../components/AppHeader";
 import { PwaRuntime } from "../components/PwaRuntime";
+import { resolveApiBaseUrl } from "../lib/api-base";
 
 function resolveMetadataBase() {
   return new URL(
@@ -87,11 +88,14 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <meta name="wg-image-origin" content={new URL(resolveApiBaseUrl()).origin} />
         {nonce ? <meta name="csp-nonce" content={nonce} /> : null}
         <link rel="stylesheet" href="/github-markdown.css" />
         <link rel="stylesheet" href="/markdown-theme.css" />
         <link rel="stylesheet" href="/app.css" />
         <link rel="stylesheet" href="/syntax.css" />
+        <link rel="stylesheet" href="/vendor/photoswipe/photoswipe.css" />
+        <link rel="stylesheet" href="/gallery-viewer.css" />
         <script
           nonce={nonce}
           suppressHydrationWarning

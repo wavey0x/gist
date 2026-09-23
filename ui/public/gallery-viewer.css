@@ -1,0 +1,107 @@
+.wg-gallery {
+  --pswp-bg: #101215;
+  --pswp-icon-color: #f5f5f5;
+  --pswp-icon-color-secondary: #101215;
+  --pswp-icon-stroke-color: #101215;
+  --pswp-icon-stroke-width: 1px;
+  color: #f5f5f5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.wg-gallery .pswp__top-bar {
+  top: env(safe-area-inset-top, 0px);
+  padding: 0 max(8px, env(safe-area-inset-right, 0px)) 0
+    max(8px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+}
+.wg-gallery .pswp__counter {
+  font-size: 13px;
+  opacity: 0.75;
+  text-shadow: none;
+}
+.wg-gallery .pswp__button {
+  opacity: 0.8;
+}
+.wg-gallery .pswp__button:hover {
+  opacity: 1;
+}
+.wg-gallery .pswp__button:focus-visible,
+.wg-gallery a:focus-visible,
+.wg-gallery button:focus-visible,
+.wg-gallery-trigger:focus-visible {
+  outline: 2px solid #8ab4f8;
+  outline-offset: 3px;
+}
+.wg-gallery-original {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  margin: 6px 12px;
+  color: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  opacity: 0.8;
+}
+.wg-gallery-original:hover {
+  text-decoration: underline;
+  opacity: 1;
+}
+.wg-gallery-caption {
+  position: absolute;
+  inset: auto 0 0;
+  box-sizing: border-box;
+  max-height: 28vh;
+  overflow: auto;
+  padding: 12px max(24px, env(safe-area-inset-right, 0px))
+    max(20px, env(safe-area-inset-bottom, 0px))
+    max(24px, env(safe-area-inset-left, 0px));
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #dedfe1;
+}
+.wg-gallery-caption[hidden] {
+  display: none;
+}
+.wg-gallery-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.wg-gallery .pswp__content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wg-gallery-message {
+  max-width: 32rem;
+  padding: 24px;
+  text-align: center;
+  line-height: 1.5;
+}
+.wg-gallery-retry {
+  border: 1px solid #777;
+  border-radius: 6px;
+  padding: 10px 20px;
+  min-height: 44px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.wg-gallery-trigger:has(> img) {
+  cursor: zoom-in;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wg-gallery *,
+  .wg-gallery *::before,
+  .wg-gallery *::after {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}

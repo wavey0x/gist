@@ -47,7 +47,9 @@ async function proxyImage(request: Request, { params }: RouteProps) {
       headers.set(name, value);
     }
   }
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  headers.set("Cache-Control", backendResponse.ok || backendResponse.status === 304
+    ? "public, max-age=31536000, immutable"
+    : "no-store");
   return new NextResponse(
     request.method === "HEAD" ? null : backendResponse.body,
     { status: backendResponse.status, headers }

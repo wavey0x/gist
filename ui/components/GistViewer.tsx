@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { mountGallery } from "../public/gallery-viewer.mjs";
 import { getGistHeaderTitle, getTopLevelHeading } from "../lib/gist-title";
 import {
   orderedGistFiles,
@@ -223,6 +224,11 @@ export function GistViewer({
   const files = orderedGistFiles(gist);
   const singleFile = files.length === 1 ? files[0] : null;
   const primaryFile = gist.files[gist.primary_file];
+
+  useEffect(() => {
+    if (viewMode !== "files" || !contentRef.current) return;
+    return mountGallery(contentRef.current.querySelectorAll<HTMLElement>("article.markdown-body"));
+  }, [gist.id, gist.revision_number, gist.snapshot_sha256, viewMode, collapsedFilenames]);
 
   useEffect(() => {
     if (!copiedFilename) {

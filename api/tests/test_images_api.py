@@ -438,3 +438,31 @@ def test_multipart_patch_can_append_image_to_existing_gist(client, app):
     image = body["images"][0]
     assert body["revision_number"] == 2
     assert body["files"]["README.md"]["content"] == f"# Start\n\n![patch.png]({image['url']})"
+
+
+@pytest.mark.parametrize("marker", ["wg-image", "wg-gallery", "wg-gallery=trip-2"])
+def test_gallery_markers_and_captions_survive_attachment_publish_and_render(client, app, marker):
+    from lxml import html
+
+    key = make_key(app)
+    markdown = (
+        f'# Photos\n\n[01][photo]\n\n'
+        f'![Lake](attachment:lake.png#{marker} "Lake at dawn")\n\n'
+        f'[![Thumbnail](https://example.com/small.png)][photo]\n\n'
+        f'[photo]: attachment:lake.png#{marker} "Photo 05"\n'
+    )
+    response = client.post(
+        "/api/v1/gists",
+        headers=auth_header(key),
+        data={"payload": _gist_payload(markdown), "images[]": _upload_tuple(filename="lake.png")},
+    )
+    assert response.status_code == 201
+    body = response.get_json()
+    image_url = body["images"][0]["url"]
+    rendered = client.get(f'/api/v1/gists/{body["id"]}/render').get_json()
+    root = html.fragment_fromstring(rendered["files"]["README.md"]["rendered_html"], create_parent="div")
+    assert [node.get("href") for node in root.xpath(".//a")] == [f"{image_url}#{marker}"] * 2
+    assert [node.get("title") for node in root.xpath(".//a")] == ["Photo 05"] * 2
+    assert root.xpath(".//img")[0].get("src") == f"{image_url}#{marker}"
+    assert root.xpath(".//img")[0].get("alt") == "Lake"
+    assert "attachment:" not in rendered["files"]["README.md"]["content"]

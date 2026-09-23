@@ -4,12 +4,14 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/prepare-gallery-assets.mjs && next dev",
+    "build": "node scripts/prepare-gallery-assets.mjs && next build",
     "start": "next start",
     "test:offline": "node --test tests/offline.test.mjs",
     "test:mermaid": "node --test tests/mermaid-theme.test.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:gallery": "node --test tests/gallery.test.mjs",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "diff": "^9.0.0",
@@ -17,6 +19,7 @@
     "lucide-react": "^0.555.0",
     "mermaid": "^11.17.2",
     "next": "^16.2.11",
+    "photoswipe": "5.4.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"
   },
@@ -26,6 +29,7 @@
     "sharp": "0.35.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

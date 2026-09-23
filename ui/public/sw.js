@@ -6,7 +6,12 @@ const SHARED_SHELL_ASSETS = [
   "/github-markdown.css",
   "/markdown-theme.css",
   "/app.css",
-  "/syntax.css"
+  "/syntax.css",
+  "/gallery-model.mjs",
+  "/gallery-viewer.mjs",
+  "/gallery-viewer.css",
+  "/vendor/photoswipe/photoswipe.esm.js",
+  "/vendor/photoswipe/photoswipe.css"
 ];
 const OFFLINE_SHELL_ASSETS = [
   SHELL_URL,
@@ -195,11 +200,11 @@ async function cachedAudioResponse(request) {
   );
 }
 
-async function networkWithCachedFallback(request, cacheName) {
+async function networkWithCachedFallback(request, cacheName, ignoreSearch = false) {
   try {
     return await fetch(request);
   } catch (error) {
-    const cached = await (await caches.open(cacheName)).match(request.url);
+    const cached = await (await caches.open(cacheName)).match(request.url, { ignoreSearch });
     if (cached) {
       return cached;
     }
@@ -291,7 +296,7 @@ self.addEventListener("fetch", (event) => {
     url.origin === self.location.origin &&
     IMAGE_PATH_RE.test(url.pathname)
   ) {
-    event.respondWith(networkWithCachedFallback(request, CONTENT_CACHE));
+    event.respondWith(networkWithCachedFallback(request, CONTENT_CACHE, true));
   }
 });
 
