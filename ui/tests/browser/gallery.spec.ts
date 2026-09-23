@@ -532,3 +532,20 @@ test("temporary image failures are not cached as immutable responses", async ({
   expect(retried.status()).toBe(200);
   expect(retried.headers()["content-type"]).toBe("image/png");
 });
+
+test("a preview can be dismissed immediately, including after Forward", async ({
+  page
+}) => {
+  await visit(page, "GallerySingle001");
+  await page.locator(".wg-gallery-trigger").first().click();
+  await page
+    .getByRole("button", { name: "Close", exact: true })
+    .click({ force: true });
+  await expect(page.locator(".pswp")).toHaveCount(0);
+  await page.goForward();
+  await page
+    .getByRole("button", { name: "Close", exact: true })
+    .click({ force: true });
+  await expect(page.locator(".pswp")).toHaveCount(0);
+  await expect(page.locator(".wg-gallery-trigger").first()).toBeFocused();
+});

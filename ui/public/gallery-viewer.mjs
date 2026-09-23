@@ -145,7 +145,9 @@ export function mountGallery(roots, options = galleryOptions(document)) {
       tapAction: "toggle-controls",
       doubleTapAction: "zoom",
       showHideAnimationType: "fade",
-      showAnimationDuration: reducedMotion ? 0 : 160,
+      // PhotoSwipe ignores dismissal while its opening transition is running.
+      // Open immediately so a quick preview can always be closed right away.
+      showAnimationDuration: 0,
       hideAnimationDuration: reducedMotion ? 0 : 160,
       zoomAnimationDuration: reducedMotion ? 0 : 200,
       initialZoomLevel: "fit",

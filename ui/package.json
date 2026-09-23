@@ -18,7 +18,7 @@
     "katex": "^0.16.47",
     "lucide-react": "^0.555.0",
     "mermaid": "^11.17.2",
-    "next": "^16.2.11",
+    "next": "^16.3.6",
     "photoswipe": "5.4.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"
@@ -26,7 +26,7 @@
   "overrides": {
     "dompurify": "3.4.14",
     "postcss": "^8.5.15",
-    "sharp": "0.35.3"
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
