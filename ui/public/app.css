@@ -1586,6 +1586,18 @@ button {
   animation: article-audio-spin 700ms linear infinite;
 }
 
+.article-audio-button {
+  position: relative;
+}
+
+.article-audio-offline-check {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  border-radius: 50%;
+  background: var(--button-bg);
+}
+
 .article-audio-button-ready {
   border-color: rgb(var(--audio-accent-rgb) / 45%);
   box-shadow:

@@ -116,6 +116,7 @@ let databasePromise: Promise<IDBDatabase> | null = null;
 const pendingCacheWrites = new Set<string>();
 let reconciliationPromise: Promise<void> | null = null;
 let reconciliationController: AbortController | null = null;
+let reconciliationRequested = false;
 
 class OfflineStorageFullError extends Error {
   constructor() {
@@ -1024,10 +1025,16 @@ export function reconcileOfflineLibrary() {
   if (!offlineSupported()) {
     return Promise.resolve();
   }
+  reconciliationRequested = true;
   if (!reconciliationPromise) {
     const controller = new AbortController();
     reconciliationController = controller;
-    reconciliationPromise = performReconciliation(controller.signal).finally(
+    reconciliationPromise = (async () => {
+      do {
+        reconciliationRequested = false;
+        await performReconciliation(controller.signal);
+      } while (reconciliationRequested && !controller.signal.aborted);
+    })().finally(
       () => {
         if (reconciliationController === controller) {
           reconciliationController = null;
@@ -1040,6 +1047,7 @@ export function reconcileOfflineLibrary() {
 }
 
 async function stopActiveReconciliation() {
+  reconciliationRequested = false;
   reconciliationController?.abort();
   await reconciliationPromise?.catch(() => undefined);
 }

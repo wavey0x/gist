@@ -13,6 +13,7 @@ import type { CSSProperties, ReactNode } from "react";
 import {
   markNarrationPlayed,
   narrationIsCached,
+  OFFLINE_LIBRARY_EVENT,
   reconcileOfflineLibrary
 } from "../lib/offline-library";
 
@@ -33,7 +34,7 @@ type ArticleAudioProps = {
   revisionNumber: number;
 };
 
-type ViewState = "idle" | "preparing" | "ready" | "failed";
+type ViewState = "checking" | "unavailable" | "idle" | "preparing" | "ready" | "failed";
 
 type NavigatorWithAudioSession = Navigator & {
   audioSession?: {
@@ -114,15 +115,16 @@ function isNarrationPayload(value: unknown): value is NarrationPayload {
 
 function wait(milliseconds: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(resolve, milliseconds);
-    signal.addEventListener(
-      "abort",
-      () => {
-        window.clearTimeout(timeout);
-        reject(new DOMException("Aborted", "AbortError"));
-      },
-      { once: true }
-    );
+    signal.throwIfAborted();
+    const abort = () => {
+      window.clearTimeout(timeout);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    signal.addEventListener("abort", abort, { once: true });
   });
 }
 
@@ -134,7 +136,7 @@ export function ArticleAudio({
   gistId,
   revisionNumber
 }: ArticleAudioProps) {
-  const [viewState, setViewState] = useState<ViewState>("idle");
+  const [viewState, setViewState] = useState<ViewState>("checking");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [cachedAvailable, setCachedAvailable] = useState(false);
   const [message, setMessage] = useState("");
@@ -240,7 +242,7 @@ export function ArticleAudio({
     audioRef.current?.pause();
     audioRef.current?.removeAttribute("src");
     audioRef.current?.load();
-    setViewState("idle");
+    setViewState("checking");
     setAudioUrl(null);
     setCachedAvailable(false);
     setMessage("");
@@ -471,10 +473,9 @@ export function ArticleAudio({
   }
 
   function showReady(payload: NarrationPayload, revealPlayer = false) {
-    setCachedAvailable(true);
     setAudioUrl(payload.audio_url ?? null);
     setViewState("ready");
-    setPlayerOpen(revealPlayer);
+    if (revealPlayer) setPlayerOpen(true);
     setMessage("");
     setRetryable(false);
     void reconcileOfflineLibrary();
@@ -501,135 +502,131 @@ export function ArticleAudio({
     }
   }
 
-  async function poll(controller: AbortController) {
-    let attempt = 0;
-    while (!controller.signal.aborted) {
-      await wait(
-        POLL_DELAYS_MS[Math.min(attempt, POLL_DELAYS_MS.length - 1)],
-        controller.signal
-      );
-      const response = await fetch(endpoint, {
-        cache: "no-store",
-        headers: { Accept: "application/json" },
-        signal: controller.signal
-      });
-      const payload = await readPayload(response);
-      if (!response.ok || !payload) {
-        showFailure(response, payload);
-        return;
-      }
-      if (payload.status === "ready") {
-        showReady(payload);
-        return;
-      }
-      if (payload.status === "failed") {
-        showFailure(response, payload);
-        return;
-      }
-      attempt += 1;
-    }
-  }
-
-  async function start() {
-    if (!active || controllerRef.current) {
-      return;
-    }
+  async function syncNarration(method: "GET" | "POST" = "GET", revealPlayer = false) {
+    if (!active || controllerRef.current) return;
     const controller = new AbortController();
     controllerRef.current = controller;
-    setViewState("preparing");
-    setPlayerOpen(false);
-    setMessage(
-      "Preparing audio — it will be saved for offline use when ready."
-    );
-    setRetryable(false);
+    let pending = method === "POST";
+    let attempt = 0;
+    if (pending) {
+      setViewState("preparing");
+      setPlayerOpen(false);
+      setMessage("Preparing audio.");
+      setRetryable(false);
+    }
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json"
-        },
-        body: "{}",
-        signal: controller.signal
-      });
-      const payload = await readPayload(response);
-      if (!response.ok || !payload) {
-        showFailure(response, payload);
-        return;
+      while (!controller.signal.aborted) {
+        try {
+          const response = await fetch(endpoint, {
+            method,
+            cache: "no-store",
+            headers: {
+              Accept: "application/json",
+              ...(method === "POST" ? { "Content-Type": "application/json" } : {})
+            },
+            ...(method === "POST" ? { body: "{}" } : {}),
+            signal: controller.signal
+          });
+          const payload = await readPayload(response);
+          controller.signal.throwIfAborted();
+          if (method === "GET" && response.status === 404) {
+            const cached = await narrationIsCached(gistId, revisionNumber);
+            controller.signal.throwIfAborted();
+            if (!cached) setViewState("idle");
+            setMessage("");
+            setRetryable(false);
+            return;
+          }
+          if (response.status >= 500 || (method === "GET" && response.status === 429)) {
+            throw new Error("Audio status temporarily unavailable");
+          }
+          if (!response.ok || payload?.status === "failed") {
+            // A cached recording remains playable when the server cannot provide it.
+            if (!(await narrationIsCached(gistId, revisionNumber))) {
+              controller.signal.throwIfAborted();
+              showFailure(response, payload);
+            }
+            return;
+          }
+          if (!payload) throw new Error("Invalid audio status");
+          if (payload.status === "ready") {
+            showReady(payload, revealPlayer);
+            return;
+          }
+          pending = true;
+          setViewState("preparing");
+          setMessage("Preparing audio.");
+          setRetryable(false);
+        } catch {
+          controller.signal.throwIfAborted();
+          setMessage("Audio status is temporarily unavailable. Reconnecting…");
+          if (!pending) {
+            setViewState((state) => state === "checking" ? "unavailable" : state);
+            return;
+          }
+        }
+        // After an uncertain POST, only read status; never resubmit automatically.
+        method = "GET";
+        await wait(
+          POLL_DELAYS_MS[Math.min(attempt++, POLL_DELAYS_MS.length - 1)],
+          controller.signal
+        );
       }
-      if (payload.status === "ready") {
-        showReady(payload);
-        return;
-      }
-      if (payload.status === "failed") {
-        showFailure(response, payload);
-        return;
-      }
-      await poll(controller);
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
-        showFailure(null);
+        throw error;
       }
     } finally {
-      if (controllerRef.current === controller) {
-        controllerRef.current = null;
-      }
+      if (controllerRef.current === controller) controllerRef.current = null;
     }
   }
 
   useEffect(() => {
-    if (!active || typeof window === "undefined") {
-      return;
-    }
+    if (!active) return;
+    let disposed = false;
     const revealPlayer =
       new URL(window.location.href).searchParams.get("audio") === "ready";
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const cached = await narrationIsCached(gistId, revisionNumber);
-        if (cached) {
-          setCachedAvailable(true);
-          setAudioUrl(`${endpoint}/audio`);
-          setViewState("ready");
-          setPlayerOpen(revealPlayer);
-          setMessage("");
-          setRetryable(false);
-        }
-        const response = await fetch(endpoint, {
-          cache: "no-store",
-          headers: { Accept: "application/json" },
-          signal: controller.signal
-        });
-        const payload = await readPayload(response);
-        if (response.ok && payload?.status === "ready") {
-          setCachedAvailable(true);
-          if (revealPlayer) {
-            showReady(payload, true);
-          } else {
-            setAudioUrl(payload.audio_url ?? null);
-            setViewState("ready");
-            setMessage("");
-            setRetryable(false);
-          }
-        }
-      } catch (error) {
-        if (
-          revealPlayer &&
-          !(error instanceof DOMException && error.name === "AbortError")
-        ) {
-          setMessage("");
-        }
+    async function refreshCache() {
+      const cached = await narrationIsCached(gistId, revisionNumber).catch(() => false);
+      if (disposed) return;
+      setCachedAvailable(cached);
+      if (cached) {
+        setAudioUrl(`${endpoint}/audio`);
+        setViewState("ready");
       }
-    })();
-    return () => controller.abort();
-    // The exact article identity is represented by endpoint.
+    }
+    const refresh = () => { void syncNarration(); };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void refreshCache();
+        refresh();
+      }
+    };
+    void refreshCache().then(() => {
+      if (!disposed) {
+        if (revealPlayer) setPlayerOpen(true);
+        void syncNarration("GET", revealPlayer);
+      }
+    });
+    window.addEventListener(OFFLINE_LIBRARY_EVENT, refreshCache);
+    window.addEventListener("online", refresh);
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      disposed = true;
+      cancelRequest();
+      window.removeEventListener(OFFLINE_LIBRARY_EVENT, refreshCache);
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+    // Each subscription belongs to this immutable article and account capability.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, endpoint]);
 
   function togglePlayer() {
     if (viewState !== "ready" || !audioUrl) {
-      void start();
+      void syncNarration(viewState === "unavailable" ? "GET" : "POST");
       return;
     }
     if (playerOpen) {
@@ -728,21 +725,30 @@ export function ArticleAudio({
 
   const showButton =
     active &&
-    (viewState === "idle" ||
+    (viewState === "checking" ||
+      viewState === "unavailable" ||
+      viewState === "idle" ||
       viewState === "preparing" ||
       viewState === "ready" ||
       retryable);
   let buttonLabel = "Listen to article";
   let buttonTitle = "Listen";
-  if (viewState === "preparing") {
+  if (viewState === "checking") {
+    buttonLabel = "Checking article audio";
+    buttonTitle = "Checking audio";
+  } else if (viewState === "unavailable") {
+    buttonLabel = "Check article audio";
+    buttonTitle = "Check audio status";
+  } else if (viewState === "preparing") {
     buttonLabel = "Preparing article audio";
     buttonTitle = "Preparing audio";
   } else if (retryable) {
     buttonLabel = "Retry article audio";
     buttonTitle = "Retry audio";
-  } else if (cachedAvailable) {
+  } else if (viewState === "ready") {
     buttonLabel = playerOpen ? "Hide article audio player" : "Play article audio";
     buttonTitle = playerOpen ? "Hide audio player" : "Play article audio";
+    if (cachedAvailable) buttonTitle += " (available offline)";
   }
 
   return (
@@ -753,23 +759,28 @@ export function ArticleAudio({
             <button
               type="button"
               className={
-                cachedAvailable && viewState === "ready" && !playerOpen
-                  ? "icon-button article-audio-button-ready"
-                  : "icon-button"
+                viewState === "ready" && !playerOpen
+                  ? "icon-button article-audio-button article-audio-button-ready"
+                  : "icon-button article-audio-button"
               }
-              aria-busy={viewState === "preparing"}
+              aria-busy={viewState === "checking" || viewState === "preparing"}
               aria-controls={viewState === "ready" ? playerId : undefined}
               aria-expanded={viewState === "ready" ? playerOpen : undefined}
               aria-label={buttonLabel}
               aria-pressed={viewState === "ready" ? playerOpen : undefined}
               title={buttonTitle}
-              disabled={viewState === "preparing"}
+              disabled={viewState === "checking" || viewState === "preparing"}
               onClick={togglePlayer}
             >
-              {viewState === "preparing" ? (
+              {viewState === "checking" || viewState === "preparing" ? (
                 <span className="article-audio-spinner" aria-hidden="true" />
               ) : (
-                <Volume2 aria-hidden="true" size={18} strokeWidth={1.8} />
+                <>
+                  <Volume2 aria-hidden="true" size={18} strokeWidth={1.8} />
+                  {cachedAvailable && viewState === "ready" ? (
+                    <Check className="article-audio-offline-check" aria-hidden="true" size={10} strokeWidth={2.5} />
+                  ) : null}
+                </>
               )}
             </button>
           ) : null}

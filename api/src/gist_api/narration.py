@@ -731,6 +731,12 @@ def reconcile_narration(app, narration_id):
         except GistError:
             _mark_failed(app, row["id"], row["service_job_id"], "source_unavailable")
             return
+        # Move checked jobs behind other pending work, including on service errors.
+        with conn:
+            conn.execute(
+                "update narrations set updated_at = ? where id = ? and status = 'pending'",
+                (utc_now(), row["id"]),
+            )
     if source.text_sha256 != row["text_sha256"]:
         _mark_failed(app, row["id"], row["service_job_id"], "source_mismatch")
         return

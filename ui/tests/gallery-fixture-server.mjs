@@ -12,7 +12,9 @@ const mark = (
   `<a href="${image(number)}#${fragment}" title="${title}">${String(number).padStart(2, "0")}</a>`;
 const album = `<h1 id="gallery-test">Field notes</h1><p>Read the numbered photo references without leaving the article.</p>${"<p>We followed the path beside the lake and made these notes along the way.</p>".repeat(12)}<p id="references">${mark(1)} · ${mark(2)} · ${mark(3)}</p><p>${mark(2, "wg-gallery=album", "A duplicate title")}</p><p>Individual previews: ${mark(1, "wg-image", "Standalone lake")} · ${mark(2, "wg-image", "Standalone cabin")}</p><p><img src="${image(1)}#wg-gallery=album" alt="Lake at dawn" title="Inline lake" width="320"></p><p><a href="${image(3)}#wg-gallery=album" title="Full-size landscape"><img src="${image(4)}" alt="Landscape thumbnail" width="200"></a></p><p><a href="${image(2)}"><img src="${image(1)}#wg-gallery=album" width="180" alt="Ordinary linked image"></a></p><p><a href="https://images.example.test/external.png#wg-image" title="External image">External</a> · <a href="${image(9)}#wg-image" title="Missing image">Broken</a></p>${"<p>Continue reading the notes here.</p>".repeat(18)}`;
 const filesFor = (id) =>
-  id === "GalleryLongText1"
+  id.startsWith("GalleryAudio")
+    ? { "README.md": "<h1>Audio article</h1><p>A short article for narration tests.</p>" }
+    : id === "GalleryLongText1"
     ? {
         "README.md": `<h1>Long caption</h1><p>${mark(1, "wg-image", "Lake at dawn. ".repeat(75))}</p>`
       }
@@ -91,6 +93,12 @@ http
       res.end(JSON.stringify(value));
     };
     if (url.pathname === "/health") return respond(200, { ok: true });
+    if (url.pathname === "/api/v1/auth/session" && req.headers.cookie === "wg_session=audio-test") {
+      return respond(200, {
+        name: "Audio Test", key: "test-key", key_prefix: "test",
+        can_generate_audio: true
+      });
+    }
     if (url.pathname === "/fail-next-image") {
       failedImage = Number(url.searchParams.get("id"));
       return respond(200, { ok: true });

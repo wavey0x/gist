@@ -20,7 +20,6 @@ from .app import create_app
 from .gist_files import file_kind
 from .narration import (
     CLEANUP_BATCH_SIZE,
-    RECONCILE_BATCH_SIZE,
     cleanup_narration_jobs,
     run_narration_pass,
 )
@@ -424,19 +423,15 @@ def run_worker(app, vapid, *, once=False, stop_event=None):
             _log_health(app, now)
             next_health_at = now + timedelta(seconds=HEALTH_LOG_INTERVAL_SECONDS)
 
-        reconciled = run_narration_pass(app)
+        run_narration_pass(app)
         cleaned = cleanup_narration_jobs(app)
         processed = run_due_pass(app, vapid, now=now)
         if once:
-            if (
-                processed == DELIVERY_BATCH_SIZE
-                or reconciled == RECONCILE_BATCH_SIZE
-                or cleaned == CLEANUP_BATCH_SIZE
-            ):
+            if processed == DELIVERY_BATCH_SIZE or cleaned == CLEANUP_BATCH_SIZE:
                 continue
             return
-        if processed == 0 and reconciled == 0 and cleaned == 0:
-            stop_event.wait(EMPTY_POLL_SECONDS)
+        # A pending narration is checked work, not evidence of forward progress.
+        stop_event.wait(EMPTY_POLL_SECONDS)
 
 
 def main(argv=None):

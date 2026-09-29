@@ -154,3 +154,26 @@ def test_gist_deletion_cleans_product_audio_and_service_job(monkeypatch, client,
         )
     assert deleted_jobs
     assert not (narration_storage_dir(app) / filename).exists()
+
+
+def test_pending_checks_rotate_even_when_the_service_is_unavailable(monkeypatch, client, app):
+    for _ in range(5):
+        _request(client, app)
+    with gist_connection(app) as conn:
+        with conn:
+            conn.execute("update narrations set updated_at = '2026-01-01T00:00:00.000Z'")
+        expected = [row[0] for row in conn.execute("select service_job_id from narrations order by id")]
+    checked = []
+
+    def check(_app, job_id, _text, _sha):
+        checked.append(job_id)
+        if job_id == expected[0]:
+            raise NarrationServiceError(503, "service_error", transient=True)
+        return ServiceJob(job_id, "running")
+
+    monkeypatch.setattr(narration_module, "put_service_job", check)
+    assert run_narration_pass(app) == 3
+    assert run_narration_pass(app) == 3
+    assert checked[:5] == expected
+    with gist_connection(app) as conn:
+        assert conn.execute("select count(*) from narrations where status = 'pending'").fetchone()[0] == 5

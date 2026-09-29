@@ -432,3 +432,32 @@ def test_worker_configuration_requires_matching_private_key(tmp_path, app):
     private_path.chmod(0o644)
     with pytest.raises(RuntimeError, match="permissions"):
         validate_worker_config(app)
+
+
+@pytest.mark.parametrize("once", [False, True])
+def test_pending_narration_does_not_spin_the_worker(monkeypatch, app, once):
+    from gist_api import push_worker
+    import threading
+
+    stop = threading.Event()
+    checks = []
+    waits = []
+
+    def check(_app):
+        checks.append(True)
+        assert len(checks) == 1
+        return 3
+
+    def pause(seconds):
+        waits.append(seconds)
+        stop.set()
+
+    monkeypatch.setattr(push_worker, "run_narration_pass", check)
+    monkeypatch.setattr(push_worker, "cleanup_narration_jobs", lambda *_: 0)
+    monkeypatch.setattr(push_worker, "run_due_pass", lambda *_, **__: 0)
+    monkeypatch.setattr(push_worker, "cleanup_terminal_deliveries", lambda *_, **__: 0)
+    monkeypatch.setattr(push_worker, "_log_health", lambda *_: None)
+    monkeypatch.setattr(stop, "wait", pause)
+    push_worker.run_worker(app, object(), once=once, stop_event=stop)
+    assert len(checks) == 1
+    assert waits == ([] if once else [push_worker.EMPTY_POLL_SECONDS])
