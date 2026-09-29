@@ -134,9 +134,7 @@ def build_payload(row):
             "type": EVENT_NARRATION_READY,
             "title": "🔊 Audio ready",
             "body": body,
-            "path": (
-                f"/{external_id}/revisions/{revision_number}?audio=ready"
-            ),
+            "path": f"/{external_id}/revisions/{revision_number}",
             "tag": f"narration:{external_id}:{revision_number}",
         }
     if row["event_type"] == EVENT_GIST_PUBLISHED:

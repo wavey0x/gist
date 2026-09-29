@@ -1,7 +1,11 @@
 import http from "node:http";
+import { readFileSync } from "node:fs";
 import sharp from "sharp";
 
 const origin = "http://127.0.0.1:4311";
+const audio = readFileSync(new URL("./fixtures/silence.mp3", import.meta.url));
+const offlineAudioId = "GalleryAudioOffline01";
+const audioPath = `/api/v1/gists/${offlineAudioId}/revisions/1/narration`;
 const image = (number) =>
   `${origin}/api/v1/images/img_${String(number).padStart(16, "0")}`;
 const mark = (
@@ -98,6 +102,27 @@ http
         name: "Audio Test", key: "test-key", key_prefix: "test",
         can_generate_audio: true
       });
+    }
+    if (url.pathname === "/api/v1/me/offline-manifest" && req.headers.cookie === "wg_session=audio-test") {
+      return respond(200, {
+        account_marker: "c".repeat(64), generated_at: new Date().toISOString(),
+        gists: [{
+          id: offlineAudioId, revision_number: 1, owned: true,
+          snapshot_sha256: "a".repeat(64), display_title: "Audio article",
+          author_name: "Field Notes", updated_at: "2026-09-02T12:00:00Z",
+          narration: { etag: "d".repeat(64), byte_size: audio.length }
+        }]
+      });
+    }
+    if (url.pathname === audioPath) {
+      return respond(200, {
+        status: "ready", retryable: false,
+        audio_url: `/api/gists/${offlineAudioId}/revisions/1/narration/audio`
+      });
+    }
+    if (url.pathname === `${audioPath}/audio`) {
+      res.writeHead(200, { "content-type": "audio/mpeg", "content-length": audio.length });
+      return res.end(audio);
     }
     if (url.pathname === "/fail-next-image") {
       failedImage = Number(url.searchParams.get("id"));

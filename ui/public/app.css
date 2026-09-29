@@ -1586,30 +1586,27 @@ button {
   animation: article-audio-spin 700ms linear infinite;
 }
 
-.article-audio-button {
-  position: relative;
-}
-
-.article-audio-offline-check {
-  position: absolute;
-  right: 1px;
-  bottom: 1px;
-  border-radius: 50%;
-  background: var(--button-bg);
-}
-
-.article-audio-button-ready {
+.article-audio-button[aria-busy="true"] {
   border-color: rgb(var(--audio-accent-rgb) / 45%);
   box-shadow:
     0 0 0 1px rgb(var(--audio-accent-rgb) / 8%),
     0 0 8px rgb(var(--audio-accent-rgb) / 16%);
+  animation: article-audio-wait-pulse 2s ease-in-out infinite;
 }
 
-:root[data-theme="dark"] .article-audio-button-ready {
-  border-color: rgb(var(--audio-accent-rgb) / 55%);
+.icon-button.article-audio-button-ready {
+  border-color: color-mix(in srgb, var(--switch-on) 55%, var(--border));
   box-shadow:
-    0 0 0 1px rgb(var(--audio-accent-rgb) / 10%),
-    0 0 8px rgb(var(--audio-accent-rgb) / 20%);
+    0 0 0 1px color-mix(in srgb, var(--switch-on) 10%, transparent),
+    0 0 8px color-mix(in srgb, var(--switch-on) 22%, transparent);
+}
+
+@keyframes article-audio-wait-pulse {
+  50% {
+    box-shadow:
+      0 0 0 1px rgb(var(--audio-accent-rgb) / 14%),
+      0 0 12px rgb(var(--audio-accent-rgb) / 30%);
+  }
 }
 
 @keyframes article-audio-spin {
@@ -1619,8 +1616,16 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .article-audio-spinner {
+  .article-audio-spinner,
+  .article-audio-button[aria-busy="true"] {
     animation: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .icon-button.article-audio-button {
+    width: 44px;
+    height: 44px;
   }
 }
 
@@ -1679,26 +1684,12 @@ button {
   box-shadow: 0 5px 20px rgb(1 4 9 / 48%);
 }
 
-.article-audio-preparing-overlay {
-  width: min(230px, calc(100vw - 32px));
-  min-height: 42px;
-  grid-template-columns: minmax(0, 1fr);
-  color: var(--muted-fg);
-  padding: 8px 11px;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
 .article-audio-overlay-docked {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 10px);
   right: max(32px, calc((100vw - 1040px) / 2 + 32px));
   width: min(300px, calc(100vw - 64px));
   box-shadow: 0 7px 22px rgb(31 35 40 / 18%);
-}
-
-.article-audio-preparing-overlay.article-audio-overlay-docked {
-  width: min(230px, calc(100vw - 64px));
 }
 
 :root[data-theme="dark"] .article-audio-overlay-docked {
@@ -3087,10 +3078,6 @@ button.gist-file-action {
   .article-audio-overlay-docked {
     right: 16px;
     width: min(300px, calc(100vw - 32px));
-  }
-
-  .article-audio-preparing-overlay.article-audio-overlay-docked {
-    width: min(230px, calc(100vw - 32px));
   }
 }
 

@@ -922,10 +922,10 @@
 
     if (audioEntry && narrationEligible) {
       audioButton = element("button", {
-        className: "icon-button article-audio-button-ready"
+        className: "icon-button article-audio-button article-audio-button-ready"
       });
       audioButton.type = "button";
-      audioButton.title = "Play article audio";
+      audioButton.title = "Play article audio (available offline)";
       audioButton.setAttribute("aria-label", "Play article audio");
       audioButton.setAttribute("aria-expanded", "false");
       audioButton.setAttribute("aria-pressed", "false");
@@ -1149,8 +1149,7 @@
           "aria-label",
           open ? "Hide article audio player" : "Play article audio"
         );
-        audioButton.title = open ? "Hide audio player" : "Play article audio";
-        audioButton.classList.toggle("article-audio-button-ready", !open);
+        audioButton.title = `${open ? "Hide audio player" : "Play article audio"} (available offline)`;
         if (open) {
           void playAudio();
         } else {
@@ -1215,7 +1214,7 @@
 
       toolbar.append(audioButton);
     } else if (narrationEligible && readOfflineIdentity()?.canGenerateAudio === true) {
-      audioButton = element("button", { className: "icon-button" });
+      audioButton = element("button", { className: "icon-button article-audio-button" });
       audioButton.type = "button";
       audioButton.disabled = true;
       audioButton.title = "Audio isn’t saved offline";
@@ -1293,9 +1292,8 @@
         audioButton?.setAttribute("aria-pressed", "false");
         audioButton?.setAttribute("aria-label", "Play article audio");
         if (audioButton) {
-          audioButton.title = "Play article audio";
+          audioButton.title = "Play article audio (available offline)";
         }
-        audioButton?.classList.add("article-audio-button-ready");
       }
     }
 
@@ -1656,10 +1654,6 @@
     });
     app.append(gistHeading(payload, toolbar));
     paintContent();
-
-    if (new URL(location.href).searchParams.get("audio") === "ready") {
-      toolbar.querySelector(".article-audio-button-ready")?.click();
-    }
   }
 
   function renderUnavailable(message) {

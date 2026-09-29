@@ -424,9 +424,7 @@ export function ArticleAudio({
 
   useEffect(() => {
     const surfaceVisible =
-      active &&
-      (viewState === "preparing" ||
-        (viewState === "ready" && playerOpen && Boolean(audioUrl)));
+      active && viewState === "ready" && playerOpen && Boolean(audioUrl);
     if (!surfaceVisible) {
       setDocked(false);
       return;
@@ -472,10 +470,9 @@ export function ArticleAudio({
     return isNarrationPayload(payload) ? payload : null;
   }
 
-  function showReady(payload: NarrationPayload, revealPlayer = false) {
+  function showReady(payload: NarrationPayload) {
     setAudioUrl(payload.audio_url ?? null);
     setViewState("ready");
-    if (revealPlayer) setPlayerOpen(true);
     setMessage("");
     setRetryable(false);
     void reconcileOfflineLibrary();
@@ -502,7 +499,7 @@ export function ArticleAudio({
     }
   }
 
-  async function syncNarration(method: "GET" | "POST" = "GET", revealPlayer = false) {
+  async function syncNarration(method: "GET" | "POST" = "GET") {
     if (!active || controllerRef.current) return;
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -511,8 +508,10 @@ export function ArticleAudio({
     if (pending) {
       setViewState("preparing");
       setPlayerOpen(false);
-      setMessage("Preparing audio.");
+      setMessage("");
       setRetryable(false);
+    } else {
+      setViewState((state) => state === "unavailable" ? "checking" : state);
     }
     try {
       while (!controller.signal.aborted) {
@@ -550,16 +549,20 @@ export function ArticleAudio({
           }
           if (!payload) throw new Error("Invalid audio status");
           if (payload.status === "ready") {
-            showReady(payload, revealPlayer);
+            showReady(payload);
             return;
           }
           pending = true;
           setViewState("preparing");
-          setMessage("Preparing audio.");
+          setMessage("");
           setRetryable(false);
         } catch {
           controller.signal.throwIfAborted();
-          setMessage("Audio status is temporarily unavailable. Reconnecting…");
+          setMessage(
+            pending
+              ? "Connection interrupted. Checking again…"
+              : "Audio status is unavailable. Try again."
+          );
           if (!pending) {
             setViewState((state) => state === "checking" ? "unavailable" : state);
             return;
@@ -584,8 +587,6 @@ export function ArticleAudio({
   useEffect(() => {
     if (!active) return;
     let disposed = false;
-    const revealPlayer =
-      new URL(window.location.href).searchParams.get("audio") === "ready";
     async function refreshCache() {
       const cached = await narrationIsCached(gistId, revisionNumber).catch(() => false);
       if (disposed) return;
@@ -593,6 +594,8 @@ export function ArticleAudio({
       if (cached) {
         setAudioUrl(`${endpoint}/audio`);
         setViewState("ready");
+        setRetryable(false);
+        setMessage("");
       }
     }
     const refresh = () => { void syncNarration(); };
@@ -604,8 +607,7 @@ export function ArticleAudio({
     };
     void refreshCache().then(() => {
       if (!disposed) {
-        if (revealPlayer) setPlayerOpen(true);
-        void syncNarration("GET", revealPlayer);
+        void syncNarration();
       }
     });
     window.addEventListener(OFFLINE_LIBRARY_EVENT, refreshCache);
@@ -723,14 +725,7 @@ export function ArticleAudio({
     "--audio-progress": `${seekProgress}%`
   } as CSSProperties;
 
-  const showButton =
-    active &&
-    (viewState === "checking" ||
-      viewState === "unavailable" ||
-      viewState === "idle" ||
-      viewState === "preparing" ||
-      viewState === "ready" ||
-      retryable);
+  const waiting = viewState === "checking" || viewState === "preparing";
   let buttonLabel = "Listen to article";
   let buttonTitle = "Listen";
   if (viewState === "checking") {
@@ -745,6 +740,9 @@ export function ArticleAudio({
   } else if (retryable) {
     buttonLabel = "Retry article audio";
     buttonTitle = "Retry audio";
+  } else if (viewState === "failed") {
+    buttonLabel = "Article audio unavailable";
+    buttonTitle = "Audio unavailable";
   } else if (viewState === "ready") {
     buttonLabel = playerOpen ? "Hide article audio player" : "Play article audio";
     buttonTitle = playerOpen ? "Hide audio player" : "Play article audio";
@@ -755,32 +753,27 @@ export function ArticleAudio({
     <>
       <div className="article-audio-toolbar-group">
         <div className="toolbar" aria-label="Display controls">
-          {showButton ? (
+          {active ? (
             <button
               type="button"
               className={
-                viewState === "ready" && !playerOpen
+                viewState === "ready"
                   ? "icon-button article-audio-button article-audio-button-ready"
                   : "icon-button article-audio-button"
               }
-              aria-busy={viewState === "checking" || viewState === "preparing"}
+              aria-busy={waiting}
               aria-controls={viewState === "ready" ? playerId : undefined}
               aria-expanded={viewState === "ready" ? playerOpen : undefined}
               aria-label={buttonLabel}
               aria-pressed={viewState === "ready" ? playerOpen : undefined}
               title={buttonTitle}
-              disabled={viewState === "checking" || viewState === "preparing"}
+              disabled={waiting || (viewState === "failed" && !retryable)}
               onClick={togglePlayer}
             >
-              {viewState === "checking" || viewState === "preparing" ? (
+              {waiting ? (
                 <span className="article-audio-spinner" aria-hidden="true" />
               ) : (
-                <>
-                  <Volume2 aria-hidden="true" size={18} strokeWidth={1.8} />
-                  {cachedAvailable && viewState === "ready" ? (
-                    <Check className="article-audio-offline-check" aria-hidden="true" size={10} strokeWidth={2.5} />
-                  ) : null}
-                </>
+                <Volume2 aria-hidden="true" size={18} strokeWidth={1.8} />
               )}
             </button>
           ) : null}
@@ -796,16 +789,7 @@ export function ArticleAudio({
           className="article-audio-dock-top-probe"
           aria-hidden="true"
         />
-        {active && viewState === "preparing" && message ? (
-          <div
-            className={`article-audio-overlay article-audio-preparing-overlay${
-              docked ? " article-audio-overlay-docked" : ""
-            }`}
-            role="status"
-          >
-            {message}
-          </div>
-        ) : null}
+        {active ? <span className="sr-only" role="status">{buttonLabel}</span> : null}
         {active && audioUrl ? (
           <audio
             ref={audioRef}
@@ -955,7 +939,7 @@ export function ArticleAudio({
           </div>
         ) : null}
       </div>
-      {active && viewState === "failed" && message ? (
+      {active && (viewState === "failed" || viewState === "unavailable" || viewState === "preparing") && message ? (
         <div className="article-audio-row" aria-live="polite">
           <span className="article-audio-message">{message}</span>
         </div>

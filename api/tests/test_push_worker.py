@@ -132,7 +132,7 @@ def test_build_payload_for_audio_ready_deep_links_to_immutable_revision():
         "type": "narration.ready",
         "title": "🔊 Audio ready",
         "body": "A useful title",
-        "path": "/AbCdEf0123456789/revisions/4?audio=ready",
+        "path": "/AbCdEf0123456789/revisions/4",
         "tag": "narration:AbCdEf0123456789:4",
     }
 
