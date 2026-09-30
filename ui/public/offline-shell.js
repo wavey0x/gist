@@ -314,7 +314,7 @@
     const entries = (await allEntries()).filter((entry) => entry.kind === "gist");
     const results = [];
     for (const entry of entries) {
-      if (await cache.match(entry.cacheKey)) {
+      if ((await cache.keys(entry.cacheKey)).length) {
         results.push(entry);
       }
     }
@@ -775,7 +775,8 @@
     if (!entry) {
       return null;
     }
-    return await (await caches.open(AUDIO_CACHE)).match(entry.cacheKey)
+    const cache = await caches.open(AUDIO_CACHE);
+    return (await cache.keys(entry.cacheKey)).length
       ? entry
       : null;
   }

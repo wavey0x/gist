@@ -1,7 +1,27 @@
 import { test, expect } from "@playwright/test";
 import http from "node:http";
 
+type CacheDiagnostics = typeof window & { audioCacheChecks: number; audioCacheBodyReads: number };
+
 test("saved audio plays through scrolling and seeking online and offline", async ({ page, context, browserName }) => {
+  await page.addInitScript(() => {
+    const diagnostics = window as CacheDiagnostics;
+    diagnostics.audioCacheChecks = 0;
+    diagnostics.audioCacheBodyReads = 0;
+    const match = Cache.prototype.match;
+    const keys = Cache.prototype.keys;
+    Cache.prototype.match = function (request, options) {
+      const url = request instanceof Request ? request.url : String(request);
+      if (url.endsWith("/narration/audio")) diagnostics.audioCacheBodyReads++;
+      return match.call(this, request, options);
+    };
+    Cache.prototype.keys = async function (request, options) {
+      const result = await keys.call(this, request, options);
+      const url = request instanceof Request ? request.url : String(request);
+      if (url.endsWith("/narration/audio")) diagnostics.audioCacheChecks++;
+      return result;
+    };
+  });
   // Close the origin too: WebKit cannot emulate offline service-worker navigation.
   const proxy = http.createServer((request, response) => {
     const upstream = http.request(
@@ -37,6 +57,8 @@ test("saved audio plays through scrolling and seeking online and offline", async
       if (offline) await expect(page.locator("body.offline-shell")).toBeVisible();
       await expect(button).toHaveAttribute("aria-expanded", "false");
       await expect(button).toHaveClass(/article-audio-button-ready/);
+      await expect(button).toHaveAttribute("title", /available offline/);
+      expect(await page.evaluate(() => (window as CacheDiagnostics).audioCacheBodyReads)).toBe(0);
       await expect(button.locator("svg")).toHaveCount(1);
       await expect(player).toBeHidden();
       const audio = page.locator("audio");
@@ -46,6 +68,16 @@ test("saved audio plays through scrolling and seeking online and offline", async
       await expect(player).toHaveCSS("backdrop-filter", "none");
       await expect(player).toHaveCSS("background-color", /^rgb\(/);
       await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThan(0);
+      if (!offline) {
+        const checks = await page.evaluate(() => (window as CacheDiagnostics).audioCacheChecks);
+        await page.evaluate(() => {
+          for (let item = 0; item < 600; item++) {
+            window.dispatchEvent(new Event("waveygist:offline-library-changed"));
+          }
+        });
+        await expect.poll(() => page.evaluate(() => (window as CacheDiagnostics).audioCacheChecks))
+          .toBeGreaterThanOrEqual(checks + 600);
+      }
       for (let lap = 0; lap < 3; lap++) {
         await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
         await expect(player).toHaveClass(/article-audio-overlay-docked/);
@@ -57,6 +89,7 @@ test("saved audio plays through scrolling and seeking online and offline", async
       await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThan(0);
       await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
       expect(await audio.evaluate((node: HTMLAudioElement) => node.error)).toBeNull();
+      expect(await page.evaluate(() => (window as CacheDiagnostics).audioCacheBodyReads)).toBe(0);
       await button.click();
       await expect(player).toBeHidden();
       await expect(button).toHaveClass(/article-audio-button-ready/);

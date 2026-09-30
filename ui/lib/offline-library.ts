@@ -512,17 +512,18 @@ function prepareOfflinePayload(gist: PublicGistPayload) {
 
 async function cachedGistIsComplete(entry: OfflineEntry) {
   const cache = await caches.open(OFFLINE_CONTENT_CACHE);
-  const response = await cache.match(entry.cacheKey);
-  if (!response) return false;
   if (!entry.imageIds) {
     // Earlier snapshots discarded image fragments and did not save link-only images.
+    const response = await cache.match(entry.cacheKey);
+    if (!response) return false;
     const payload = await response.json() as PublicGistPayload;
     return !Object.values(payload.files).some((file) =>
       file.kind === "markdown" && /#wg-(?:gallery|image)/.test(file.content)
     );
   }
+  if (!(await cache.keys(entry.cacheKey)).length) return false;
   for (const imageId of entry.imageIds) {
-    if (!(await readEntry(imageEntryKey(imageId))) || !(await cache.match(imageCacheKey(imageId)))) return false;
+    if (!(await readEntry(imageEntryKey(imageId))) || !(await cache.keys(imageCacheKey(imageId))).length) return false;
   }
   return true;
 }
@@ -536,7 +537,8 @@ async function cacheImage(
   signal?.throwIfAborted();
   const entryKey = imageEntryKey(imageId);
   const existing = await readEntry(entryKey);
-  if (existing && await (await caches.open(OFFLINE_CONTENT_CACHE)).match(existing.cacheKey)) {
+  const cache = await caches.open(OFFLINE_CONTENT_CACHE);
+  if (existing && (await cache.keys(existing.cacheKey)).length) {
     const parents = Array.from(new Set([...(existing.parents ?? []), parentKey]));
     await writeEntry({
       ...existing,
@@ -806,7 +808,7 @@ async function auditOfflineStorage() {
   const indexedCacheKeys = new Set(entries.map((entry) => entry.cacheKey));
   for (const entry of entries) {
     const cache = await caches.open(cacheNameForEntry(entry));
-    if (!pendingCacheWrites.has(entry.cacheKey) && !(await cache.match(entry.cacheKey))) {
+    if (!pendingCacheWrites.has(entry.cacheKey) && !(await cache.keys(entry.cacheKey)).length) {
       await removeEntryRow(entry.key);
     }
   }
@@ -1117,9 +1119,9 @@ export async function narrationIsCached(
   if (!entry) {
     return false;
   }
-  return Boolean(
-    await (await caches.open(OFFLINE_AUDIO_CACHE)).match(entry.cacheKey)
-  );
+  // Cache.match retrieves the recording body even when only checking availability.
+  const cache = await caches.open(OFFLINE_AUDIO_CACHE);
+  return (await cache.keys(entry.cacheKey)).length > 0;
 }
 
 export async function markNarrationPlayed(
