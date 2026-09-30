@@ -176,11 +176,14 @@ async function cachedAudioResponse(request) {
   if (!response) {
     return null;
   }
-  const bytes = await response.arrayBuffer();
-  const size = bytes.byteLength;
   const rangeHeader = request.headers.get("range");
+  if (!rangeHeader && request.method === "GET") {
+    return response;
+  }
+  // The cache writer saves the verified size, so HEAD needs no body read.
+  const size = Number(response.headers.get("content-length"));
   if (!rangeHeader) {
-    return new Response(request.method === "HEAD" ? null : bytes, {
+    return new Response(null, {
       status: 200,
       headers: copyMediaHeaders(response, size)
     });
@@ -195,7 +198,9 @@ async function cachedAudioResponse(request) {
   const headers = copyMediaHeaders(response, length);
   headers.set("Content-Range", `bytes ${range.start}-${range.end}/${size}`);
   return new Response(
-    request.method === "HEAD" ? null : bytes.slice(range.start, range.end + 1),
+    request.method === "HEAD"
+      ? null
+      : (await response.blob()).slice(range.start, range.end + 1),
     { status: 206, headers }
   );
 }

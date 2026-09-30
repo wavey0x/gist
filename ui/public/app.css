@@ -1671,11 +1671,8 @@ button {
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--page-bg);
-  background: color-mix(in srgb, var(--page-bg) 94%, transparent);
   box-shadow: 0 5px 18px rgb(31 35 40 / 14%);
   padding: 5px 6px 6px;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
   transition: box-shadow 140ms ease;
   animation: article-audio-reveal 130ms ease-out;
 }

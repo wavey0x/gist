@@ -360,7 +360,12 @@ test("cached audio supports normal, open, suffix, and invalid ranges", async () 
   await audioCache.put(
     audioUrl,
     new Response(Uint8Array.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), {
-      headers: { "Content-Type": "audio/mpeg", ETag: '"audio-1"' }
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "Content-Length": "10",
+        "Accept-Ranges": "bytes",
+        ETag: '"audio-1"'
+      }
     })
   );
 
@@ -379,6 +384,8 @@ test("cached audio supports normal, open, suffix, and invalid ranges", async () 
   const complete = await cached(null);
   assert.equal(complete.status, 200);
   assert.equal(complete.headers.get("content-length"), "10");
+  assert.equal(complete.headers.get("accept-ranges"), "bytes");
+  assert.equal(complete.headers.get("etag"), '"audio-1"');
   assert.deepEqual(new Uint8Array(await complete.arrayBuffer()),
     Uint8Array.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
 
@@ -402,4 +409,47 @@ test("cached audio supports normal, open, suffix, and invalid ranges", async () 
   assert.equal(head.status, 206);
   assert.equal(head.headers.get("content-length"), "4");
   assert.equal((await head.arrayBuffer()).byteLength, 0);
+
+  const fullHead = await cached(null, "HEAD");
+  assert.equal(fullHead.status, 200);
+  assert.equal(fullHead.headers.get("content-length"), "10");
+  assert.equal((await fullHead.arrayBuffer()).byteLength, 0);
+
+  const probe = await cached("bytes=0-1");
+  assert.equal(probe.status, 206);
+  assert.equal(probe.headers.get("content-range"), "bytes 0-1/10");
+  assert.deepEqual(new Uint8Array(await probe.arrayBuffer()), Uint8Array.from([0, 1]));
+
+  const clipped = await cached("bytes=8-99");
+  assert.equal(clipped.status, 206);
+  assert.equal(clipped.headers.get("content-range"), "bytes 8-9/10");
+  assert.deepEqual(new Uint8Array(await clipped.arrayBuffer()), Uint8Array.from([8, 9]));
+
+  const multiple = await cached("bytes=0-1,4-5");
+  assert.equal(multiple.status, 416);
+  assert.equal(multiple.headers.get("content-range"), "bytes */10");
+});
+
+test("cached audio avoids full-file JavaScript buffers and unnecessary body reads", async (t) => {
+  const harness = workerHarness();
+  for (const [method, range, readsBody] of [
+    ["GET", null, false],
+    ["HEAD", null, false],
+    ["HEAD", "bytes=0-1", false],
+    ["GET", "bytes=20-", false],
+    ["GET", "bytes=0-1", true]
+  ]) {
+    const source = new Response("0123456789", {
+      headers: { "Content-Length": "10", "Content-Type": "audio/mpeg" }
+    });
+    t.mock.method(source, "arrayBuffer", () => assert.fail("Full-file buffer allocated"));
+    harness.context.caches = { open: async () => ({ match: async () => source }) };
+    harness.context.testRequest = new Request("https://gist.wavey.info/audio", {
+      method,
+      headers: range ? { Range: range } : undefined
+    });
+    const response = await vm.runInContext("cachedAudioResponse(testRequest)", harness.context);
+    assert.equal(source.bodyUsed, readsBody, `${method} ${range}`);
+    if (!range && method === "GET") assert.equal(response, source);
+  }
 });
