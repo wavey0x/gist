@@ -1181,3 +1181,15 @@ def test_multifile_footnotes_and_rerender_preserve_source_and_revision(client, a
     rerender_gists(app, external_id=gist_id)
     after = client.get(url).get_json()
     assert after == before
+
+
+def test_tables_have_keyboard_accessible_scroll_regions_and_preserve_tail():
+    result = render_markdown_result("| Name | Value |\n| --- | --- |\n| [Venue name](https://example.com) | 12 |\n\nAfter table.")
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+    wrapper = root.xpath('.//div[@class="table-scroll"]')[0]
+    assert wrapper.attrib["tabindex"] == "0"
+    assert wrapper.attrib["role"] == "region"
+    assert wrapper.attrib["aria-label"]
+    assert wrapper.xpath('./table/tbody/tr/td/a')[0].text == "Venue name"
+    assert root.xpath('./p')[0].text == "After table."
+    assert "table-enrichment/2026-10-02.1" in result.version

@@ -2315,40 +2315,41 @@ button {
   display: block;
 }
 
-.markdown-body table {
-  display: block;
-  width: 100%;
-  min-width: 0;
-  overflow-y: hidden;
+.markdown-body .table-scroll {
+  max-width: 100%;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  scrollbar-width: auto;
+}
+
+.markdown-body .table-scroll:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.markdown-body .table-scroll > table {
+  display: table;
+  width: auto;
+  max-width: none;
+  margin-bottom: 0;
+  overflow: visible;
   table-layout: auto;
 }
 
 .markdown-body th,
-.markdown-body td {
-  min-width: 0;
+.markdown-body td,
+.markdown-body table :is(p, li, a) {
   overflow-wrap: break-word;
   word-break: normal;
-}
-
-.markdown-body th {
-  white-space: normal;
-}
-
-.markdown-body th:last-child,
-.markdown-body td:last-child {
-  min-width: 0;
-  max-width: 90ch;
-  overflow-wrap: break-word;
   white-space: normal;
 }
 
 .markdown-body table code {
   overflow-wrap: anywhere;
   white-space: normal;
-  word-break: break-word;
+  word-break: normal;
 }
 
-.markdown-body table a,
 .markdown-body table .eth-entity {
   white-space: nowrap;
 }

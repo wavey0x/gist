@@ -1660,6 +1660,21 @@ def _allow_attribute(
     return False
 
 
+def _enrich_tables(root):
+    for table in list(root.xpath(".//table")):
+        parent = table.getparent()
+        wrapper = etree.Element("div", {
+            "class": "table-scroll",
+            "tabindex": "0",
+            "role": "region",
+            "aria-label": "Table (scroll horizontally for more columns)",
+        })
+        wrapper.tail = table.tail
+        table.tail = None
+        parent.replace(table, wrapper)
+        wrapper.append(table)
+
+
 def render_markdown_result(
     markdown,
     *,
@@ -1700,6 +1715,7 @@ def render_markdown_result(
         strip_comments=True,
     )
     cleaned_root = _parse_fragment(cleaned_html)
+    _enrich_tables(cleaned_root)
     _enrich_images(cleaned_root)
     _enrich_mermaid_blocks(cleaned_root, mermaid_placeholder_languages)
     _enrich_math_placeholders(cleaned_root, math_expressions)
@@ -1786,6 +1802,7 @@ def render_version(highlight_status="unknown"):
         f"ethereum-entities/on@{ETHEREUM_ENTITY_RENDER_VERSION};"
         f"mermaid-enrichment/{MERMAID_RENDER_VERSION};"
         f"math-enrichment/{MATH_RENDER_VERSION};"
+        "table-enrichment/2026-10-02.1;"
         f"bleach/{_package_version('bleach')};"
         f"lxml/{_package_version('lxml')};"
         f"syntax-css/{SYNTAX_CSS_VERSION};"
