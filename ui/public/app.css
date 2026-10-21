@@ -1622,13 +1622,6 @@ button {
   }
 }
 
-@media (pointer: coarse) {
-  .icon-button.article-audio-button {
-    width: 44px;
-    height: 44px;
-  }
-}
-
 .article-audio-engine {
   position: absolute;
   width: 1px;
