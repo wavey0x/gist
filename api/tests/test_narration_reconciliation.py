@@ -4,7 +4,6 @@ from gist_api import narration as narration_module
 from gist_api.db import gist_connection
 from gist_api.narration import (
     cleanup_narration_jobs,
-    narration_storage_dir,
     run_narration_pass,
 )
 from gist_api.narration_service import NarrationServiceError, ServiceJob
@@ -15,6 +14,7 @@ from .conftest import auth_header, create_gist, make_key
 class AudioResponse:
     def __init__(self, audio, sha256):
         self.audio = audio
+        self.status_code = 200
         self.headers = {
             "Content-Type": "audio/mpeg",
             "Content-Length": str(len(audio)),
@@ -68,8 +68,15 @@ def test_reconciliation_publishes_verified_audio_once(monkeypatch, client, app):
     monkeypatch.setattr(narration_module, "put_service_job", put_job)
     monkeypatch.setattr(
         narration_module,
+        "get_service_job",
+        lambda *_args: (_ for _ in ()).throw(
+            NarrationServiceError(404, "not_found", transient=False)
+        ),
+    )
+    monkeypatch.setattr(
+        narration_module,
         "get_service_audio",
-        lambda _app, _job_id: AudioResponse(audio, sha256),
+        lambda _app, _job_id, **_kwargs: AudioResponse(audio, sha256),
     )
     monkeypatch.setattr(
         narration_module,
@@ -84,15 +91,16 @@ def test_reconciliation_publishes_verified_audio_once(monkeypatch, client, app):
     assert row["status"] == "ready"
     assert row["audio_sha256"] == sha256
     assert row["engine_fingerprint"] == "sha256:test-engine"
-    assert (narration_storage_dir(app) / row["audio_filename"]).read_bytes() == audio
     assert len(submissions) == 1
-    assert acknowledgements == [row["service_job_id"]]
+    assert acknowledgements == []
 
     status = client.get(f"/api/v1/gists/{gist_id}/revisions/1/narration").get_json()
     assert status["status"] == "ready"
     response = client.get(f"/api/v1/gists/{gist_id}/revisions/1/narration/audio")
     assert response.data == audio
     assert response.headers["X-Content-SHA256"] == sha256
+    assert response.headers["X-Audio-Duration-Ms"] == "1200"
+    assert response.headers["X-Engine-Fingerprint"] == "sha256:test-engine"
     assert response.headers["ETag"] == f'"{sha256}"'
 
 
@@ -102,7 +110,7 @@ def test_transient_service_failure_stays_pending(monkeypatch, client, app):
     def unavailable(*_args):
         raise NarrationServiceError(503, "service_error", transient=True)
 
-    monkeypatch.setattr(narration_module, "put_service_job", unavailable)
+    monkeypatch.setattr(narration_module, "get_service_job", unavailable)
     assert run_narration_pass(app) == 1
     with gist_connection(app) as conn:
         row = conn.execute("select status, error_code from narrations").fetchone()
@@ -127,14 +135,18 @@ def test_gist_deletion_cleans_product_audio_and_service_job(monkeypatch, client,
     )
     monkeypatch.setattr(
         narration_module,
+        "get_service_job",
+        lambda *_args: (_ for _ in ()).throw(
+            NarrationServiceError(404, "not_found", transient=False)
+        ),
+    )
+    monkeypatch.setattr(
+        narration_module,
         "get_service_audio",
-        lambda _app, _job_id: AudioResponse(audio, sha256),
+        lambda _app, _job_id, **_kwargs: AudioResponse(audio, sha256),
     )
     monkeypatch.setattr(narration_module, "delete_service_job", lambda *_args: None)
     run_narration_pass(app)
-    with gist_connection(app) as conn:
-        filename = conn.execute("select audio_filename from narrations").fetchone()[0]
-
     assert (
         client.delete(f"/api/v1/gists/{gist_id}", headers=auth_header(key)).status_code
         == 204
@@ -153,7 +165,6 @@ def test_gist_deletion_cleans_product_audio_and_service_job(monkeypatch, client,
             == 0
         )
     assert deleted_jobs
-    assert not (narration_storage_dir(app) / filename).exists()
 
 
 def test_pending_checks_rotate_even_when_the_service_is_unavailable(monkeypatch, client, app):
@@ -165,13 +176,13 @@ def test_pending_checks_rotate_even_when_the_service_is_unavailable(monkeypatch,
         expected = [row[0] for row in conn.execute("select service_job_id from narrations order by id")]
     checked = []
 
-    def check(_app, job_id, _text, _sha):
+    def check(_app, job_id):
         checked.append(job_id)
         if job_id == expected[0]:
             raise NarrationServiceError(503, "service_error", transient=True)
         return ServiceJob(job_id, "running")
 
-    monkeypatch.setattr(narration_module, "put_service_job", check)
+    monkeypatch.setattr(narration_module, "get_service_job", check)
     assert run_narration_pass(app) == 3
     assert run_narration_pass(app) == 3
     assert checked[:5] == expected

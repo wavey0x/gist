@@ -2,7 +2,7 @@ import json
 import re
 from ipaddress import ip_address
 
-from flask import Blueprint, current_app, jsonify, request, send_file
+from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
 
 from .auth import (
     WEB_SESSION_COOKIE_NAME,
@@ -652,18 +652,48 @@ def read_gist_revision_narration_audio(gist_id, revision_number):
     if auth.audio_generation_daily_limit == 0:
         return error_response("forbidden", "Audio access is disabled", 403)
     try:
-        path, audio_sha256 = get_narration_audio(
-            current_app, gist_id, revision_number
+        forwarded = {
+            name: request.headers[name]
+            for name in ("Range", "If-Range", "If-None-Match")
+            if name in request.headers
+        }
+        upstream, metadata = get_narration_audio(
+            current_app,
+            gist_id,
+            revision_number,
+            method=request.method,
+            headers=forwarded,
         )
-        response = send_file(
-            path,
-            mimetype="audio/mpeg",
-            conditional=True,
-            etag=audio_sha256,
-            max_age=0,
+        response_headers = {
+            name: value
+            for name in ("Accept-Ranges", "Content-Length", "Content-Range", "ETag")
+            if (value := upstream.headers.get(name)) is not None
+        }
+        response_headers["Content-Type"] = "audio/mpeg"
+        response_headers["X-Content-SHA256"] = metadata["audio_sha256"]
+        response_headers["X-Audio-Duration-Ms"] = str(metadata["duration_ms"])
+        response_headers["X-Engine-Fingerprint"] = metadata["engine_fingerprint"]
+        response_headers.setdefault("ETag", f'"{metadata["audio_sha256"]}"')
+        if request.method == "HEAD" or upstream.status_code in {304, 416}:
+            upstream.close()
+            body = b""
+        else:
+            def body():
+                try:
+                    yield from upstream.iter_content(chunk_size=64 * 1024)
+                finally:
+                    upstream.close()
+
+            body = stream_with_context(body())
+        response = Response(
+            body,
+            status=upstream.status_code,
+            direct_passthrough=True,
         )
-        response.headers["Cache-Control"] = "private, no-store"
-        response.headers["X-Content-SHA256"] = audio_sha256
+        for name, value in response_headers.items():
+            response.headers[name] = value
+        response.headers["Cache-Control"] = "private, no-store, no-transform"
+        response.headers["X-Content-Type-Options"] = "nosniff"
         return response
     except GistError as error:
         return error_response(error.code, error.message, error.status)

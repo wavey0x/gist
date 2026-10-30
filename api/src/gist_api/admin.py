@@ -12,7 +12,6 @@ from .auth import (
 )
 from .db import gist_connection
 from .migrations import init_gist_database
-from .narration import prune_narrations
 from .service import rerender_gists
 from .settings import load_settings
 
@@ -104,11 +103,6 @@ def main(argv=None):
     rerender_target.add_argument("--all", action="store_true")
     rerender.add_argument("--dry-run", action="store_true")
 
-    narrations = subparsers.add_parser("narrations")
-    narration_commands = narrations.add_subparsers(dest="command", required=True)
-    prune = narration_commands.add_parser("prune")
-    prune.add_argument("--target-bytes", required=True, type=int)
-
     args = parser.parse_args(argv)
     app = _app()
     init_gist_database(app)
@@ -177,14 +171,6 @@ def main(argv=None):
                 dry_run=args.dry_run,
             )
             print(json.dumps(result, indent=2))
-    elif args.resource == "narrations":
-        if args.command == "prune":
-            print(
-                json.dumps(
-                    prune_narrations(app, args.target_bytes),
-                    indent=2,
-                )
-            )
 
 
 if __name__ == "__main__":

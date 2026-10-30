@@ -48,13 +48,25 @@ def narration_service_config(app):
     return origin, token
 
 
-def _request(app, path, *, method="GET", json=None, stream=False, timeout=15):
+def _request(
+    app,
+    path,
+    *,
+    method="GET",
+    json=None,
+    stream=False,
+    timeout=15,
+    headers=None,
+    accepted_statuses=(),
+):
     try:
         origin, token = narration_service_config(app)
+        request_headers = {**(headers or {}), "Accept-Encoding": "identity"}
+        request_headers["Authorization"] = f"Bearer {token}"
         response = requests.request(
             method,
             f"{origin}{path}",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=request_headers,
             json=json,
             stream=stream,
             timeout=(5, timeout),
@@ -62,7 +74,7 @@ def _request(app, path, *, method="GET", json=None, stream=False, timeout=15):
         )
     except (OSError, requests.RequestException, RuntimeError) as exc:
         raise NarrationServiceError(0, "service_unavailable", transient=True) from exc
-    if 200 <= response.status_code <= 299:
+    if 200 <= response.status_code <= 299 or response.status_code in accepted_statuses:
         return response
     code = "service_error"
     try:
@@ -137,12 +149,19 @@ def put_service_job(app, job_id, text, text_sha256):
     return _parse_job(response, job_id)
 
 
-def get_service_audio(app, job_id):
+def get_service_job(app, job_id):
+    return _parse_job(_request(app, f"/jobs/{job_id}"), job_id)
+
+
+def get_service_audio(app, job_id, *, method="GET", headers=None):
     return _request(
         app,
         f"/jobs/{job_id}/audio",
+        method=method,
+        headers=headers,
         stream=True,
         timeout=60,
+        accepted_statuses=(304, 416),
     )
 
 

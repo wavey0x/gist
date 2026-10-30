@@ -51,9 +51,9 @@ uv run push-worker
 ```
 
 The worker delivers Web Push, reconciles narration jobs with the independent
-private narration service, publishes verified MP3s, and drains narration
-cleanup. Use `uv run push-worker --once` to drain work that is currently due
-and exit. Run only one worker process.
+private narration service, and drains narration deletion outboxes. Use
+`uv run push-worker --once` to drain work that is currently due and exit. Run
+only one worker process.
 
 ## Article Audio
 
@@ -74,12 +74,10 @@ only final normalized plaintext, its SHA-256, and a random job UUID. It does
 not send gist URLs, user identity, browser credentials, callbacks, or push
 subscriptions.
 
-The default limits are 100,000 extracted narration characters, 128 MiB per
-MP3, and 2 GiB total narration storage. Generated files are private and are
-served only through the session-authenticated revision route with byte-range
-support and an exact SHA-256 ETag. Use `uv run admin narrations prune
---target-bytes <bytes>` for explicit oldest-first pruning. Publication and
-cleanup are idempotent, so the command does not require a worker shutdown.
+The default limits are 100,000 extracted narration characters and 128 MiB per
+MP3. Canonical files remain private in the narration service and are streamed
+only through the session-authenticated revision route with byte-range support
+and an exact SHA-256 ETag. Deletion delivery is idempotent.
 
 Run the service with `umask 077` so the SQLite database and WAL files are not
 readable by other local users. If a reverse proxy fronts the API, configure it
@@ -91,6 +89,13 @@ rate limits.
 
 Run migrations during app startup with the configured `SQLITE_DB_PATH`. Back up
 the SQLite database before upgrading.
+
+For an existing installation upgrading from schema 13, import every `ready`
+narration file into the narration service with its existing `service_job_id`,
+`text_sha256`, engine fingerprint, and duration. Wait until every imported job
+reports `ready`, then deploy this release and allow migration 14 to run. The
+migration permanently removes local audio filenames and the old publication
+state; there is no runtime fallback to product-owned audio.
 
 ## API Keys
 

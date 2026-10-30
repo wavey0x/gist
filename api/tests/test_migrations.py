@@ -54,7 +54,7 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
             )
         }
 
-    assert versions == [1, 8, 9, 10, 11, 12, 13, 15]
+    assert versions == [1, 8, 9, 10, 11, 12, 13, 14, 15]
     assert api_key_columns == [
         "id",
         "name",
@@ -194,6 +194,8 @@ def test_shared_service_cutover_retains_ready_audio_without_runtime_fallback(
     assert watcher_count == 1
     assert "recipe_version" not in columns
     assert "source_render_version" not in columns
+    assert "audio_filename" not in columns
+    assert "publish_started_at" not in columns
 
 
 def test_existing_migration_ledger_is_not_replayed(monkeypatch, tmp_path):

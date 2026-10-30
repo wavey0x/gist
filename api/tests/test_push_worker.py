@@ -351,11 +351,11 @@ def test_worker_drops_audio_ready_delivery_when_audio_is_disabled(client, app):
                 insert into narrations(
                     gist_revision_id, requested_by_key_id, service_job_id,
                     text_sha256, status, retry_count, engine_fingerprint,
-                    audio_filename, audio_sha256, mime_type, byte_size, duration_ms,
+                    audio_sha256, mime_type, byte_size, duration_ms,
                     created_at, updated_at, finished_at
                 ) values (?, ?, '00000000-0000-4000-8000-000000000001',
                           ?, 'ready', 0, 'test-engine',
-                          'narration-test.mp3', ?, 'audio/mpeg', 10, 1000,
+                          ?, 'audio/mpeg', 10, 1000,
                           ?, ?, ?)
                 """,
                 (

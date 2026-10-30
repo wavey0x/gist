@@ -1,7 +1,6 @@
 import hashlib
 
 from gist_api.db import gist_connection
-from gist_api.narration import narration_storage_dir
 
 from .conftest import auth_header, create_gist, make_key
 
@@ -24,19 +23,17 @@ def _mark_only_narration_ready(app, audio=b"ID3offline-audio"):
         row = conn.execute(
             "select id from narrations order by id desc limit 1"
         ).fetchone()
-        filename = f"narration-{row['id']}.mp3"
         with conn:
             conn.execute(
                 """
                 update narrations
                 set status = 'ready', engine_fingerprint = 'test-engine',
-                    audio_filename = ?, audio_sha256 = ?, mime_type = 'audio/mpeg',
+                    audio_sha256 = ?, mime_type = 'audio/mpeg',
                     byte_size = ?, duration_ms = 1200, error_code = null,
                     updated_at = ?, finished_at = ?
                 where id = ?
                 """,
                 (
-                    filename,
                     hashlib.sha256(audio).hexdigest(),
                     len(audio),
                     "2026-08-28T12:00:00.000Z",
@@ -44,9 +41,6 @@ def _mark_only_narration_ready(app, audio=b"ID3offline-audio"):
                     row["id"],
                 ),
             )
-    path = narration_storage_dir(app) / filename
-    path.write_bytes(audio)
-    path.chmod(0o600)
     return len(audio)
 
 
@@ -108,7 +102,7 @@ def test_offline_manifest_projects_owned_latest_and_watched_ready_audio(client, 
     )
 
 
-def test_offline_manifest_skips_missing_ready_audio_and_deleted_gists(client, app):
+def test_offline_manifest_projects_service_owned_audio_until_gist_deletion(client, app):
     key = make_key(app)
     created = create_gist(client, key, markdown="# Article", title="Article")
     assert created.status_code == 201
@@ -116,12 +110,8 @@ def test_offline_manifest_skips_missing_ready_audio_and_deleted_gists(client, ap
     _login(client, key)
     _request_narration(client, gist_id)
     _mark_only_narration_ready(app)
-    with gist_connection(app) as conn:
-        row = conn.execute("select audio_filename from narrations").fetchone()
-    (narration_storage_dir(app) / row["audio_filename"]).unlink()
-
     manifest = client.get("/api/v1/me/offline-manifest").get_json()
-    assert manifest["gists"][0]["narration"] is None
+    assert manifest["gists"][0]["narration"]["byte_size"] > 0
 
     deleted = client.delete(
         f"/api/v1/gists/{gist_id}",

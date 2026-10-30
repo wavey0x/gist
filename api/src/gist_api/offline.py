@@ -76,7 +76,6 @@ def get_offline_manifest(app, auth):
                 r.created_at as updated_at,
                 author_key.avatar_url as author_avatar_url,
                 n.id as narration_id,
-                n.audio_filename,
                 n.audio_sha256,
                 n.byte_size,
                 n.mime_type,
@@ -102,7 +101,7 @@ def get_offline_manifest(app, auth):
             items[key] = _manifest_item(app, conn, row, owned=True)
 
         for row in narration_rows:
-            if not _ready_audio_is_valid(app, row):
+            if not _ready_audio_is_valid(row):
                 continue
             narration = {
                 "etag": row["audio_sha256"],

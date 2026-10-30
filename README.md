@@ -198,12 +198,12 @@ content. Search covers active gists' latest revisions only.
 
 ## Article Audio
 
-Logged-in accounts can request cached MP3 audio for an immutable Markdown
-revision. Wavey Gist derives the final plaintext, submits it to a separately
-deployed private narration service, and copies the verified MP3 into its own
-private storage. Publishing and editing never queue audio. The existing push
-worker performs bounded service reconciliation, media publication, cleanup,
-and ready notifications; Wavey Gist does not load a model or run an encoder.
+Logged-in accounts can request MP3 audio for an immutable Markdown revision.
+Wavey Gist derives final plaintext and submits it to the private narration
+service, which owns canonical publication and storage. The push worker performs
+bounded status reconciliation, deletion delivery, and ready notifications.
+Authenticated audio routes stream from the service with range support; Wavey
+Gist stores only job identity and integrity metadata.
 
 ## Configuration
 
@@ -220,8 +220,6 @@ Backend environment variables:
 | `GIST_IMAGE_MAX_BYTES` | `20971520` | Maximum size for one uploaded image. |
 | `GIST_IMAGE_MAX_DIMENSION` | `4096` | Maximum image width or height. |
 | `GIST_IMAGE_MAX_PER_REQUEST` | `10` | Maximum images accepted in one multipart request. |
-| `GIST_NARRATION_STORAGE_DIR` | sibling `narrations/` directory next to SQLite | Private generated MP3 directory. |
-| `GIST_NARRATION_STORAGE_LIMIT_BYTES` | `2147483648` | Global narration storage cap. |
 | `GIST_NARRATION_FILE_LIMIT_BYTES` | `134217728` | Maximum size for one narration MP3. |
 | `GIST_NARRATION_TEXT_LIMIT_CHARS` | `100000` | Maximum normalized narration characters. |
 | `NARRATION_SERVICE_ORIGIN` | required by the worker | HTTPS origin of the private narration service. |
@@ -270,7 +268,6 @@ uv run admin keys rotate <key_prefix_or_id> --avatar-url <https_url>
 uv run admin keys audio-limit <key_prefix_or_id> unlimited
 uv run admin keys audio-limit <key_prefix_or_id> 0
 uv run admin gists rerender --all
-uv run admin narrations prune --target-bytes <bytes>
 ```
 
 A gist API key can create gists, read authenticated API metadata, and

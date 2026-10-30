@@ -1,15 +1,13 @@
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
-
 import pytest
 
+from gist_api import narration as narration_module
 from gist_api.auth import set_audio_generation_daily_limit, verify_api_key_value
 from gist_api.db import gist_connection
 from gist_api.errors import GistError
 from gist_api.narration import (
     extract_narration_text,
-    narration_storage_dir,
-    prune_narrations,
     start_narration,
 )
 
@@ -193,7 +191,7 @@ def test_audio_limit_zero_disables_capability_and_null_is_unlimited(client, app)
         assert client.post(_narration_path(gist_id), json={}).status_code == 202
 
 
-def test_ready_audio_supports_head_and_byte_ranges(client, app):
+def test_ready_audio_supports_head_and_byte_ranges(monkeypatch, client, app):
     key = make_key(app)
     gist_id = _create_markdown_gist(client, key)
     _login(client, key)
@@ -203,19 +201,17 @@ def test_ready_audio_supports_head_and_byte_ranges(client, app):
     audio = b"ID3article-audio-bytes"
     with gist_connection(app) as conn:
         row = conn.execute("select id from narrations").fetchone()
-        filename = f"narration-{row['id']}.mp3"
         with conn:
             conn.execute(
                 """
                 update narrations
                 set status = 'ready', engine_fingerprint = 'test-engine',
-                    audio_filename = ?, audio_sha256 = ?, mime_type = 'audio/mpeg',
+                    audio_sha256 = ?, mime_type = 'audio/mpeg',
                     byte_size = ?, duration_ms = 1200, error_code = null,
                     updated_at = ?, finished_at = ?
                 where id = ?
                 """,
                 (
-                    filename,
                     hashlib.sha256(audio).hexdigest(),
                     len(audio),
                     "2026-08-28T12:00:00.000Z",
@@ -223,9 +219,43 @@ def test_ready_audio_supports_head_and_byte_ranges(client, app):
                     row["id"],
                 ),
             )
-    audio_path = narration_storage_dir(app) / filename
-    audio_path.write_bytes(audio)
-    audio_path.chmod(0o600)
+    sha256 = hashlib.sha256(audio).hexdigest()
+
+    class AudioResponse:
+        def __init__(self, status_code, body, headers):
+            self.status_code = status_code
+            self.body = body
+            self.headers = headers
+
+        def iter_content(self, chunk_size):
+            assert chunk_size == 64 * 1024
+            yield self.body
+
+        def close(self):
+            pass
+
+    def service_audio(_app, _job_id, *, method, headers):
+        base = {
+            "Content-Type": "audio/mpeg",
+            "X-Content-SHA256": sha256,
+            "X-Audio-Duration-Ms": "1200",
+            "X-Engine-Fingerprint": "test-engine",
+            "Accept-Ranges": "bytes",
+            "ETag": f'"{sha256}"',
+        }
+        raw_range = headers.get("Range")
+        if raw_range == "bytes=3-9":
+            body = audio[3:10]
+            return AudioResponse(
+                206,
+                body,
+                {**base, "Content-Length": str(len(body)), "Content-Range": f"bytes 3-9/{len(audio)}"},
+            )
+        if raw_range == "bytes=999-":
+            return AudioResponse(416, b"", {**base, "Content-Range": f"bytes */{len(audio)}"})
+        return AudioResponse(200, b"" if method == "HEAD" else audio, {**base, "Content-Length": str(len(audio))})
+
+    monkeypatch.setattr(narration_module, "get_service_audio", service_audio)
 
     status = client.get(path)
     assert status.status_code == 200
@@ -238,7 +268,7 @@ def test_ready_audio_supports_head_and_byte_ranges(client, app):
     head = client.head(audio_url)
     assert head.status_code == 200
     assert head.headers["Content-Length"] == str(len(audio))
-    assert head.headers["Cache-Control"] == "private, no-store"
+    assert head.headers["Cache-Control"] == "private, no-store, no-transform"
     partial = client.get(audio_url, headers={"Range": "bytes=3-9"})
     assert partial.status_code == 206
     assert partial.data == audio[3:10]
@@ -328,51 +358,3 @@ def test_new_source_render_replaces_the_single_narration_identity(client, app):
         ).fetchone()[0]
     assert len(rows) == 1
     assert cleanup_count == 1
-
-
-def test_admin_prune_deletes_oldest_ready_cache_row_before_file(client, app):
-    key = make_key(app)
-    _login(client, key)
-    gist_ids = [_create_markdown_gist(client, key) for _ in range(2)]
-    for gist_id in gist_ids:
-        client.post(_narration_path(gist_id), json={})
-
-    storage = narration_storage_dir(app)
-    with gist_connection(app) as conn:
-        rows = conn.execute("select id from narrations order by id").fetchall()
-        for index, row in enumerate(rows):
-            filename = f"narration-{row['id']}.mp3"
-            (storage / filename).write_bytes(b"four")
-            with conn:
-                conn.execute(
-                    """
-                    update narrations
-                    set status = 'ready', engine_fingerprint = 'test-engine',
-                        audio_filename = ?, audio_sha256 = ?, mime_type = 'audio/mpeg',
-                        byte_size = 4, duration_ms = 500,
-                        updated_at = ?, finished_at = ?
-                    where id = ?
-                    """,
-                    (
-                        filename,
-                        hashlib.sha256(b"four").hexdigest(),
-                        f"2026-08-28T12:00:0{index}.000Z",
-                        f"2026-08-28T12:00:0{index}.000Z",
-                        row["id"],
-                    ),
-                )
-
-    result = prune_narrations(app, 4)
-    assert result["deleted_rows"] == 1
-    assert result["deleted_files"] == 1
-    assert result["remaining_bytes"] == 4
-    with gist_connection(app) as conn:
-        remaining = conn.execute("select id from narrations").fetchall()
-    assert [row["id"] for row in remaining] == [rows[1]["id"]]
-
-    orphan = storage / "narration-999.mp3"
-    orphan.write_bytes(b"orphan")
-    cleanup = prune_narrations(app, app.config["NARRATION_STORAGE_LIMIT_BYTES"])
-    assert cleanup["deleted_rows"] == 0
-    assert cleanup["deleted_files"] == 1
-    assert orphan.exists() is False
