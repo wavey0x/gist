@@ -1135,9 +1135,45 @@
           await audio.play();
           playbackError.hidden = true;
           playbackError.textContent = "";
+        } catch (error) {
+          // Swapping the source aborts this attempt and resumes on the new one.
+          if (error?.name !== "AbortError") {
+            playbackError.textContent = "Audio could not be played.";
+            playbackError.hidden = false;
+          }
+        }
+      }
+
+      let localAudioUrl = null;
+      let localCopyFailed = false;
+      let sourceSwap = null;
+
+      // iOS can suspend the service worker while locked, so playback must not
+      // need it once the recording is in memory.
+      async function playFromLocalCopy() {
+        if (localAudioUrl || localCopyFailed) {
+          await playAudio();
+          return;
+        }
+        sourceSwap = {
+          position: audio.readyState >= HTMLMediaElement.HAVE_METADATA ? audio.currentTime : null
+        };
+        // The cached body loads after this tap, so bless the element for a later play.
+        void audio.play().catch(() => undefined);
+        audio.pause();
+        try {
+          const cache = await caches.open(AUDIO_CACHE);
+          const blob = await (await cache.match(audioEntry.cacheKey)).blob();
+          localAudioUrl = URL.createObjectURL(
+            blob.type ? blob : new Blob([blob], { type: "audio/mpeg" })
+          );
+          audio.src = localAudioUrl;
         } catch {
-          playbackError.textContent = "Audio could not be played.";
-          playbackError.hidden = false;
+          localCopyFailed = true;
+          sourceSwap = null;
+        }
+        if (!overlay.hidden) {
+          await playAudio();
         }
       }
 
@@ -1152,7 +1188,7 @@
         );
         audioButton.title = `${open ? "Hide audio player" : "Play article audio"} (available offline)`;
         if (open) {
-          void playAudio();
+          void playFromLocalCopy();
         } else {
           audio.pause();
           closeSpeedMenu(false);
@@ -1182,12 +1218,36 @@
       seek.addEventListener("change", () => savePosition(true));
       seek.addEventListener("pointerup", () => savePosition(true));
       audio.addEventListener("loadedmetadata", () => {
-        restorePosition();
+        const position = sourceSwap?.position ?? null;
+        sourceSwap = null;
+        audio.playbackRate = readPlaybackRate();
+        if (position === null) {
+          restorePosition();
+        } else {
+          audio.currentTime = position;
+        }
         paintTimeline();
         setupMediaSession(audio, payload);
       });
       audio.addEventListener("durationchange", paintTimeline);
+      audio.addEventListener("error", () => {
+        if (!localAudioUrl) {
+          return;
+        }
+        // Fall back to the worker-served recording, including when an old
+        // cached shell's policy still blocks local audio.
+        URL.revokeObjectURL(localAudioUrl);
+        localAudioUrl = null;
+        localCopyFailed = true;
+        audio.src = audioEntry.cacheKey;
+        if (!overlay.hidden) {
+          void playAudio();
+        }
+      });
       audio.addEventListener("timeupdate", () => {
+        if (sourceSwap) {
+          return;
+        }
         paintTimeline();
         savePosition(false);
       });
@@ -1204,7 +1264,9 @@
       audio.addEventListener("pause", () => {
         replaceIcon(play, "play", 16, 2);
         play.setAttribute("aria-label", "Play article audio");
-        savePosition(true);
+        if (!sourceSwap) {
+          savePosition(true);
+        }
       });
       audio.addEventListener("ended", () => {
         replaceIcon(play, "play", 16, 2);

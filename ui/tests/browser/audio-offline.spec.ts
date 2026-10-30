@@ -68,6 +68,8 @@ test("saved audio plays through scrolling and seeking online and offline", async
       await expect(player).toHaveCSS("backdrop-filter", "none");
       await expect(player).toHaveCSS("background-color", /^rgb\(/);
       await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThan(0);
+      // Lock-screen playback must not depend on the service worker or network.
+      await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
       if (!offline) {
         const checks = await page.evaluate(() => (window as CacheDiagnostics).audioCacheChecks);
         await page.evaluate(() => {
@@ -89,7 +91,7 @@ test("saved audio plays through scrolling and seeking online and offline", async
       await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThan(0);
       await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
       expect(await audio.evaluate((node: HTMLAudioElement) => node.error)).toBeNull();
-      expect(await page.evaluate(() => (window as CacheDiagnostics).audioCacheBodyReads)).toBe(0);
+      expect(await page.evaluate(() => (window as CacheDiagnostics).audioCacheBodyReads)).toBe(1);
       await button.click();
       await expect(player).toBeHidden();
       await expect(button).toHaveClass(/article-audio-button-ready/);

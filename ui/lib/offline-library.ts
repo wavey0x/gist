@@ -1124,6 +1124,18 @@ export async function narrationIsCached(
   return (await cache.keys(entry.cacheKey)).length > 0;
 }
 
+export async function cachedNarrationBlob(
+  gistId: string,
+  revisionNumber: number
+) {
+  if (!offlineSupported()) {
+    return null;
+  }
+  const cache = await caches.open(OFFLINE_AUDIO_CACHE);
+  const response = await cache.match(audioCacheKey(gistId, revisionNumber));
+  return response ? response.blob() : null;
+}
+
 export async function markNarrationPlayed(
   gistId: string,
   revisionNumber: number

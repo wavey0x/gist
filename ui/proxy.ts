@@ -10,7 +10,7 @@ export function proxy(request: NextRequest) {
     "frame-ancestors 'none'",
     "img-src 'self' https:",
     "font-src 'self' data:",
-    "media-src 'self'",
+    "media-src 'self' blob:",
     "manifest-src 'self'",
     "worker-src 'self'",
     `style-src 'self' 'nonce-${nonce}'`,

@@ -253,3 +253,38 @@ test("waiting honors reduced motion and terminal failure keeps a plain speaker",
     initial.release();
   }
 });
+
+test("streamed audio moves to a local copy and survives a wake-up status failure", async ({ page }) => {
+  let status: { json: object } | { status: number; json: object } = { json: ready };
+  await page.route(`**${endpoint}`, (route) => route.fulfill(status));
+  await page.goto(`/${id}`);
+  const button = page.getByRole("button", { name: "Play article audio" });
+  await expect(button).toBeEnabled();
+  await button.click();
+  const audio = page.locator("audio");
+  const player = page.getByRole("group", { name: "Article audio player" });
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+  const source = await audio.evaluate((node: HTMLAudioElement) => node.currentSrc);
+  status = { status: 401, json: {} };
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(player).toBeVisible();
+  expect(await audio.evaluate((node: HTMLAudioElement) => node.currentSrc)).toBe(source);
+  expect(await audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+});
+
+test("an unplayable local copy falls back to the stream at the same state", async ({ page }) => {
+  await page.route(`**${endpoint}`, (route) => route.fulfill({ json: ready }));
+  await page.addInitScript(() => {
+    const create = URL.createObjectURL;
+    URL.createObjectURL = (blob) => create(new Blob(["not audio"], { type: (blob as Blob).type }));
+  });
+  await page.goto(`/${id}`);
+  await page.getByRole("button", { name: "Play article audio" }).click();
+  const audio = page.locator("audio");
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentSrc)).toContain("/narration/audio");
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentSrc.startsWith("blob:"))).toBe(false);
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+  expect(await audio.evaluate((node: HTMLAudioElement) => node.error)).toBeNull();
+});
