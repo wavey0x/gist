@@ -2,11 +2,16 @@
 
 import { useEffect, useState } from "react";
 
-type ApiKeyCopyButtonProps = {
-  apiKey: string;
-};
+async function fetchApiKey() {
+  const response = await fetch("/api/me/key", { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Could not load API key");
+  }
+  const payload = (await response.json()) as { key: string };
+  return payload.key;
+}
 
-export function ApiKeyCopyButton({ apiKey }: ApiKeyCopyButtonProps) {
+export function ApiKeyCopyButton() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -19,7 +24,18 @@ export function ApiKeyCopyButton({ apiKey }: ApiKeyCopyButtonProps) {
 
   async function copyApiKey() {
     try {
-      await navigator.clipboard.writeText(apiKey);
+      // Safari only allows a clipboard write that starts inside the tap.
+      if (typeof ClipboardItem === "function") {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/plain": fetchApiKey().then(
+              (key) => new Blob([key], { type: "text/plain" })
+            )
+          })
+        ]);
+      } else {
+        await navigator.clipboard.writeText(await fetchApiKey());
+      }
       setCopied(true);
     } catch {
       setCopied(false);

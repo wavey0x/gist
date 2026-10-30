@@ -22,7 +22,9 @@ import {
 import type { SiteChromeConfig } from "../lib/site-config";
 import { ArticleAudio } from "./ArticleAudio";
 import { LocalTimestamp } from "./LocalTimestamp";
+import { ReadingProgress } from "./ReadingProgress";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
+import { TableOfContents } from "./TableOfContents";
 import { ThemeToggle } from "./ThemeToggle";
 
 type ViewMode = "files" | "raw" | "custom";
@@ -636,9 +638,16 @@ export function GistViewer({
               </div>
             ) : null}
           </div>
+          {viewMode === "files" && singleFile?.kind === "markdown" && !rawIsVisible ? (
+            <TableOfContents html={singleFile.rendered_html} />
+          ) : null}
           <ThemeToggle />
         </ArticleAudio>
       </header>
+
+      {viewMode === "files" && singleFile?.kind === "markdown" && !rawIsVisible ? (
+        <ReadingProgress gistId={gist.id} revisionNumber={gist.revision_number} />
+      ) : null}
 
       {viewMode === "custom" && customContent ? (
         customContent

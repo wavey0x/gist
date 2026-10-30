@@ -288,3 +288,24 @@ test("an unplayable local copy falls back to the stream at the same state", asyn
   await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
   expect(await audio.evaluate((node: HTMLAudioElement) => node.error)).toBeNull();
 });
+
+test("audio keeps playing across pages with a mini-player and a sleep timer", async ({ page }) => {
+  await page.route(`**${endpoint}`, (route) => route.fulfill({ json: ready }));
+  await page.goto(`/${id}`);
+  await page.getByRole("button", { name: "Play article audio" }).click();
+  const audio = page.locator("audio");
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+  const sleep = page.getByRole("button", { name: "Sleep timer off" });
+  await sleep.click();
+  await expect(page.getByRole("button", { name: "Sleep timer 15 minutes" })).toBeVisible();
+  await page.locator(".app-brand").click();
+  await expect(page).toHaveURL(/\/$/);
+  const mini = page.getByRole("complementary", { name: "Now playing" });
+  await expect(mini).toBeVisible();
+  expect(await audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+  await mini.getByRole("link").click();
+  await expect(page.getByRole("group", { name: "Article audio player" })).toBeVisible();
+  await expect(mini).toHaveCount(0);
+  expect(await audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+});
+

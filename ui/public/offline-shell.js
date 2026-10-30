@@ -28,6 +28,8 @@
   const TAB_KEY = "waveygist:home-tab:v1";
   const OFFLINE_IDENTITY_KEY = "waveygist:offline-identity:v1";
   const AUDIO_RATE_KEY = "waveygist:audio-rate:v1";
+  const RECONNECT_RELOAD_KEY = "waveygist:reconnect-reload:v1";
+  const RECONNECT_RELOAD_INTERVAL_MS = 60 * 1000;
   const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2];
   const MINUTE_MS = 60 * 1000;
   const HOUR_MS = 60 * MINUTE_MS;
@@ -1756,6 +1758,22 @@
     }
   }
 
+  function readReconnectReload() {
+    try {
+      return Number(sessionStorage.getItem(RECONNECT_RELOAD_KEY)) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  function writeReconnectReload() {
+    try {
+      sessionStorage.setItem(RECONNECT_RELOAD_KEY, String(Date.now()));
+    } catch {
+      // Without session storage the probe keeps its reload behavior.
+    }
+  }
+
   async function verifyReconnect() {
     if (reconnectProbe || navigator.onLine === false) {
       return reconnectProbe;
@@ -1774,7 +1792,11 @@
           throw new Error(`Connectivity probe failed: ${response.status}`);
         }
         showBackOnline();
-        if (!audioIsPlaying()) {
+        // A slow link can pass this probe and then time out the page again, so
+        // reload at most once a minute and leave the Refresh control otherwise.
+        const lastReload = readReconnectReload();
+        if (!audioIsPlaying() && Date.now() - lastReload > RECONNECT_RELOAD_INTERVAL_MS) {
+          writeReconnectReload();
           location.reload();
         }
       } catch {

@@ -2,21 +2,43 @@
 
 import {
   Check,
+  ListPlus,
+  Moon,
   Pause,
   Play,
   RotateCcw,
   RotateCw,
   Volume2
 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import {
-  cachedNarrationBlob,
-  markNarrationPlayed,
+  audioIsLoadedFor,
+  closePlayer,
+  enqueueTrack,
+  hydratePlaybackRate,
+  isTrack,
+  noteTrackCached,
+  openTrack,
+  persistPosition,
+  PLAYBACK_RATES,
+  prepareTrack,
+  releaseTrack,
+  seek,
+  selectPlaybackRate,
+  skip,
+  cycleSleepTimer,
+  togglePlayback,
+  useAudioEngine,
+  type AudioTrack
+} from "../lib/audio-engine";
+import { formatPlaybackRate, formatPlaybackTime } from "../lib/audio-format";
+import {
   narrationIsCached,
   OFFLINE_LIBRARY_EVENT,
   reconcileOfflineLibrary
 } from "../lib/offline-library";
+import { ListenFromHere } from "./ListenFromHere";
 
 type NarrationStatus = "pending" | "ready" | "failed";
 
@@ -37,90 +59,8 @@ type ArticleAudioProps = {
 
 type ViewState = "checking" | "unavailable" | "idle" | "preparing" | "ready" | "failed";
 
-type LocalCopyState = {
-  generation: number;
-  loading: Promise<void> | null;
-  url: string | null;
-  pendingUrl: string | null;
-  failed: boolean;
-};
-
-type SourceSwap = {
-  position: number | null;
-  resume: boolean;
-};
-
-type NavigatorWithAudioSession = Navigator & {
-  audioSession?: {
-    type: string;
-  };
-};
-
 const POLL_DELAYS_MS = [1500, 2500, 4000, 6000, 8000];
-const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2] as const;
-const PLAYBACK_RATE_STORAGE_KEY = "waveygist:audio-rate:v1";
-const POSITION_SAVE_INTERVAL_SECONDS = 5;
-const POSITION_END_THRESHOLD_SECONDS = 10;
 const PLAYER_DOCK_TOP_PX = 10;
-
-function positionStorageKey(gistId: string, revisionNumber: number) {
-  return `waveygist:audio-position:v1:${gistId}:${revisionNumber}`;
-}
-
-async function downloadNarrationBlob(url: string) {
-  const response = await fetch(url, { headers: { Accept: "audio/mpeg" } });
-  if (!response.ok) {
-    return null;
-  }
-  const blob = await response.blob();
-  const expectedSize = Number(response.headers.get("content-length"));
-  return expectedSize > 0 && blob.size !== expectedSize ? null : blob;
-}
-
-function requestPlaybackAudioSession() {
-  const audioSession = (navigator as NavigatorWithAudioSession).audioSession;
-  if (!audioSession) {
-    return;
-  }
-  try {
-    audioSession.type = "playback";
-  } catch {
-    // The Audio Session API is still experimental outside WebKit.
-  }
-}
-
-function isPlaybackRate(value: number): value is (typeof PLAYBACK_RATES)[number] {
-  return PLAYBACK_RATES.some((rate) => rate === value);
-}
-
-function formatPlaybackRate(rate: number) {
-  return `${rate.toFixed(rate % 1 === 0 ? 0 : 2).replace(/0$/, "")}×`;
-}
-
-function formatPlaybackTime(value: number) {
-  if (!Number.isFinite(value) || value < 0) {
-    return "0:00";
-  }
-  const totalSeconds = Math.floor(value);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
-      .toString()
-      .padStart(2, "0")}`;
-  }
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function readStoredPlaybackRate() {
-  try {
-    const value = Number(window.localStorage.getItem(PLAYBACK_RATE_STORAGE_KEY));
-    return isPlaybackRate(value) ? value : 1;
-  } catch {
-    return 1;
-  }
-}
 
 function isNarrationPayload(value: unknown): value is NarrationPayload {
   if (!value || typeof value !== "object") {
@@ -160,237 +100,67 @@ export function ArticleAudio({
   gistId,
   revisionNumber
 }: ArticleAudioProps) {
+  const engine = useAudioEngine();
   const [viewState, setViewState] = useState<ViewState>("checking");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(null);
   const [cachedAvailable, setCachedAvailable] = useState(false);
   const [message, setMessage] = useState("");
   const [retryable, setRetryable] = useState(false);
-  const [playerOpen, setPlayerOpen] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [playbackRate, setPlaybackRate] = useState(1);
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
   const [docked, setDocked] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastSavedTimeRef = useRef(0);
-  const restoredPositionKeyRef = useRef<string | null>(null);
-  const localCopyRef = useRef<LocalCopyState>({
-    generation: 0,
-    loading: null,
-    url: null,
-    pendingUrl: null,
-    failed: false
-  });
-  const sourceSwapRef = useRef<SourceSwap | null>(null);
-  const resumeOnLocalCopyRef = useRef(false);
   const speedControlRef = useRef<HTMLDivElement | null>(null);
   const speedButtonRef = useRef<HTMLButtonElement | null>(null);
   const dockSentinelRef = useRef<HTMLSpanElement | null>(null);
   const dockTopProbeRef = useRef<HTMLSpanElement | null>(null);
-  const playerOpenRef = useRef(false);
-  playerOpenRef.current = playerOpen;
   const playerId = useId();
   const speedOptionsId = useId();
   const endpoint = `/api/gists/${encodeURIComponent(gistId)}/revisions/${revisionNumber}/narration`;
-  const positionKey = positionStorageKey(gistId, revisionNumber);
+  const isCurrentTrack = isTrack(engine.track, gistId, revisionNumber);
+  const playerOpen = isCurrentTrack && engine.opened;
+  const { currentTime, duration, playbackRate, playing } = isCurrentTrack
+    ? engine
+    : { currentTime: 0, duration: 0, playbackRate: engine.playbackRate, playing: false };
+  const otherTrackOpen = engine.opened && !isCurrentTrack;
+  const queued = engine.queue.some((item) =>
+    isTrack(item, gistId, revisionNumber)
+  );
+  const track = useMemo<AudioTrack | null>(
+    () =>
+      audioUrl
+        ? {
+            gistId,
+            revisionNumber,
+            title: articleTitle?.trim() || "Article audio",
+            author: authorName,
+            url: audioUrl,
+            cached: cachedAvailable
+          }
+        : null,
+    [articleTitle, audioUrl, authorName, cachedAvailable, gistId, revisionNumber]
+  );
 
   function cancelRequest() {
     controllerRef.current?.abort();
     controllerRef.current = null;
   }
 
-  function clearStoredPosition() {
-    try {
-      window.localStorage.removeItem(positionKey);
-    } catch {
-      // Playback bookmarks are best effort.
-    }
-  }
-
-  function persistPosition(force = false) {
-    const audio = audioRef.current;
-    if (!audio || !Number.isFinite(audio.currentTime)) {
-      return;
-    }
-    if (audio.currentTime <= 0.5) {
-      clearStoredPosition();
-      lastSavedTimeRef.current = 0;
-      return;
-    }
-    if (
-      Number.isFinite(audio.duration) &&
-      audio.duration - audio.currentTime <= POSITION_END_THRESHOLD_SECONDS
-    ) {
-      clearStoredPosition();
-      return;
-    }
-    if (
-      !force &&
-      Math.abs(audio.currentTime - lastSavedTimeRef.current) <
-        POSITION_SAVE_INTERVAL_SECONDS
-    ) {
-      return;
-    }
-    try {
-      window.localStorage.setItem(
-        positionKey,
-        JSON.stringify({
-          position: Math.round(audio.currentTime * 10) / 10
-        })
-      );
-      lastSavedTimeRef.current = audio.currentTime;
-    } catch {
-      // Playback bookmarks are best effort.
-    }
-  }
-
-  function restorePosition(audio: HTMLAudioElement) {
-    if (restoredPositionKeyRef.current === positionKey) {
-      return;
-    }
-    restoredPositionKeyRef.current = positionKey;
-    try {
-      const stored = JSON.parse(
-        window.localStorage.getItem(positionKey) ?? "null"
-      ) as { position?: unknown } | null;
-      const position = Number(stored?.position);
-      if (
-        Number.isFinite(position) &&
-        position > 0 &&
-        position < audio.duration - POSITION_END_THRESHOLD_SECONDS
-      ) {
-        audio.currentTime = position;
-        setCurrentTime(position);
-        lastSavedTimeRef.current = position;
-      } else if (stored) {
-        clearStoredPosition();
-      }
-    } catch {
-      clearStoredPosition();
-    }
-  }
-
-  function releaseLocalCopy() {
-    const copy = localCopyRef.current;
-    for (const url of [copy.url, copy.pendingUrl]) {
-      if (url) URL.revokeObjectURL(url);
-    }
-    localCopyRef.current = {
-      generation: copy.generation + 1,
-      loading: null,
-      url: null,
-      pendingUrl: null,
-      failed: false
-    };
-    sourceSwapRef.current = null;
-    resumeOnLocalCopyRef.current = false;
-    setLocalAudioUrl(null);
-  }
-
-  // iOS can suspend the service worker and drop proxied range requests while
-  // locked, so playback must not need either once the recording is in memory.
-  function ensureLocalCopy(networkUrl?: string) {
-    const copy = localCopyRef.current;
-    if (copy.url || copy.pendingUrl || copy.failed) {
-      return Promise.resolve();
-    }
-    if (copy.loading) {
-      return copy.loading;
-    }
-    const { generation } = copy;
-    const loading = (async () => {
-      let blob = await cachedNarrationBlob(gistId, revisionNumber).catch(() => null);
-      if (!blob && networkUrl) {
-        blob = await downloadNarrationBlob(networkUrl).catch(() => null);
-      }
-      if (generation !== localCopyRef.current.generation) {
-        return;
-      }
-      localCopyRef.current.loading = null;
-      if (blob) {
-        localCopyRef.current.pendingUrl = URL.createObjectURL(
-          blob.type ? blob : new Blob([blob], { type: "audio/mpeg" })
-        );
-        adoptLocalCopy();
-      }
-    })();
-    copy.loading = loading;
-    return loading;
-  }
-
-  function adoptLocalCopy() {
-    const copy = localCopyRef.current;
-    const audio = audioRef.current;
-    if (!copy.pendingUrl) {
-      return;
-    }
-    const interrupted = Boolean(audio) && !audio!.paused;
-    // A hidden page may not be allowed to restart, so keep a healthy stream
-    // running until it stalls, pauses, or the page returns.
-    if (
-      interrupted &&
-      document.visibilityState !== "visible" &&
-      audio!.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
-    ) {
-      return;
-    }
-    sourceSwapRef.current = {
-      position:
-        audio && audio.readyState >= HTMLMediaElement.HAVE_METADATA
-          ? audio.currentTime
-          : null,
-      resume: interrupted || resumeOnLocalCopyRef.current
-    };
-    resumeOnLocalCopyRef.current = false;
-    copy.url = copy.pendingUrl;
-    copy.pendingUrl = null;
-    setLocalAudioUrl(copy.url);
-  }
-
-  function handleAudioError(audio: HTMLAudioElement) {
-    const copy = localCopyRef.current;
-    if (!copy.url) {
-      return;
-    }
-    URL.revokeObjectURL(copy.url);
-    copy.url = null;
-    copy.failed = true;
-    sourceSwapRef.current = {
-      position: audio.currentTime > 0 ? audio.currentTime : null,
-      resume: playing
-    };
-    setLocalAudioUrl(null);
-  }
-
   function reset() {
     cancelRequest();
-    audioRef.current?.pause();
-    audioRef.current?.removeAttribute("src");
-    audioRef.current?.load();
-    releaseLocalCopy();
     setViewState("checking");
     setAudioUrl(null);
     setCachedAvailable(false);
     setMessage("");
     setRetryable(false);
-    setPlayerOpen(false);
-    setPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
     setSpeedMenuOpen(false);
     setDocked(false);
-    lastSavedTimeRef.current = 0;
-    restoredPositionKeyRef.current = null;
   }
 
   useEffect(() => {
     reset();
     return () => {
       cancelRequest();
-      releaseLocalCopy();
+      releaseTrack(gistId, revisionNumber);
     };
     // Reset only when the immutable article identity changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -399,125 +169,20 @@ export function ArticleAudio({
   useEffect(() => {
     if (!active) {
       reset();
+      releaseTrack(gistId, revisionNumber);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
   useEffect(() => {
-    setPlaybackRate(readStoredPlaybackRate());
+    hydratePlaybackRate();
   }, []);
 
   useEffect(() => {
-    if (!active || !audioUrl || !("mediaSession" in navigator)) {
-      return;
+    if (active && track) {
+      prepareTrack(track);
     }
-
-    const session = navigator.mediaSession;
-    if ("MediaMetadata" in window) {
-      session.metadata = new MediaMetadata({
-        title: articleTitle?.trim() || "Article audio",
-        artist: authorName,
-        album: "waveygist",
-        artwork: [
-          {
-            src: new URL("/icons/icon-192.png", window.location.origin).href,
-            sizes: "192x192",
-            type: "image/png"
-          },
-          {
-            src: new URL("/icons/icon-512.png", window.location.origin).href,
-            sizes: "512x512",
-            type: "image/png"
-          }
-        ]
-      });
-    }
-
-    const actionHandlers: Array<[
-      MediaSessionAction,
-      MediaSessionActionHandler
-    ]> = [
-      [
-        "play",
-        () => {
-          const audio = audioRef.current;
-          if (audio) {
-            requestPlaybackAudioSession();
-            void audio.play().catch(() => {
-              setMessage("Audio playback was blocked. Tap play to continue.");
-            });
-          }
-        }
-      ],
-      [
-        "pause",
-        () => {
-          audioRef.current?.pause();
-          persistPosition(true);
-        }
-      ],
-      [
-        "seekbackward",
-        (details) => skip(-(details.seekOffset ?? 10))
-      ],
-      ["seekforward", (details) => skip(details.seekOffset ?? 10)],
-      [
-        "seekto",
-        (details) => {
-          if (typeof details.seekTime === "number") {
-            seek(String(details.seekTime));
-            persistPosition(true);
-          }
-        }
-      ]
-    ];
-
-    const installedActions: MediaSessionAction[] = [];
-    for (const [action, handler] of actionHandlers) {
-      try {
-        session.setActionHandler(action, handler);
-        installedActions.push(action);
-      } catch {
-        // Media Session actions vary by Safari release.
-      }
-    }
-
-    return () => {
-      for (const action of installedActions) {
-        try {
-          session.setActionHandler(action, null);
-        } catch {
-          // The action may no longer be supported.
-        }
-      }
-      session.metadata = null;
-      session.playbackState = "none";
-    };
-    // Handlers resolve the current audio element through refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, articleTitle, audioUrl, authorName, positionKey]);
-
-  useEffect(() => {
-    if (!active || !audioUrl || !("mediaSession" in navigator)) {
-      return;
-    }
-    const session = navigator.mediaSession;
-    session.playbackState = playing ? "playing" : "paused";
-    syncMediaPosition();
-    // The lock screen extrapolates position, so ticks need no update.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, audioUrl, duration, playbackRate, playing]);
-
-  useEffect(() => {
-    const savePosition = () => persistPosition(true);
-    window.addEventListener("pagehide", savePosition);
-    return () => {
-      savePosition();
-      window.removeEventListener("pagehide", savePosition);
-    };
-    // Persist against the immutable revision key captured by this effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [positionKey]);
+  }, [active, track]);
 
   useEffect(() => {
     if (!speedMenuOpen) {
@@ -588,27 +253,6 @@ export function ArticleAudio({
     };
   }, [active, audioUrl, playerOpen, viewState]);
 
-  function syncMediaPosition() {
-    const audio = audioRef.current;
-    if (
-      !audio ||
-      !("mediaSession" in navigator) ||
-      !Number.isFinite(audio.duration) ||
-      audio.duration <= 0
-    ) {
-      return;
-    }
-    try {
-      navigator.mediaSession.setPositionState({
-        duration: audio.duration,
-        playbackRate: audio.playbackRate,
-        position: Math.min(audio.duration, Math.max(0, audio.currentTime))
-      });
-    } catch {
-      // Position state is optional on older Safari releases.
-    }
-  }
-
   async function readPayload(response: Response) {
     const payload: unknown = await response.json().catch(() => null);
     return isNarrationPayload(payload) ? payload : null;
@@ -624,7 +268,6 @@ export function ArticleAudio({
 
   function showFailure(response: Response | null, payload?: NarrationPayload | null) {
     setViewState("failed");
-    setPlayerOpen(false);
     setRetryable(Boolean(payload?.retryable));
     if (response?.status === 401) {
       setMessage("Your session expired. Log in again to listen.");
@@ -647,14 +290,17 @@ export function ArticleAudio({
     if (!active || controllerRef.current) return;
     // A revision's recording is immutable, and a wake-up status failure must
     // never take down audio that is already loaded.
-    if (method === "GET" && (audioRef.current?.readyState ?? 0) > 0) return;
+    if (method === "GET" && audioIsLoadedFor(gistId, revisionNumber)) {
+      setAudioUrl(`${endpoint}/audio`);
+      setViewState("ready");
+      return;
+    }
     const controller = new AbortController();
     controllerRef.current = controller;
     let pending = method === "POST";
     let attempt = 0;
     if (pending) {
       setViewState("preparing");
-      setPlayerOpen(false);
       setMessage("");
       setRetryable(false);
     } else {
@@ -743,7 +389,7 @@ export function ArticleAudio({
         setViewState("ready");
         setRetryable(false);
         setMessage("");
-        if (playerOpenRef.current) void ensureLocalCopy();
+        noteTrackCached(gistId, revisionNumber);
       }
     }
     const refresh = () => { void syncNarration(); };
@@ -751,7 +397,6 @@ export function ArticleAudio({
       if (document.visibilityState === "visible") {
         void refreshCache();
         refresh();
-        adoptLocalCopy();
       }
     };
     void refreshCache().then(() => {
@@ -776,139 +421,21 @@ export function ArticleAudio({
   }, [active, endpoint]);
 
   function togglePlayer() {
-    if (viewState !== "ready" || !audioUrl) {
+    if (viewState !== "ready" || !track) {
       void syncNarration(viewState === "unavailable" ? "GET" : "POST");
       return;
     }
     if (playerOpen) {
-      audioRef.current?.pause();
-      persistPosition(true);
+      closePlayer();
       setSpeedMenuOpen(false);
-      setPlayerOpen(false);
       return;
     }
     setMessage("");
-    setPlayerOpen(true);
-    if (localAudioUrl) {
-      void playAudio();
-      return;
-    }
-    if (cachedAvailable) {
-      void startFromCachedCopy();
-      return;
-    }
-    void playAudio();
-    void ensureLocalCopy(audioUrl);
+    openTrack(track);
   }
 
-  async function startFromCachedCopy() {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-    // The cached body loads after this tap, so bless the element for a later
-    // play instead of restarting the stream a moment after it begins.
-    requestPlaybackAudioSession();
-    resumeOnLocalCopyRef.current = true;
-    void audio.play().catch(() => undefined);
-    audio.pause();
-    await ensureLocalCopy(audioUrl ?? undefined);
-    if (resumeOnLocalCopyRef.current) {
-      resumeOnLocalCopyRef.current = false;
-      await playAudio();
-    }
-  }
-
-  async function playAudio() {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-    requestPlaybackAudioSession();
-    audio.playbackRate = playbackRate;
-    try {
-      await audio.play();
-      setMessage("");
-    } catch (error) {
-      // Swapping the source aborts this attempt and resumes on the new one.
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
-        setMessage("Audio could not be played.");
-      }
-    }
-  }
-
-  async function togglePlayback() {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-    if (!audio.paused) {
-      audio.pause();
-      persistPosition(true);
-      return;
-    }
-    await playAudio();
-  }
-
-  function handleLoadedMetadata(audio: HTMLAudioElement) {
-    const nextDuration = Number.isFinite(audio.duration) ? audio.duration : 0;
-    setDuration(nextDuration);
-    audio.playbackRate = playbackRate;
-    const swap = sourceSwapRef.current;
-    sourceSwapRef.current = null;
-    if (swap?.position === null || !swap) {
-      restorePosition(audio);
-    } else {
-      audio.currentTime = swap.position;
-      setCurrentTime(swap.position);
-    }
-    if (swap?.resume) {
-      void playAudio();
-    }
-    syncMediaPosition();
-  }
-
-  function handleTimeUpdate(audio: HTMLAudioElement) {
-    if (sourceSwapRef.current) {
-      return;
-    }
-    setCurrentTime(audio.currentTime);
-    persistPosition();
-  }
-
-  function seek(value: string) {
-    const audio = audioRef.current;
-    const nextTime = Number(value);
-    if (!audio || !Number.isFinite(nextTime)) {
-      return;
-    }
-    audio.currentTime = nextTime;
-    setCurrentTime(nextTime);
-  }
-
-  function skip(seconds: number) {
-    const audio = audioRef.current;
-    if (!audio || !Number.isFinite(audio.currentTime)) {
-      return;
-    }
-    const maximum = Number.isFinite(audio.duration) ? audio.duration : Infinity;
-    const nextTime = Math.min(maximum, Math.max(0, audio.currentTime + seconds));
-    audio.currentTime = nextTime;
-    setCurrentTime(nextTime);
-    persistPosition(true);
-  }
-
-  function selectPlaybackRate(rate: (typeof PLAYBACK_RATES)[number]) {
-    setPlaybackRate(rate);
-    if (audioRef.current) {
-      audioRef.current.playbackRate = rate;
-      syncMediaPosition();
-    }
-    try {
-      window.localStorage.setItem(PLAYBACK_RATE_STORAGE_KEY, String(rate));
-    } catch {
-      // Playback preferences are best effort.
-    }
+  function choosePlaybackRate(rate: number) {
+    selectPlaybackRate(rate);
     setSpeedMenuOpen(false);
     window.requestAnimationFrame(() => speedButtonRef.current?.focus());
   }
@@ -971,6 +498,19 @@ export function ArticleAudio({
               )}
             </button>
           ) : null}
+          {active && otherTrackOpen && viewState === "ready" && track ? (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={queued ? "In your audio queue" : "Add to audio queue"}
+              aria-pressed={queued}
+              title={queued ? "Up next" : "Play next"}
+              disabled={queued}
+              onClick={() => enqueueTrack(track)}
+            >
+              <ListPlus aria-hidden="true" size={18} strokeWidth={1.8} />
+            </button>
+          ) : null}
           {children}
         </div>
         <span
@@ -984,44 +524,6 @@ export function ArticleAudio({
           aria-hidden="true"
         />
         {active ? <span className="sr-only" role="status">{buttonLabel}</span> : null}
-        {active && audioUrl ? (
-          <audio
-            ref={audioRef}
-            className="article-audio-engine"
-            preload={playerOpen ? "auto" : "metadata"}
-            src={localAudioUrl ?? audioUrl}
-            onLoadedMetadata={(event) =>
-              handleLoadedMetadata(event.currentTarget)
-            }
-            onDurationChange={(event) =>
-              setDuration(
-                Number.isFinite(event.currentTarget.duration)
-                  ? event.currentTarget.duration
-                  : 0
-              )
-            }
-            onTimeUpdate={(event) => handleTimeUpdate(event.currentTarget)}
-            onSeeked={syncMediaPosition}
-            onError={(event) => handleAudioError(event.currentTarget)}
-            onWaiting={adoptLocalCopy}
-            onStalled={adoptLocalCopy}
-            crossOrigin="anonymous"
-            onPlay={() => {
-              setPlaying(true);
-              void markNarrationPlayed(gistId, revisionNumber);
-            }}
-            onPause={() => {
-              if (sourceSwapRef.current) return;
-              setPlaying(false);
-              adoptLocalCopy();
-            }}
-            onEnded={() => {
-              setPlaying(false);
-              clearStoredPosition();
-            }}
-            aria-hidden="true"
-          />
-        ) : null}
         {active && viewState === "ready" && audioUrl && playerOpen ? (
           <div
             id={playerId}
@@ -1050,7 +552,7 @@ export function ArticleAudio({
                 aria-label={
                   playing ? "Pause article audio" : "Play article audio"
                 }
-                onClick={() => void togglePlayback()}
+                onClick={togglePlayback}
               >
                 {playing ? (
                   <Pause aria-hidden="true" size={16} strokeWidth={2} />
@@ -1096,7 +598,7 @@ export function ArticleAudio({
                       className="article-audio-speed-option"
                       aria-pressed={rate === playbackRate}
                       key={rate}
-                      onClick={() => selectPlaybackRate(rate)}
+                      onClick={() => choosePlaybackRate(rate)}
                     >
                       <span>{formatPlaybackRate(rate)}</span>
                       {rate === playbackRate ? (
@@ -1122,7 +624,7 @@ export function ArticleAudio({
                 aria-label="Article audio position"
                 aria-valuetext={`${formatPlaybackTime(currentTime)} of ${formatPlaybackTime(duration)}`}
                 style={seekStyle}
-                onChange={(event) => seek(event.currentTarget.value)}
+                onChange={(event) => seek(Number(event.currentTarget.value))}
                 onBlur={() => persistPosition(true)}
                 onPointerUp={() => persistPosition(true)}
               />
@@ -1133,13 +635,35 @@ export function ArticleAudio({
                 {formatPlaybackTime(duration)}
               </span>
             </div>
-            {message ? (
+            <div className="article-audio-extras">
+              <button
+                type="button"
+                className="article-audio-sleep-button"
+                aria-label={
+                  engine.sleepMinutes
+                    ? `Sleep timer ${engine.sleepMinutes} minutes`
+                    : "Sleep timer off"
+                }
+                title="Sleep timer"
+                onClick={cycleSleepTimer}
+              >
+                <Moon aria-hidden="true" size={13} strokeWidth={1.8} />
+                <span>{engine.sleepMinutes ? `${engine.sleepMinutes}m` : "Off"}</span>
+              </button>
+              {engine.queue.length ? (
+                <span className="article-audio-queue-count">
+                  {engine.queue.length} up next
+                </span>
+              ) : null}
+            </div>
+            {engine.message ? (
               <span className="article-audio-playback-error" role="status">
-                {message}
+                {engine.message}
               </span>
             ) : null}
           </div>
         ) : null}
+        {playerOpen ? <ListenFromHere /> : null}
       </div>
       {active && (viewState === "failed" || viewState === "unavailable" || viewState === "preparing") && message ? (
         <div className="article-audio-row" aria-live="polite">

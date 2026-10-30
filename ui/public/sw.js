@@ -2,6 +2,7 @@ const SHELL_CACHE = "waveygist-shell";
 const CONTENT_CACHE = "waveygist-content-v1";
 const AUDIO_CACHE = "waveygist-audio-v1";
 const SHELL_URL = "/offline-shell.html";
+const NAVIGATION_TIMEOUT_MS = 1500;
 const SHARED_SHELL_ASSETS = [
   "/github-markdown.css",
   "/markdown-theme.css",
@@ -117,6 +118,38 @@ function isOfflineNavigation(url) {
       url.pathname === "/login" ||
       GIST_PATH_RE.test(url.pathname))
   );
+}
+
+async function hasSavedCopy(url) {
+  const saved = await (await caches.open(CONTENT_CACHE)).keys();
+  if (!GIST_PATH_RE.test(url.pathname)) {
+    return saved.length > 0;
+  }
+  const gistId = url.pathname.split("/")[1];
+  const prefix = `/api/gists/${gistId}/revisions/`;
+  return saved.some((request) => new URL(request.url).pathname.startsWith(prefix));
+}
+
+// Weak signal can hold a request open for minutes, so a saved copy wins quickly.
+async function navigationResponse(networkResponse, url) {
+  const shell = async () =>
+    (await caches.open(SHELL_CACHE)).match(SHELL_URL);
+  let timer;
+  const timedOut = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(null), NAVIGATION_TIMEOUT_MS);
+  });
+  try {
+    const response = await Promise.race([networkResponse, timedOut]);
+    if (response) {
+      return response;
+    }
+    const fallback = (await hasSavedCopy(url)) ? await shell() : null;
+    return fallback ?? (await networkResponse);
+  } catch {
+    return (await shell()) ?? Response.error();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function copyMediaHeaders(response, length) {
@@ -266,12 +299,7 @@ self.addEventListener("fetch", (event) => {
     isOfflineNavigation(url)
   ) {
     const networkResponse = fetch(request);
-    event.respondWith(
-      networkResponse.catch(async () => {
-        const shell = await (await caches.open(SHELL_CACHE)).match(SHELL_URL);
-        return shell ?? Response.error();
-      })
-    );
+    event.respondWith(navigationResponse(networkResponse, url));
     event.waitUntil(
       networkResponse
         .then(() => refreshShellAssets(OFFLINE_SHELL_ASSETS, "no-cache"))
@@ -308,12 +336,16 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   const notification = notificationFromEvent(event);
   event.waitUntil(
-    self.registration.showNotification(notification.title, {
-      body: notification.body,
-      tag: notification.tag,
-      icon: "/icons/icon-192.png",
-      data: { path: notification.path }
-    })
+    (async () => {
+      await self.registration.showNotification(notification.title, {
+        body: notification.body,
+        tag: notification.tag,
+        icon: "/icons/icon-192.png",
+        data: { path: notification.path }
+      });
+      const unread = await self.registration.getNotifications();
+      await self.navigator.setAppBadge?.(unread.length).catch(() => undefined);
+    })()
   );
 });
 

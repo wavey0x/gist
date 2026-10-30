@@ -2,6 +2,7 @@
 
 import type { KeyboardEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   normalizeMyGistsPayload,
@@ -42,6 +43,7 @@ type ListItem = {
   dateTime: string;
   dateLabel: "viewed" | "updated" | "created";
   action?: ReactNode;
+  updatedSinceViewed?: boolean;
 };
 
 function readActiveTab(): TabId {
@@ -220,9 +222,17 @@ function GistList({
             <li className="gist-list-item" key={item.id}>
               <div className="gist-list-row">
                 <div className="gist-list-content">
-                  <a className="gist-list-title-link" href={item.url}>
+                  <Link className="gist-list-title-link" href={item.url} prefetch={false}>
+                    {item.updatedSinceViewed ? (
+                      <span
+                        className="gist-updated-dot"
+                        role="img"
+                        aria-label="Updated since you read it"
+                        title="Updated since you read it"
+                      />
+                    ) : null}
                     <span className="gist-list-title">{title}</span>
-                  </a>
+                  </Link>
                   <span className="gist-list-meta">
                     <GistListAuthor
                       authorName={item.authorName}
@@ -401,8 +411,14 @@ export function GistHistoryTabs({
   ]);
 
   const recentItems = useMemo(
-    () => (recentGists ?? []).map(recentGistToListItem),
-    [recentGists]
+    () =>
+      (recentGists ?? []).map((gist) => ({
+        ...recentGistToListItem(gist),
+        updatedSinceViewed: myGists?.gists.some(
+          (mine) => mine.id === gist.id && mine.revision_number > gist.revision_number
+        )
+      })),
+    [myGists, recentGists]
   );
   const handleGistDeleted = useCallback(() => {
     setReloadToken((current) => current + 1);
@@ -411,10 +427,16 @@ export function GistHistoryTabs({
     searchQuery || myGistSort === "updated" ? "updated" : "created";
   const myItems = useMemo(
     () =>
-      (myGists?.gists ?? []).map((gist) =>
-        myGistToListItem(gist, myDateSort, handleGistDeleted)
-      ),
-    [handleGistDeleted, myDateSort, myGists]
+      (myGists?.gists ?? []).map((gist) => {
+        const viewed = recentGists?.find((recent) => recent.id === gist.id);
+        return {
+          ...myGistToListItem(gist, myDateSort, handleGistDeleted),
+          updatedSinceViewed: viewed
+            ? gist.revision_number > viewed.revision_number
+            : false
+        };
+      }),
+    [handleGistDeleted, myDateSort, myGists, recentGists]
   );
 
   function selectMyGistSort(sort: MyGistDateSort) {

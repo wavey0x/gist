@@ -52,7 +52,7 @@ export default async function MePage() {
             <span className="account-action-separator" aria-hidden="true">
               |
             </span>
-            <ApiKeyCopyButton apiKey={session.key} />
+            <ApiKeyCopyButton />
           </div>
         </div>
       </header>

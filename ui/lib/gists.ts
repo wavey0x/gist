@@ -120,6 +120,15 @@ function isGistFile(filename: string, value: unknown): value is PublicGistFile {
   );
 }
 
+// Whole tags are matched so "<img" inside a quoted attribute is left alone.
+function lazyLoadImages(html: string) {
+  return html.replace(/<(?:[^"'>]|"[^"]*"|'[^']*')*>/g, (tag) =>
+    /^<img\s/i.test(tag) && !/\sloading=/i.test(tag)
+      ? tag.replace(/^<img/i, '<img loading="lazy" decoding="async"')
+      : tag
+  );
+}
+
 export function normalizePublicGistPayload(
   gistId: string,
   payload: unknown
@@ -165,7 +174,13 @@ export function normalizePublicGistPayload(
     throw new Error("Invalid gist payload");
   }
 
-  return gist as PublicGistPayload;
+  const files = Object.fromEntries(
+    Object.entries(gist.files as PublicGistPayload["files"]).map(([filename, file]) => [
+      filename,
+      { ...file, rendered_html: lazyLoadImages(file.rendered_html) }
+    ])
+  );
+  return { ...gist, files } as PublicGistPayload;
 }
 
 export function orderedGistFiles(gist: PublicGistPayload) {

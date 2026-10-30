@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ContinueRow } from "../components/ContinueRow";
 import { GistHistoryTabs } from "../components/GistHistory";
 import { fetchCurrentSession, fetchMyGists } from "../lib/auth";
 
@@ -36,6 +37,8 @@ export default async function Home() {
           </p>
         </section>
       ) : null}
+
+      <ContinueRow />
 
       <section className="home-gist-history" aria-label="Gist history">
         <GistHistoryTabs

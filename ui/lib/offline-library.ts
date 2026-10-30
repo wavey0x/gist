@@ -1124,6 +1124,29 @@ export async function narrationIsCached(
   return (await cache.keys(entry.cacheKey)).length > 0;
 }
 
+export async function readSavedGist(
+  gistId: string,
+  revisionNumber: number | null
+) {
+  if (!offlineSupported()) {
+    return null;
+  }
+  const entries = (await readEntries()).filter(
+    (entry) =>
+      entry.kind === "gist" &&
+      entry.gistId === gistId &&
+      (revisionNumber === null || entry.revisionNumber === revisionNumber)
+  );
+  const entry = entries.sort((left, right) => right.revisionNumber - left.revisionNumber)[0];
+  if (!entry) {
+    return null;
+  }
+  const response = await (await caches.open(OFFLINE_CONTENT_CACHE)).match(entry.cacheKey);
+  return response
+    ? normalizePublicGistPayload(gistId, await response.json())
+    : null;
+}
+
 export async function cachedNarrationBlob(
   gistId: string,
   revisionNumber: number

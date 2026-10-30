@@ -2,8 +2,18 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "katex/dist/katex.min.css";
 import { AppHeader } from "../components/AppHeader";
+import { MiniPlayer } from "../components/MiniPlayer";
 import { PwaRuntime } from "../components/PwaRuntime";
 import { resolveApiBaseUrl } from "../lib/api-base";
+
+const LAUNCH_SCREENS = [
+  [375, 667, 2],
+  [390, 844, 3],
+  [393, 852, 3],
+  [402, 874, 3],
+  [430, 932, 3],
+  [440, 956, 3]
+] as const;
 
 function resolveMetadataBase() {
   return new URL(
@@ -42,7 +52,16 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "waveygist",
-    statusBarStyle: "black-translucent"
+    statusBarStyle: "black-translucent",
+    startupImage: LAUNCH_SCREENS.flatMap(([width, height, scale]) =>
+      (["light", "dark"] as const).map((scheme) => ({
+        url: `/icons/launch-${width * scale}x${height * scale}-${scheme}.png`,
+        media:
+          `(device-width: ${width}px) and (device-height: ${height}px) and ` +
+          `(-webkit-device-pixel-ratio: ${scale}) and (orientation: portrait) and ` +
+          `(prefers-color-scheme: ${scheme})`
+      }))
+    )
   },
   robots: {
     index: false,
@@ -63,6 +82,12 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)", color: "#0d1117" }
   ]
 };
+
+// Painted before any stylesheet so launching never flashes the wrong color.
+const launchBackground =
+  "html{background:#fff}" +
+  "@media (prefers-color-scheme:dark){html:not([data-theme=light]){background:#0d1117}}" +
+  "html[data-theme=dark]{background:#0d1117}";
 
 const themeScript = `
 (() => {
@@ -96,6 +121,7 @@ export default async function RootLayout({
         <link rel="stylesheet" href="/syntax.css" />
         <link rel="stylesheet" href="/vendor/photoswipe/photoswipe.css" />
         <link rel="stylesheet" href="/gallery-viewer.css" />
+        <style nonce={nonce} dangerouslySetInnerHTML={{ __html: launchBackground }} />
         <script
           nonce={nonce}
           suppressHydrationWarning
@@ -106,6 +132,7 @@ export default async function RootLayout({
         <PwaRuntime />
         <AppHeader />
         {children}
+        <MiniPlayer />
       </body>
     </html>
   );

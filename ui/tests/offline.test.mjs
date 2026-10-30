@@ -109,6 +109,8 @@ function workerHarness(fetchImpl) {
     Headers,
     Request,
     Response,
+    setTimeout,
+    clearTimeout,
     Set,
     Uint8Array,
     URL,
@@ -187,7 +189,7 @@ test("offline controls preserve every cache-supported reader interaction", () =>
 test("reconnection is verified and never interrupts active audio", () => {
   assert.match(shellScript, /method: "HEAD"/);
   assert.match(shellScript, /cache: "no-store"/);
-  assert.match(shellScript, /if \(!audioIsPlaying\(\)\) \{\s*location\.reload\(\)/);
+  assert.match(shellScript, /if \(!audioIsPlaying\(\) && Date\.now\(\) - lastReload/);
   assert.match(shellHtml, /class="app-offline-status offline-status"[^>]*disabled/);
 });
 
@@ -275,6 +277,39 @@ test("offline gist navigation falls back to the cached shell", async () => {
   const response = await responsePromise;
   await refreshCompletion;
   assert.equal(response.status, 200);
+  assert.equal(await response.text(), "cached:/offline-shell.html");
+});
+
+test("a stalled navigation opens a saved gist from the shell", async () => {
+  const harness = workerHarness();
+  let installCompletion;
+  harness.listeners.get("install")({
+    waitUntil(value) {
+      installCompletion = value;
+    }
+  });
+  await installCompletion;
+  const content = await harness.context.caches.open("waveygist-content-v1");
+  await content.put(
+    "https://gist.wavey.info/api/gists/AbCdEf0123456789/revisions/1/render",
+    new Response("{}")
+  );
+  harness.context.fetch = () => new Promise(() => {});
+
+  let responsePromise;
+  harness.listeners.get("fetch")({
+    request: {
+      method: "GET",
+      mode: "navigate",
+      url: "https://gist.wavey.info/AbCdEf0123456789"
+    },
+    respondWith(value) {
+      responsePromise = value;
+    },
+    waitUntil() {}
+  });
+
+  const response = await responsePromise;
   assert.equal(await response.text(), "cached:/offline-shell.html");
 });
 
