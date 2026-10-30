@@ -1253,3 +1253,34 @@ def test_api_responses_include_security_headers(client):
         "default-src 'none'; base-uri 'none'; form-action 'self'; "
         "frame-ancestors 'none'"
     )
+
+
+def test_search_index_follows_deletes_and_keeps_short_terms(client, app):
+    key = make_key(app, name="owner")
+    created = create_gist(
+        client,
+        key,
+        markdown="# Heading\n\nA \"quoted zq\" trigramword here.",
+        title="Indexed",
+    ).get_json()
+
+    def search(term):
+        response = client.get(
+            "/api/v1/gists",
+            query_string={"q": term},
+            headers=auth_header(key),
+        )
+        assert response.status_code == 200
+        return [gist["id"] for gist in response.get_json()["gists"]]
+
+    assert search("trigramword") == [created["id"]]
+    assert search("TRIGRAM") == [created["id"]]
+    assert search("zq") == [created["id"]]
+    assert search('"quoted') == [created["id"]]
+
+    deleted = client.delete(
+        f"/api/v1/gists/{created['id']}",
+        headers=auth_header(key),
+    )
+    assert deleted.status_code in (200, 204)
+    assert search("trigramword") == []

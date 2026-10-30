@@ -54,7 +54,7 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
             )
         }
 
-    assert versions == [1, 8, 9, 10, 11, 12, 13]
+    assert versions == [1, 8, 9, 10, 11, 12, 13, 15]
     assert api_key_columns == [
         "id",
         "name",
@@ -113,7 +113,10 @@ def test_shared_service_cutover_retains_ready_audio_without_runtime_fallback(
     old_migrations = tmp_path / "old-migrations"
     old_migrations.mkdir()
     for source in current_migrations.iterdir():
-        if source.name[:3].isdigit() and int(source.name[:3]) <= 12:
+        if source.name[:3].isdigit() and int(source.name[:3]) in {
+            *range(1, 13),
+            15,
+        }:
             shutil.copy2(source, old_migrations / source.name)
     monkeypatch.setattr(migration_module, "MIGRATIONS_DIR", old_migrations)
 
@@ -305,7 +308,7 @@ def test_migration_10_seeds_existing_api_keys(tmp_path):
         "new_gist_enabled": 1,
         "edited_gist_enabled": 0,
     }
-    assert version == 13
+    assert version == 15
     assert audio_limit == 3
 
 

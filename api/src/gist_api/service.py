@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from urllib.parse import quote
 
 from .auth import utc_now
-from .db import gist_connection
+from .db import _unicode_casefold, gist_connection
 from .errors import GistError
 from .external_ids import generate_external_id, validate_external_id
 from .gist_files import (
@@ -506,6 +506,7 @@ def create_gist(app, key_id, author_name, payload, image_uploads=None):
                             created_at=now,
                             prepared_files=prepared_files,
                         )
+                        _refresh_search_index(conn, gist_id)
                         insert_image_assets(
                             conn,
                             app,
@@ -596,6 +597,35 @@ def get_public_raw_file(app, external_id, *, revision_number=None, filename=None
         return selected, row["content"]
 
 
+MIN_INDEXED_TERM_LENGTH = 3
+
+
+def _refresh_search_index(conn, gist_id):
+    conn.execute("delete from gist_search where rowid = ?", (gist_id,))
+    conn.execute(
+        """
+        insert into gist_search(rowid, body)
+        select
+            g.id,
+            wg_casefold(g.external_id) || char(10)
+                || wg_casefold(coalesce(r.title, '')) || char(10)
+                || (
+                    select group_concat(
+                        wg_casefold(f.filename) || char(10) || wg_casefold(f.content),
+                        char(10)
+                    )
+                    from gist_revision_files f
+                    where f.gist_revision_id = r.id
+                )
+        from gists g
+        join gist_revisions r
+          on r.gist_id = g.id and r.revision_number = g.latest_revision_number
+        where g.id = ?
+        """,
+        (gist_id,),
+    )
+
+
 def _search_predicates(query):
     if query is None:
         return [], []
@@ -603,6 +633,13 @@ def _search_predicates(query):
     predicates = []
     values = []
     for term in query.split():
+        # Trigrams narrow the candidates; instr below keeps exact matching.
+        folded = _unicode_casefold(term)
+        if len(folded) >= MIN_INDEXED_TERM_LENGTH:
+            predicates.append(
+                "g.id in (select rowid from gist_search where gist_search match ?)"
+            )
+            values.append('"' + folded.replace('"', '""') + '"')
         predicates.append(
             """
             (
@@ -1006,6 +1043,7 @@ def patch_gist(app, key_id, author_name, external_id, payload, image_uploads=Non
                     """,
                     (next_revision_number, now, locked["gist_id"]),
                 )
+                _refresh_search_index(conn, locked["gist_id"])
                 enqueue_push_deliveries(
                     conn,
                     api_key_id=key_id,
@@ -1049,6 +1087,7 @@ def delete_gist_created_by_key(app, key_id, external_id):
             ).fetchone()
             if current is None:
                 raise GistError("not_found", "Not found", 404)
+            conn.execute("delete from gist_search where rowid = ?", (current["id"],))
             conn.execute(
                 "update gists set deleted_at = ? where id = ?",
                 (now, current["id"]),
