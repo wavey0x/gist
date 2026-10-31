@@ -187,7 +187,8 @@ export function UpNext() {
     [mounted, queue.items, live?.gistId, live?.revisionNumber, live?.currentTime, live?.duration]
   );
 
-  if (!mounted || !queue.available || (!rows.length && !undo)) {
+  // Hidden only when this account has no audio access at all.
+  if (!mounted || (queue.loaded && !queue.available && !queue.error)) {
     return null;
   }
 
@@ -382,6 +383,15 @@ export function UpNext() {
             );
           })}
         </ol>
+      ) : null}
+      {!rows.length && !undo ? (
+        <p className="up-next-empty">
+          {queue.error
+            ? "Your queue couldn't be loaded."
+            : queue.loaded || queue.available
+              ? "Nothing queued yet. Add an article from its audio player with the + list button, or ask for audio and it lands here."
+              : "Loading…"}
+        </p>
       ) : null}
       {hiddenCount > 0 || expanded ? (
         <button

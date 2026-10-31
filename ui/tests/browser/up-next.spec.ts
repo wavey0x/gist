@@ -142,3 +142,10 @@ test("dragging the grip moves an item down the queue", async ({ page }, testInfo
     "QueueSecond00001", "QueueThird000001", "QueueFirst000001"
   ]);
 });
+
+test("an empty queue still shows up next with a hint", async ({ page }) => {
+  await mockQueue(page, []);
+  await page.goto("/");
+  const upNext = page.getByRole("region", { name: "Up next" });
+  await expect(upNext.getByText(/Nothing queued yet/)).toBeVisible();
+});

@@ -3795,3 +3795,13 @@ body:has(.mini-player) {
     transition: none;
   }
 }
+
+.up-next-empty {
+  margin: 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-fg);
+  font-size: 14px;
+  line-height: 1.45;
+}

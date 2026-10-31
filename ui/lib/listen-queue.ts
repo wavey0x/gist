@@ -32,13 +32,19 @@ export type ListenQueueState = {
   items: QueueItem[];
   loaded: boolean;
   available: boolean;
+  error: boolean;
 };
 
 const STORAGE_KEY = "waveygist:listen-queue:v1";
 const DIRTY_KEY = "waveygist:listen-queue-dirty:v1";
 const ENDPOINT = "/api/me/listen-queue";
 
-const SERVER_STATE: ListenQueueState = { items: [], loaded: false, available: false };
+const SERVER_STATE: ListenQueueState = {
+  items: [],
+  loaded: false,
+  available: false,
+  error: false
+};
 
 let state: ListenQueueState = SERVER_STATE;
 let hydrated = false;
@@ -117,7 +123,7 @@ function hydrateFromCache() {
   try {
     const items = parseItems(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null"));
     if (items) {
-      state = { items, loaded: false, available: true };
+      state = { items, loaded: false, available: true, error: false };
     }
   } catch {
     // Ignore a corrupt cache; the server copy replaces it.
@@ -143,7 +149,7 @@ export function useListenQueue() {
 
 function handleUnavailable(status: number) {
   if (status === 401 || status === 403) {
-    setState({ items: [], loaded: true, available: false });
+    setState({ items: [], loaded: true, available: false, error: false });
     markDirty(false);
     return true;
   }
@@ -168,7 +174,7 @@ async function putOrder(gistIds: string[], startedAt: number) {
     if (version === startedAt) {
       markDirty(false);
       if (items) {
-        setState({ items, loaded: true, available: true });
+        setState({ items, loaded: true, available: true, error: false });
       }
     }
   } catch {
@@ -212,10 +218,10 @@ export function refreshListenQueue() {
       }
       const items = parseItems(await response.json());
       if (items && version === startedAt) {
-        setState({ items, loaded: true, available: true });
+        setState({ items, loaded: true, available: true, error: false });
       }
     } catch {
-      setState({ loaded: true });
+      setState({ loaded: true, error: true });
     }
   })().finally(() => {
     refreshing = null;
