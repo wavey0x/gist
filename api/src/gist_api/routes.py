@@ -18,6 +18,7 @@ from .db import gist_connection
 from .errors import GistError, error_response
 from .external_ids import validate_external_id
 from .images import IMAGE_RETRY_HINT, create_image_asset, send_image_asset
+from .listen_queue import get_listen_queue, replace_listen_queue
 from .narration import (
     get_narration_audio,
     get_narration_status,
@@ -427,6 +428,39 @@ def read_offline_manifest():
     body = jsonify(get_offline_manifest(current_app, auth))
     body.headers["Cache-Control"] = "private, no-store"
     return body
+
+
+def require_audio_session():
+    auth, response = require_web_session()
+    if response:
+        return None, response
+    if auth.audio_generation_daily_limit == 0:
+        return None, error_response("forbidden", "Audio access is disabled", 403)
+    return auth, None
+
+
+@gists_api.route("/api/v1/me/listen-queue", methods=["GET"])
+def read_listen_queue():
+    auth, response = require_audio_session()
+    if response:
+        return response
+    body = jsonify(get_listen_queue(current_app, auth.key_id))
+    body.headers["Cache-Control"] = "private, no-store"
+    return body
+
+
+@gists_api.route("/api/v1/me/listen-queue", methods=["PUT"])
+def put_listen_queue():
+    auth, response = require_audio_session()
+    if response:
+        return response
+    try:
+        payload = parse_json_body({"gist_ids"})
+        body = jsonify(replace_listen_queue(current_app, auth.key_id, payload))
+        body.headers["Cache-Control"] = "private, no-store"
+        return body
+    except GistError as error:
+        return error_response(error.code, error.message, error.status)
 
 
 @gists_api.route("/api/v1/me/gists/export", methods=["GET"])

@@ -4,7 +4,7 @@ const id = "GalleryAudio0001";
 
 test.use({ serviceWorkers: "block" });
 
-test("the home page offers to continue a part-read article", async ({ page }) => {
+test("the library shows how far into an article you read", async ({ page }) => {
   await page.goto("/");
   await page.evaluate((gistId) => {
     localStorage.setItem("waveygist:recently-viewed:v1", JSON.stringify([{
@@ -16,7 +16,8 @@ test("the home page offers to continue a part-read article", async ({ page }) =>
     }));
   }, id);
   await page.reload();
-  const row = page.getByRole("region", { name: "Continue" });
-  await expect(row.getByText("Long read")).toBeVisible();
-  await expect(row.getByText("40% read")).toBeVisible();
+  const library = page.getByRole("region", { name: "Library" });
+  await expect(library.getByRole("link", { name: /Long read/ })).toBeVisible();
+  await expect(library.locator(".library-progress")).toHaveAttribute("style", /width: 40%/);
+  await expect(page.getByRole("region", { name: "Up next" })).toHaveCount(0);
 });

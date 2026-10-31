@@ -10,9 +10,12 @@ import {
   useAudioEngine
 } from "../lib/audio-engine";
 import { formatPlaybackTime } from "../lib/audio-format";
+import { countUpNext, useListenQueue } from "../lib/listen-queue";
 
 export function MiniPlayer() {
-  const { currentTime, duration, opened, playing, queue, track } = useAudioEngine();
+  const { currentTime, duration, opened, playing, track } = useAudioEngine();
+  const { items } = useListenQueue();
+  const upNext = countUpNext(items, track?.gistId ?? null);
   const pathname = usePathname();
   if (!track || !opened) {
     return null;
@@ -42,10 +45,10 @@ export function MiniPlayer() {
         <span className="mini-player-name">{track.title}</span>
         <span className="mini-player-meta">
           {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
-          {queue.length ? ` · ${queue.length} up next` : ""}
+          {upNext ? ` · ${upNext} up next` : ""}
         </span>
       </Link>
-      {queue.length ? (
+      {upNext ? (
         <button
           type="button"
           className="mini-player-button"

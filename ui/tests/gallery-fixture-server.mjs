@@ -103,6 +103,14 @@ http
         can_generate_audio: true
       });
     }
+    if (url.pathname === "/api/v1/me/gists" && req.headers.cookie === "wg_session=audio-test") {
+      return respond(200, {
+        query: null,
+        gists: [],
+        pagination: { limit: 20, offset: 0, total: 0, next_offset: null },
+        stats: { gist_count: 0, revision_count: 0, last_updated_at: null }
+      });
+    }
     if (url.pathname === "/api/v1/me/offline-manifest" && req.headers.cookie === "wg_session=audio-test") {
       return respond(200, {
         account_marker: "c".repeat(64), generated_at: new Date().toISOString(),

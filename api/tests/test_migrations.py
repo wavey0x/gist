@@ -54,7 +54,7 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
             )
         }
 
-    assert versions == [1, 8, 9, 10, 11, 12, 13, 14, 15]
+    assert versions == [1, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     assert api_key_columns == [
         "id",
         "name",
@@ -68,6 +68,8 @@ def test_fresh_database_uses_current_schema_baseline(tmp_path):
         "audio_generation_daily_limit",
     ]
     assert "web_sessions" in tables
+    assert "listen_queue" in tables
+    assert "idx_listen_queue_key_position" in indexes
     assert "api_write_events" in tables
     assert "api_auth_failure_events" in tables
     assert "image_blobs" in tables
@@ -310,7 +312,7 @@ def test_migration_10_seeds_existing_api_keys(tmp_path):
         "new_gist_enabled": 1,
         "edited_gist_enabled": 0,
     }
-    assert version == 15
+    assert version == 16
     assert audio_limit == 3
 
 

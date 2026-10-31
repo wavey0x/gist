@@ -11,6 +11,7 @@ from .db import gist_connection
 from .errors import GistError
 from .external_ids import validate_external_id
 from .gist_files import file_kind, lead_filename
+from .listen_queue import append_to_listen_queue
 from .narration_service import (
     NarrationServiceError,
     delete_service_job,
@@ -314,6 +315,8 @@ def start_narration(app, auth, external_id, revision_number, *, now_datetime=Non
                 raise GistError("forbidden", "Audio access is disabled", 403)
 
             source = load_narration_source(conn, app, external_id, revision_number)
+            # Asking for audio means wanting to hear it: queue the gist.
+            append_to_listen_queue(conn, auth.key_id, source.gist_id, created_at)
             row = _matching_narration(conn, source)
             if row is not None and row["text_sha256"] != source.text_sha256:
                 conn.execute("delete from narrations where id = ?", (row["id"],))

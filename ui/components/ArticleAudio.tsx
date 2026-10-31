@@ -1,6 +1,12 @@
 "use client";
 
 import {
+  addToQueue,
+  countUpNext,
+  refreshListenQueue,
+  useListenQueue
+} from "../lib/listen-queue";
+import {
   Check,
   ListPlus,
   Moon,
@@ -15,7 +21,6 @@ import type { CSSProperties, ReactNode } from "react";
 import {
   audioIsLoadedFor,
   closePlayer,
-  enqueueTrack,
   hydratePlaybackRate,
   isTrack,
   noteTrackCached,
@@ -121,10 +126,9 @@ export function ArticleAudio({
   const { currentTime, duration, playbackRate, playing } = isCurrentTrack
     ? engine
     : { currentTime: 0, duration: 0, playbackRate: engine.playbackRate, playing: false };
-  const otherTrackOpen = engine.opened && !isCurrentTrack;
-  const queued = engine.queue.some((item) =>
-    isTrack(item, gistId, revisionNumber)
-  );
+  const listenQueue = useListenQueue();
+  const queued = listenQueue.items.some((item) => item.gist_id === gistId);
+  const upNextCount = countUpNext(listenQueue.items, engine.track?.gistId ?? null);
   const track = useMemo<AudioTrack | null>(
     () =>
       audioUrl
@@ -172,6 +176,12 @@ export function ArticleAudio({
       releaseTrack(gistId, revisionNumber);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  useEffect(() => {
+    if (active) {
+      void refreshListenQueue();
+    }
   }, [active]);
 
   useEffect(() => {
@@ -321,6 +331,10 @@ export function ArticleAudio({
           });
           const payload = await readPayload(response);
           controller.signal.throwIfAborted();
+          if (method === "POST" && response.ok) {
+            // Requesting audio queues the gist on the server.
+            void refreshListenQueue();
+          }
           if (method === "GET" && response.status === 404) {
             const cached = await narrationIsCached(gistId, revisionNumber);
             controller.signal.throwIfAborted();
@@ -498,15 +512,22 @@ export function ArticleAudio({
               )}
             </button>
           ) : null}
-          {active && otherTrackOpen && viewState === "ready" && track ? (
+          {active && !playerOpen && viewState === "ready" && track ? (
             <button
               type="button"
               className="icon-button"
               aria-label={queued ? "In your audio queue" : "Add to audio queue"}
               aria-pressed={queued}
-              title={queued ? "Up next" : "Play next"}
+              title={queued ? "In Up next" : "Add to Up next"}
               disabled={queued}
-              onClick={() => enqueueTrack(track)}
+              onClick={() =>
+                addToQueue(gistId, {
+                  title: track.title,
+                  author_name: track.author,
+                  revision_number: track.revisionNumber,
+                  audio_url: track.url
+                })
+              }
             >
               <ListPlus aria-hidden="true" size={18} strokeWidth={1.8} />
             </button>
@@ -650,9 +671,9 @@ export function ArticleAudio({
                 <Moon aria-hidden="true" size={13} strokeWidth={1.8} />
                 <span>{engine.sleepMinutes ? `${engine.sleepMinutes}m` : "Off"}</span>
               </button>
-              {engine.queue.length ? (
+              {upNextCount ? (
                 <span className="article-audio-queue-count">
-                  {engine.queue.length} up next
+                  {upNextCount} up next
                 </span>
               ) : null}
             </div>

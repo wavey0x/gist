@@ -18,7 +18,8 @@ gists; anyone with a random gist URL can read the rendered files and raw text.
 - Sanitized stored HTML.
 - Immutable revision and revision-diff URLs.
 - Read-only rendered/raw browser views.
-- Home-page tabs for browser-local recent views and the logged-in key's gists.
+- A home page with an ordered, account-synced audio queue (Up next) and a
+  library of the logged-in key's gists and browser-local reading history.
 - Owner-scoped title, filename, and latest-file-content search.
 - Account settings for browser Web Push enrollment and publication alerts.
 - On-demand, session-authenticated Markdown article audio with completion push.

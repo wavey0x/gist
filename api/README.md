@@ -129,6 +129,8 @@ GET    /api/v1/auth/session
 DELETE /api/v1/auth/session
 GET    /api/v1/me/gists
 GET    /api/v1/me/offline-manifest
+GET    /api/v1/me/listen-queue
+PUT    /api/v1/me/listen-queue
 GET    /api/v1/me/gists/export
 DELETE /api/v1/me/gists/{gist_id}
 GET    /api/v1/me/notification-settings
@@ -139,6 +141,12 @@ POST   /api/v1/gists/{gist_id}/revisions/{revision_number}/narration
 GET    /api/v1/gists/{gist_id}/revisions/{revision_number}/narration
 GET    /api/v1/gists/{gist_id}/revisions/{revision_number}/narration/audio
 ```
+
+The listen queue is an ordered list of gists per key. `PUT` replaces the order
+with `{"gist_ids": [...]}` (unknown or deleted gists are dropped). Each item
+resolves to the newest revision with ready audio, so a recording for a newer
+revision always supersedes older ones; `updating` is true while a newer
+revision's audio is still generating. Requesting narration appends the gist.
 
 `/api/v1/me/gists` returns gists owned by the logged-in key plus aggregate
 active-gist statistics. It supports the same search and pagination parameters

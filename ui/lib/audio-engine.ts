@@ -1,7 +1,19 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { cachedNarrationBlob, markNarrationPlayed } from "./offline-library";
+import {
+  getListenQueue,
+  moveToFront,
+  nextQueueItem,
+  removeFromQueue,
+  subscribeListenQueue,
+  type QueueItem
+} from "./listen-queue";
+import {
+  cachedNarrationBlob,
+  markNarrationPlayed,
+  narrationIsCached
+} from "./offline-library";
 
 export type AudioTrack = {
   gistId: string;
@@ -20,7 +32,6 @@ export type AudioEngineState = {
   duration: number;
   playbackRate: number;
   message: string;
-  queue: AudioTrack[];
   sleepEndsAt: number | null;
   sleepMinutes: number | null;
 };
@@ -52,7 +63,6 @@ const INITIAL_STATE: AudioEngineState = {
   duration: 0,
   playbackRate: 1,
   message: "",
-  queue: [],
   sleepEndsAt: null,
   sleepMinutes: null
 };
@@ -239,7 +249,7 @@ function syncMediaMetadata() {
     return;
   }
   const session = navigator.mediaSession;
-  const { track, queue } = state;
+  const { track } = state;
   if (!track) {
     session.metadata = null;
     session.playbackState = "none";
@@ -263,7 +273,10 @@ function syncMediaMetadata() {
     });
   }
   try {
-    session.setActionHandler("nexttrack", queue.length ? playNext : null);
+    session.setActionHandler(
+      "nexttrack",
+      nextQueueItem(track?.gistId ?? null) ? playNext : null
+    );
   } catch {
     // Media Session actions vary by Safari release.
   }
@@ -343,6 +356,11 @@ function element() {
   document.body.append(created);
   audio = created;
   installMediaSessionActions();
+  subscribeListenQueue(() => {
+    syncMediaMetadata();
+    refreshCachedQueueTracks();
+  });
+  refreshCachedQueueTracks();
   window.addEventListener("pagehide", () => persistPosition(true));
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
@@ -397,9 +415,11 @@ function handleTimeUpdate() {
 function handleEnded() {
   update({ playing: false });
   clearStoredPosition();
-  if (state.queue.length) {
-    playNext();
+  const finished = state.track;
+  if (finished) {
+    removeFromQueue(finished.gistId);
   }
+  playNext();
 }
 
 function releaseLocalCopy() {
@@ -578,13 +598,12 @@ export function openTrack(track: AudioTrack) {
   }
   const target = element();
   target.preload = "auto";
-  update({
-    track,
-    opened: true,
-    message: "",
-    queue: state.queue.filter(
-      (queued) => !isTrack(queued, track.gistId, track.revisionNumber)
-    )
+  update({ track, opened: true, message: "" });
+  moveToFront(track.gistId, {
+    title: track.title,
+    author_name: track.author,
+    revision_number: track.revisionNumber,
+    audio_url: track.url
   });
   syncMediaMetadata();
   if (localCopy.url) {
@@ -603,7 +622,7 @@ export function closePlayer() {
   if (audio) {
     audio.preload = "metadata";
   }
-  update({ opened: false, queue: [], sleepEndsAt: null, sleepMinutes: null });
+  update({ opened: false, sleepEndsAt: null, sleepMinutes: null });
   syncMediaMetadata();
 }
 
@@ -669,32 +688,60 @@ export function hydratePlaybackRate() {
   update({ playbackRate: readStoredPlaybackRate() });
 }
 
-export function enqueueTrack(track: AudioTrack) {
-  const { queue, track: current } = state;
-  if (
-    isTrack(current, track.gistId, track.revisionNumber) ||
-    queue.some((queued) => isTrack(queued, track.gistId, track.revisionNumber))
-  ) {
-    return;
+export function trackForQueueItem(item: QueueItem): AudioTrack | null {
+  if (item.status !== "ready" || !item.audio_url || item.revision_number === null) {
+    return null;
   }
-  update({ queue: [...queue, track] });
-  syncMediaMetadata();
+  return {
+    gistId: item.gist_id,
+    revisionNumber: item.revision_number,
+    title: item.title,
+    author: item.author_name,
+    url: item.audio_url,
+    cached: false
+  };
 }
 
-export function removeQueuedTrack(gistId: string, revisionNumber: number) {
-  update({
-    queue: state.queue.filter((queued) => !isTrack(queued, gistId, revisionNumber))
-  });
-  syncMediaMetadata();
+// Offline availability of queued recordings, resolved ahead of time so that
+// auto-advance can start the next track synchronously from the ended event.
+const cachedQueueTracks = new Set<string>();
+
+function refreshCachedQueueTracks() {
+  for (const item of getListenQueue().items) {
+    const track = trackForQueueItem(item);
+    if (!track) {
+      continue;
+    }
+    const key = trackKey(track.gistId, track.revisionNumber);
+    if (cachedQueueTracks.has(key)) {
+      continue;
+    }
+    void narrationIsCached(track.gistId, track.revisionNumber)
+      .then((cached) => {
+        if (cached) {
+          cachedQueueTracks.add(key);
+        }
+      })
+      .catch(() => undefined);
+  }
+}
+
+export function queueItemTrack(item: QueueItem) {
+  const track = trackForQueueItem(item);
+  return track
+    ? {
+        ...track,
+        cached: cachedQueueTracks.has(trackKey(track.gistId, track.revisionNumber))
+      }
+    : null;
 }
 
 export function playNext() {
-  const [next, ...queue] = state.queue;
-  if (!next) {
-    return;
+  const next = nextQueueItem(state.track?.gistId ?? null);
+  const track = next ? queueItemTrack(next) : null;
+  if (track) {
+    openTrack(track);
   }
-  update({ queue });
-  openTrack(next);
 }
 
 export function cycleSleepTimer() {

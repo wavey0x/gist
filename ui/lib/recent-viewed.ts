@@ -84,3 +84,19 @@ export function recordRecentlyViewedGist(item: RecentGistItem) {
     // Browsers can reject localStorage writes; recent views are best effort.
   }
 }
+
+export function removeRecentlyViewedGist(gistId: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      RECENTLY_VIEWED_STORAGE_KEY,
+      JSON.stringify(
+        readRecentlyViewedGists().filter((recent) => recent.id !== gistId)
+      )
+    );
+  } catch {
+    // Browsers can reject localStorage writes; recent views are best effort.
+  }
+}

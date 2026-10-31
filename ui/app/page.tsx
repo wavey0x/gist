@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { ContinueRow } from "../components/ContinueRow";
-import { GistHistoryTabs } from "../components/GistHistory";
+import { Library } from "../components/Library";
+import { UpNext } from "../components/UpNext";
 import { fetchCurrentSession, fetchMyGists } from "../lib/auth";
 
 async function getHomeSession() {
@@ -38,14 +38,9 @@ export default async function Home() {
         </section>
       ) : null}
 
-      <ContinueRow />
+      {isAuthenticated ? <UpNext /> : null}
 
-      <section className="home-gist-history" aria-label="Gist history">
-        <GistHistoryTabs
-          initialMyGists={payload}
-          isAuthenticated={isAuthenticated}
-        />
-      </section>
+      <Library initialMyGists={payload} isAuthenticated={isAuthenticated} />
     </main>
   );
 }
