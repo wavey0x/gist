@@ -88,6 +88,7 @@ function Avatar({ name, url }: { name: string; url?: string }) {
 function LibraryRow({
   href,
   title,
+  revision,
   meta,
   updated,
   progress,
@@ -97,6 +98,7 @@ function LibraryRow({
 }: {
   href: string;
   title: string;
+  revision: number;
   meta: ReactNode;
   updated?: boolean;
   progress?: number;
@@ -119,6 +121,9 @@ function LibraryRow({
                 />
               ) : null}
               {title}
+            </span>
+            <span className="library-revision" aria-label={`revision ${revision}`}>
+              r{revision}
             </span>
             <span className="library-meta">{meta}</span>
           </Link>
@@ -369,11 +374,10 @@ export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
                 key={gist.id}
                 href={`/${gist.id}`}
                 title={title}
+                revision={gist.revision_number}
                 updated={read !== undefined && gist.revision_number > read}
                 meta={
                   <>
-                    <span>r{gist.revision_number}</span>
-                    <span aria-hidden="true">·</span>
                     {sort === "created" && !query ? <span>created</span> : null}
                     <RelativeTime
                       value={sort === "created" && !query ? gist.created_at : gist.updated_at}
@@ -424,6 +428,7 @@ export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
               key={gist.id}
               href={`/${gist.id}`}
               title={title}
+              revision={gist.revision_number}
               updated={latest !== undefined && latest > gist.revision_number}
               progress={reading?.fraction}
               meta={
@@ -432,8 +437,6 @@ export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
                     <Avatar name={gist.author_name} url={gist.author_avatar_url} />
                     {gist.author_name}
                   </span>
-                  <span aria-hidden="true">·</span>
-                  <span>r{gist.revision_number}</span>
                   <span aria-hidden="true">·</span>
                   <RelativeTime value={gist.viewed_at} />
                 </>
@@ -498,7 +501,7 @@ export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
               onClick={() => selectTab(id)}
               onKeyDown={onTabKeyDown}
             >
-              {id === "mine" ? "Mine" : "Read"}
+              {id === "mine" ? "My gists" : "Recently viewed"}
             </button>
           ))}
         </div>
@@ -511,8 +514,8 @@ export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
             className="library-search-input"
             type="search"
             value={searchInput}
-            placeholder={activeTab === "mine" ? "Search your gists" : "Search what you've read"}
-            aria-label={activeTab === "mine" ? "Search your gists" : "Search what you've read"}
+            placeholder={activeTab === "mine" ? "Search my gists" : "Search recently viewed"}
+            aria-label={activeTab === "mine" ? "Search my gists" : "Search recently viewed"}
             autoComplete="off"
             onChange={(event) => setSearchInput(event.target.value)}
             onKeyDown={(event) => {
