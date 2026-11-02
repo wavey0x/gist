@@ -273,10 +273,11 @@ function syncMediaMetadata() {
     });
   }
   try {
-    session.setActionHandler(
-      "nexttrack",
-      nextQueueItem(track?.gistId ?? null) ? playNext : null
-    );
+    // iOS swaps the lock screen's 10-second skip buttons for track buttons
+    // whenever a track handler exists, so leave them unset. The playlist
+    // still advances on its own when a recording ends.
+    session.setActionHandler("nexttrack", null);
+    session.setActionHandler("previoustrack", null);
   } catch {
     // Media Session actions vary by Safari release.
   }
