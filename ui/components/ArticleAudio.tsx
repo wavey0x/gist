@@ -516,9 +516,9 @@ export function ArticleAudio({
             <button
               type="button"
               className="icon-button"
-              aria-label={queued ? "In your audio queue" : "Add to audio queue"}
+              aria-label={queued ? "In your playlist" : "Add to playlist"}
               aria-pressed={queued}
-              title={queued ? "In Up next" : "Add to Up next"}
+              title={queued ? "In your playlist" : "Add to playlist"}
               disabled={queued}
               onClick={() =>
                 addToQueue(gistId, {

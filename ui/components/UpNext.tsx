@@ -27,7 +27,7 @@ import { readRecentlyViewedGists } from "../lib/recent-viewed";
 import { SwipeRow } from "./SwipeRow";
 
 const COLLAPSED_COUNT = 4;
-const ROW_HEIGHT = 58;
+const ROW_HEIGHT = 50;
 const UNDO_MS = 5000;
 const SEED_KEY = "waveygist:listen-queue-seeded:v1";
 
@@ -259,7 +259,7 @@ export function UpNext() {
     <section className="up-next" aria-labelledby="up-next-heading">
       <header className="home-section-header">
         <h2 id="up-next-heading" className="home-section-title">
-          Up next
+          Playlist
         </h2>
         {rows.length ? (
           <span className="home-section-meta">
@@ -342,7 +342,7 @@ export function UpNext() {
                     <button
                       type="button"
                       className="up-next-remove"
-                      aria-label={`Remove ${item.title} from Up next`}
+                      aria-label={`Remove ${item.title} from Playlist`}
                       onClick={() => remove(item)}
                       data-no-swipe
                     >
@@ -387,9 +387,9 @@ export function UpNext() {
       {!rows.length && !undo ? (
         <p className="up-next-empty">
           {queue.error
-            ? "Your queue couldn't be loaded."
+            ? "Couldn't load your playlist."
             : queue.loaded || queue.available
-              ? "Nothing queued yet. Add an article from its audio player with the + list button, or ask for audio and it lands here."
+              ? "Empty. Add audio from any article with the + list button."
               : "Loading…"}
         </p>
       ) : null}

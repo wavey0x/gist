@@ -72,7 +72,7 @@ test("up next lists the saved queue with time left and generation states", async
     })
   ]);
   await page.goto("/");
-  const upNext = page.getByRole("region", { name: "Up next" });
+  const upNext = page.getByRole("region", { name: "Playlist" });
   await expect(upNext.getByText("First listen")).toBeVisible();
   await expect(upNext.getByText("2:05").first()).toBeVisible();
   await expect(upNext.getByText("Update generating")).toBeVisible();
@@ -87,7 +87,7 @@ test("the queue can be reordered from the grip", async ({ page }) => {
     item("QueueSecond00001", "Second listen")
   ]);
   await page.goto("/");
-  const upNext = page.getByRole("region", { name: "Up next" });
+  const upNext = page.getByRole("region", { name: "Playlist" });
   await upNext.getByRole("button", { name: "Reorder First listen" }).press("ArrowDown");
   await expect.poll(() => queue.puts.at(-1)).toEqual(["QueueSecond00001", "QueueFirst000001"]);
   await expect(upNext.locator(".up-next-title").first()).toHaveText("Second listen");
@@ -104,7 +104,7 @@ test("playing an article puts it at the front of up next", async ({ page }) => {
   await page.locator(".app-brand").click();
   const mini = page.getByRole("complementary", { name: "Now playing" });
   await expect(mini.getByText(/1 up next/)).toBeVisible();
-  const upNext = page.getByRole("region", { name: "Up next" });
+  const upNext = page.getByRole("region", { name: "Playlist" });
   await expect(upNext.getByRole("button", { name: /^Pause / })).toBeVisible();
 });
 
@@ -115,9 +115,9 @@ test("removing an item can be undone", async ({ page }, testInfo) => {
     item("QueueSecond00001", "Second listen")
   ]);
   await page.goto("/");
-  const upNext = page.getByRole("region", { name: "Up next" });
+  const upNext = page.getByRole("region", { name: "Playlist" });
   await upNext.getByText("First listen").hover();
-  await upNext.getByRole("button", { name: "Remove First listen from Up next" }).click();
+  await upNext.getByRole("button", { name: "Remove First listen from Playlist" }).click();
   await expect.poll(() => queue.puts.at(-1)).toEqual(["QueueSecond00001"]);
   await upNext.getByRole("button", { name: "Undo" }).click();
   await expect.poll(() => queue.puts.at(-1)).toEqual(["QueueFirst000001", "QueueSecond00001"]);
@@ -146,6 +146,6 @@ test("dragging the grip moves an item down the queue", async ({ page }, testInfo
 test("an empty queue still shows up next with a hint", async ({ page }) => {
   await mockQueue(page, []);
   await page.goto("/");
-  const upNext = page.getByRole("region", { name: "Up next" });
-  await expect(upNext.getByText(/Nothing queued yet/)).toBeVisible();
+  const upNext = page.getByRole("region", { name: "Playlist" });
+  await expect(upNext.getByText(/Empty\. Add audio/)).toBeVisible();
 });

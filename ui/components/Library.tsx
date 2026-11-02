@@ -466,11 +466,30 @@ export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
   }
 
   return (
-    <section className="library" aria-labelledby="library-heading">
-      <header className="home-section-header">
-        <h2 id="library-heading" className="home-section-title">
-          Library
-        </h2>
+    <section className="library" aria-label="Library">
+      <div className="library-bar">
+        {showTabs ? (
+          <div className="library-tabs" role="tablist" aria-label="Library">
+            {(["mine", "recent"] as const).map((id) => (
+              <button
+                key={id}
+                id={`library-tab-${id}`}
+                type="button"
+                role="tab"
+                className="library-tab"
+                aria-selected={activeTab === id}
+                aria-controls="library-panel"
+                tabIndex={activeTab === id ? 0 : -1}
+                onClick={() => selectTab(id)}
+                onKeyDown={onTabKeyDown}
+              >
+                {id === "mine" ? "My gists" : "Recently viewed"}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className="library-bar-label">Recently viewed</span>
+        )}
         <button
           type="button"
           className="library-search-toggle"
@@ -484,28 +503,7 @@ export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
             <Search aria-hidden="true" size={17} strokeWidth={1.8} />
           )}
         </button>
-      </header>
-
-      {showTabs ? (
-        <div className="library-tabs" role="tablist" aria-label="Library">
-          {(["mine", "recent"] as const).map((id) => (
-            <button
-              key={id}
-              id={`library-tab-${id}`}
-              type="button"
-              role="tab"
-              className="library-tab"
-              aria-selected={activeTab === id}
-              aria-controls="library-panel"
-              tabIndex={activeTab === id ? 0 : -1}
-              onClick={() => selectTab(id)}
-              onKeyDown={onTabKeyDown}
-            >
-              {id === "mine" ? "My gists" : "Recently viewed"}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      </div>
 
       {searchOpen ? (
         <div className="library-search">

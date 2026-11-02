@@ -19,5 +19,5 @@ test("the library shows how far into an article you read", async ({ page }) => {
   const library = page.getByRole("region", { name: "Library" });
   await expect(library.getByRole("link", { name: /Long read/ })).toBeVisible();
   await expect(library.locator(".library-progress")).toHaveAttribute("style", /width: 40%/);
-  await expect(page.getByRole("region", { name: "Up next" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Playlist" })).toHaveCount(0);
 });
