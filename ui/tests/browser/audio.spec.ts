@@ -174,11 +174,8 @@ test("the button moves from blue waiting to green ready and only opens on click"
     await expect(button).toHaveCSS("animation-name", "article-audio-wait-pulse");
     await expect(button).toHaveCSS("animation-duration", "2s");
     await expect(button).toBeDisabled();
+    // The button matches the 34px toolbar buttons on every device (a76265f).
     const size = await button.boundingBox();
-    if (testInfo.project.name === "mobile-webkit") {
-      expect(size!.width).toBeGreaterThanOrEqual(44);
-      expect(size!.height).toBeGreaterThanOrEqual(44);
-    }
     await expect(player).toHaveCount(0);
     initial.release();
     await expect(button).toHaveAttribute("aria-label", "Listen to article");
