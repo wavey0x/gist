@@ -10,13 +10,7 @@ import {
   type MyGistItem,
   type MyGistsPayload
 } from "../lib/my-gists";
-import {
-  dateGroup,
-  fullTimestamp,
-  rowTime,
-  validTimeZone,
-  type DateGroup
-} from "../lib/date-groups";
+import { fullTimestamp, rowTime, validTimeZone } from "../lib/date-groups";
 import { readReadingPosition } from "../lib/reading-position";
 import {
   readRecentlyViewedGists,
@@ -163,50 +157,18 @@ function LibraryRow({ row, time, timestamp }: { row: RowData; time: string; time
   );
 }
 
-function RowList({
-  rows,
-  grouped,
-  now,
-  timeZone
-}: {
-  rows: RowData[];
-  grouped: boolean;
-  now: number;
-  timeZone: string;
-}) {
-  const groups: { group: DateGroup; rows: RowData[] }[] = [];
-  for (const row of rows) {
-    const group = dateGroup(row.date, now, timeZone);
-    const last = groups.at(-1);
-    if (grouped && last?.group.key === group.key) {
-      last.rows.push(row);
-    } else if (!grouped && last) {
-      last.rows.push(row);
-    } else {
-      groups.push({ group, rows: [row] });
-    }
-  }
+function RowList({ rows, now, timeZone }: { rows: RowData[]; now: number; timeZone: string }) {
   return (
-    <>
-      {groups.map(({ group, rows: groupRows }) => (
-        <div className="library-group" key={grouped ? group.key : "all"}>
-          {grouped ? <h3 className="library-group-label">{group.label}</h3> : null}
-          <ul className="library-list">
-            {groupRows.map((row) => {
-              const kind = dateGroup(row.date, now, timeZone).kind;
-              return (
-                <LibraryRow
-                  key={row.key}
-                  row={row}
-                  time={rowTime(row.date, grouped ? kind : kind === "today" ? "today" : "month", timeZone)}
-                  timestamp={fullTimestamp(row.date, timeZone)}
-                />
-              );
-            })}
-          </ul>
-        </div>
+    <ul className="library-list">
+      {rows.map((row) => (
+        <LibraryRow
+          key={row.key}
+          row={row}
+          time={rowTime(row.date, now, timeZone)}
+          timestamp={fullTimestamp(row.date, timeZone)}
+        />
       ))}
-    </>
+    </ul>
   );
 }
 
@@ -441,7 +403,6 @@ export function Library({
       const byCreated = sort === "created" && !query;
       list = (
         <RowList
-          grouped={!query}
           now={clock.now}
           timeZone={clock.timeZone}
           rows={mine.map((gist) => {
@@ -489,7 +450,6 @@ export function Library({
     const me = userName?.trim().toLowerCase();
     list = (
       <RowList
-        grouped={!query}
         now={clock.now}
         timeZone={clock.timeZone}
         rows={filteredRecent.slice(0, recentCount).map((gist) => {

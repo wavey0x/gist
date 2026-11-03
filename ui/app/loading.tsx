@@ -10,7 +10,6 @@ export default function Loading() {
           <span className="loading-line" style={{ width: 72 }} />
           <span className="loading-line" style={{ width: 112 }} />
         </div>
-        <span className="loading-line home-skeleton-label" />
         {ROW_WIDTHS.map((width, index) => (
           <div className="home-skeleton-row" key={index}>
             <span className="loading-line" style={{ width }} />

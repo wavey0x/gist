@@ -3722,17 +3722,6 @@ body:has(.mini-player) {
   color: var(--page-fg);
 }
 
-.library-group-label {
-  margin: 16px 0 2px;
-  color: var(--muted-fg);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.library-group:first-child .library-group-label {
-  margin-top: 12px;
-}
-
 .library .library-list {
   border-top: 0;
 }
@@ -3746,7 +3735,7 @@ body:has(.mini-player) {
   border-bottom: 1px solid var(--divider);
 }
 
-.library-group .library-item:last-child .library-row {
+.library-list .library-item:last-child .library-row {
   border-bottom: 0;
 }
 
@@ -3845,8 +3834,8 @@ body:has(.mini-player) {
   }
 }
 
-/* The hover action floats over the row so it never takes width away from
-   the right-hand column. */
+/* The hover action sits in the margin past the date on wide screens, so it
+   never covers the date or takes width from the row. */
 .library-row-action {
   position: absolute;
   top: 50%;
@@ -3856,6 +3845,18 @@ body:has(.mini-player) {
   border-radius: 6px;
   background: var(--page-bg);
   box-shadow: -16px 0 12px var(--page-bg);
+}
+
+@media (hover: hover) and (pointer: fine) and (min-width: 860px) {
+  .library .swipe-row {
+    overflow: visible;
+  }
+
+  .library-row-action {
+    right: -40px;
+    background: transparent;
+    box-shadow: none;
+  }
 }
 
 .library-empty {
@@ -3903,12 +3904,6 @@ body:has(.home-shell) .app-header-inner {
   gap: 22px;
   padding: 8px 0 14px;
   border-bottom: 1px solid var(--border);
-}
-
-.home-skeleton .home-skeleton-label {
-  width: 52px;
-  height: 10px;
-  margin: 18px 0 6px;
 }
 
 .home-skeleton-row {

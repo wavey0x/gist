@@ -462,46 +462,20 @@
     }
   }
 
-  // Same calendar groups and row layout as the online home page.
-  function calendarDayNumber(time) {
-    const date = new Date(time);
-    return Math.round(
-      Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS
-    );
-  }
-
-  function libraryGroup(value, now) {
-    const time = Date.parse(value || "");
-    if (Number.isNaN(time)) {
-      return { key: "unknown", label: "Earlier", kind: "month" };
-    }
-    const age = calendarDayNumber(now) - calendarDayNumber(time);
-    if (age <= 0) return { key: "today", label: "Today", kind: "today" };
-    if (age === 1) return { key: "yesterday", label: "Yesterday", kind: "yesterday" };
-    if (age < 7) return { key: "week", label: "Previous 7 days", kind: "week" };
-    const date = new Date(time);
-    const sameYear = date.getFullYear() === new Date(now).getFullYear();
-    return {
-      key: `${date.getFullYear()}-${date.getMonth()}`,
-      label: date.toLocaleDateString("en-US", {
-        month: "long",
-        ...(sameYear ? {} : { year: "numeric" })
-      }),
-      kind: "month"
-    };
-  }
-
-  function libraryRowTime(value, kind) {
+  // Same row layout and dates as the online home page.
+  function libraryRowTime(value, now) {
     const time = Date.parse(value || "");
     if (Number.isNaN(time)) {
       return "";
     }
-    const options = kind === "today" || kind === "yesterday"
+    const date = new Date(time);
+    const today = new Date(now);
+    const options = date.toDateString() === today.toDateString()
       ? { hour: "numeric", minute: "2-digit" }
-      : kind === "week"
-        ? { weekday: "short" }
-        : { month: "short", day: "numeric" };
-    return new Date(time).toLocaleString("en-US", options);
+      : date.getFullYear() === today.getFullYear()
+        ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }
+        : { month: "short", day: "numeric", year: "numeric" };
+    return date.toLocaleString("en-US", options);
   }
 
   function libraryDate(entry, tab) {
@@ -510,7 +484,7 @@
       : entry.updatedAt;
   }
 
-  function gistListRow(entry, tab, kind) {
+  function gistListRow(entry, tab, now) {
     const item = element("li", { className: "library-item" });
     const row = element("div", { className: "library-row" });
     const href = tab === "recent"
@@ -523,7 +497,7 @@
     }));
     const dateValue = libraryDate(entry, tab);
     const aside = element("span", { className: "library-aside" });
-    const time = element("time", { text: libraryRowTime(dateValue, kind) });
+    const time = element("time", { text: libraryRowTime(dateValue, now) });
     if (dateValue) {
       time.dateTime = dateValue;
       time.title = formatDate(dateValue);
@@ -603,11 +577,11 @@
 
     const panel = element("div");
     panel.setAttribute("role", "tabpanel");
-    const groups = element("div");
+    const list = element("ul", { className: "library-list" });
     const empty = element("p", { className: "library-empty" });
     const more = element("button", { className: "home-more-button", text: "Show more" });
     more.type = "button";
-    panel.append(groups, empty, more);
+    panel.append(list, empty, more);
     library.append(bar, search, panel);
     app.append(library);
 
@@ -652,25 +626,7 @@
         });
       const visible = filtered.slice(0, count);
       const now = Date.now();
-      const sections = [];
-      for (const entry of visible) {
-        const group = libraryGroup(libraryDate(entry, tab), now);
-        let section = sections.at(-1);
-        if (!section || (!query && section.group.key !== group.key)) {
-          const node = element("div", { className: "library-group" });
-          if (!query) {
-            node.append(element("h3", { className: "library-group-label", text: group.label }));
-          }
-          const list = element("ul", { className: "library-list" });
-          node.append(list);
-          section = { group, node, list };
-          sections.push(section);
-        }
-        section.list.append(
-          gistListRow(entry, tab, query ? (group.kind === "today" ? "today" : "month") : group.kind)
-        );
-      }
-      groups.replaceChildren(...sections.map((section) => section.node));
+      list.replaceChildren(...visible.map((entry) => gistListRow(entry, tab, now)));
       empty.hidden = visible.length > 0;
       empty.textContent = query
         ? "No saved gists match."
