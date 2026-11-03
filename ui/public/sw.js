@@ -2,7 +2,9 @@ const SHELL_CACHE = "waveygist-shell";
 const CONTENT_CACHE = "waveygist-content-v1";
 const AUDIO_CACHE = "waveygist-audio-v1";
 const SHELL_URL = "/offline-shell.html";
-const NAVIGATION_TIMEOUT_MS = 1500;
+// Only a truly stuck request falls back to the offline page. A merely slow
+// server must not swap in a different page and then reload over it.
+const NAVIGATION_TIMEOUT_MS = 8000;
 const SHARED_SHELL_ASSETS = [
   "/github-markdown.css",
   "/markdown-theme.css",
@@ -130,7 +132,7 @@ async function hasSavedCopy(url) {
   return saved.some((request) => new URL(request.url).pathname.startsWith(prefix));
 }
 
-// Weak signal can hold a request open for minutes, so a saved copy wins quickly.
+// Weak signal can hold a request open for minutes, so a saved copy wins eventually.
 async function navigationResponse(networkResponse, url) {
   const shell = async () =>
     (await caches.open(SHELL_CACHE)).match(SHELL_URL);
@@ -139,6 +141,12 @@ async function navigationResponse(networkResponse, url) {
     timer = setTimeout(() => resolve(null), NAVIGATION_TIMEOUT_MS);
   });
   try {
+    if (self.navigator?.onLine === false && (await hasSavedCopy(url))) {
+      const offline = await shell();
+      if (offline) {
+        return offline;
+      }
+    }
     const response = await Promise.race([networkResponse, timedOut]);
     if (response) {
       return response;

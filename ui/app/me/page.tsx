@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 import { AlertSettings } from "../../components/AlertSettings";
 import { ApiKeyCopyButton } from "../../components/ApiKeyCopyButton";
 import { LocalTimestamp } from "../../components/LocalTimestamp";
@@ -15,7 +17,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "Account - Wavey Gist"
+  title: "Settings - Wavey Gist"
 };
 
 export default async function MePage() {
@@ -32,7 +34,11 @@ export default async function MePage() {
   }
 
   return (
-    <main className="auth-shell settings-shell" aria-label="Account">
+    <main className="auth-shell settings-shell" aria-label="Settings">
+      <Link className="settings-back" href="/">
+        <ChevronLeft aria-hidden="true" size={16} strokeWidth={1.8} />
+        Home
+      </Link>
       <header className="settings-page-header">
         <div className="account-profile">
           <div className="account-identity">
@@ -57,9 +63,9 @@ export default async function MePage() {
         </div>
       </header>
 
-      <section className="account-sections" aria-label="Account">
+      <section className="account-sections" aria-label="Settings">
         <details className="account-section">
-          <summary className="account-section-summary">SETTINGS</summary>
+          <summary className="account-section-summary">Offline and alerts</summary>
           <div className="account-section-body">
             <OfflineLibrarySettings />
             <AlertSettings initialSettings={notificationSettings} />
@@ -67,7 +73,7 @@ export default async function MePage() {
         </details>
 
         <details className="account-section">
-          <summary className="account-section-summary">STATS</summary>
+          <summary className="account-section-summary">Stats</summary>
           <div className="account-section-body">
             <dl className="account-stats">
               <div className="account-stat">
@@ -96,7 +102,7 @@ export default async function MePage() {
         </details>
 
         <details className="account-section">
-          <summary className="account-section-summary">EXPORT</summary>
+          <summary className="account-section-summary">Export</summary>
           <div className="account-section-body account-export">
             {payload.stats.gist_count > 0 ? (
               <>

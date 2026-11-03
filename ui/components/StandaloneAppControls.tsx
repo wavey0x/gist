@@ -70,23 +70,6 @@ function errorWasShareCancellation(error: unknown) {
   );
 }
 
-function isLegacyAccountLaunch() {
-  if (window.location.pathname !== "/me") {
-    return false;
-  }
-  const navigation = performance.getEntriesByType(
-    "navigation"
-  )[0] as PerformanceNavigationTiming | undefined;
-  if (!navigation || navigation.type !== "navigate") {
-    return false;
-  }
-  try {
-    return new URL(navigation.name).pathname === "/me";
-  } catch {
-    return false;
-  }
-}
-
 export function StandaloneAppControls() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -94,13 +77,7 @@ export function StandaloneAppControls() {
   const noticeTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const standalone = isStandaloneDisplay();
-    // Early installs retained the former /me manifest start URL on iOS.
-    if (standalone && isLegacyAccountLaunch()) {
-      window.location.replace("/");
-      return;
-    }
-    setIsStandalone(standalone);
+    setIsStandalone(isStandaloneDisplay());
   }, []);
 
   useEffect(() => {

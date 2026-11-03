@@ -93,6 +93,11 @@ const themeScript = `
 (() => {
   document.documentElement.dataset.js = "enabled";
   try {
+    // Lets the server group lists by the reader's own calendar days.
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (zone) document.cookie = "wg_tz=" + encodeURIComponent(zone) + ";path=/;max-age=31536000;samesite=lax";
+  } catch {}
+  try {
     const saved = localStorage.getItem("theme");
     const preferred = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     const theme = saved === "light" || saved === "dark" ? saved : preferred;

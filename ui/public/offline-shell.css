@@ -33,36 +33,6 @@
   gap: 22px;
 }
 
-.offline-library-summary {
-  display: grid;
-  gap: 4px;
-}
-
-.offline-library-summary h1 {
-  margin: 0;
-  color: var(--page-fg);
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.offline-library-summary p {
-  margin: 0;
-  color: var(--muted-fg);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.offline-library-history,
-.offline-library-panel {
-  display: grid;
-  gap: 12px;
-}
-
-.offline-library-search .gist-search-status:empty {
-  display: none;
-}
-
 .offline-shell [hidden] {
   display: none !important;
 }
@@ -99,8 +69,6 @@
   display: none;
 }
 
-@media (max-width: 640px) {
-  .offline-library-shell {
-    padding-top: 22px;
-  }
+.offline-shell .app-header-inner {
+  width: min(100%, 760px);
 }

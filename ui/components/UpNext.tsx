@@ -187,8 +187,9 @@ export function UpNext() {
     [mounted, queue.items, live?.gistId, live?.revisionNumber, live?.currentTime, live?.duration]
   );
 
-  // Hidden only when this account has no audio access at all.
-  if (!mounted || (queue.loaded && !queue.available && !queue.error)) {
+  // The playlist only takes up room when there is something in it. If the
+  // server can't be reached, the saved copy on this device still shows.
+  if (!mounted || (!rows.length && !undo)) {
     return null;
   }
 
@@ -383,15 +384,6 @@ export function UpNext() {
             );
           })}
         </ol>
-      ) : null}
-      {!rows.length && !undo ? (
-        <p className="up-next-empty">
-          {queue.error
-            ? "Couldn't load your playlist."
-            : queue.loaded || queue.available
-              ? "Empty. Add audio from any article with the + list button."
-              : "Loading…"}
-        </p>
       ) : null}
       {hiddenCount > 0 || expanded ? (
         <button

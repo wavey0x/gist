@@ -76,6 +76,7 @@
       '<path d="M21 12a9 9 0 1 1-3-6.7L21 8" />',
       '<path d="M21 3v5h-5" />'
     ],
+    search: ['<circle cx="11" cy="11" r="8" />', '<path d="m21 21-4.3-4.3" />'],
     share: [
       '<circle cx="18" cy="5" r="3" />',
       '<circle cx="6" cy="12" r="3" />',
@@ -87,6 +88,7 @@
       '<circle cx="12" cy="12" r="4" />',
       '<path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />'
     ],
+    x: ['<path d="M18 6 6 18" />', '<path d="m6 6 12 12" />'],
     volume: [
       '<path d="M11 5 6 9H2v6h4l5 4V5Z" />',
       '<path d="M15.54 8.46a5 5 0 0 1 0 7.07" />',
@@ -460,49 +462,91 @@
     }
   }
 
-  function gistListRow(entry, tab) {
-    const item = element("li", { className: "gist-list-item" });
-    const row = element("div", { className: "gist-list-row" });
-    const content = element("div", { className: "gist-list-content" });
+  // Same calendar groups and row layout as the online home page.
+  function calendarDayNumber(time) {
+    const date = new Date(time);
+    return Math.round(
+      Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS
+    );
+  }
+
+  function libraryGroup(value, now) {
+    const time = Date.parse(value || "");
+    if (Number.isNaN(time)) {
+      return { key: "unknown", label: "Earlier", kind: "month" };
+    }
+    const age = calendarDayNumber(now) - calendarDayNumber(time);
+    if (age <= 0) return { key: "today", label: "Today", kind: "today" };
+    if (age === 1) return { key: "yesterday", label: "Yesterday", kind: "yesterday" };
+    if (age < 7) return { key: "week", label: "Previous 7 days", kind: "week" };
+    const date = new Date(time);
+    const sameYear = date.getFullYear() === new Date(now).getFullYear();
+    return {
+      key: `${date.getFullYear()}-${date.getMonth()}`,
+      label: date.toLocaleDateString("en-US", {
+        month: "long",
+        ...(sameYear ? {} : { year: "numeric" })
+      }),
+      kind: "month"
+    };
+  }
+
+  function libraryRowTime(value, kind) {
+    const time = Date.parse(value || "");
+    if (Number.isNaN(time)) {
+      return "";
+    }
+    const options = kind === "today" || kind === "yesterday"
+      ? { hour: "numeric", minute: "2-digit" }
+      : kind === "week"
+        ? { weekday: "short" }
+        : { month: "short", day: "numeric" };
+    return new Date(time).toLocaleString("en-US", options);
+  }
+
+  function libraryDate(entry, tab) {
+    return tab === "recent"
+      ? entry.lastViewedAt || entry.updatedAt
+      : entry.updatedAt;
+  }
+
+  function gistListRow(entry, tab, kind) {
+    const item = element("li", { className: "library-item" });
+    const row = element("div", { className: "library-row" });
     const href = tab === "recent"
       ? `/${entry.gistId}/revisions/${entry.revisionNumber}`
       : `/${entry.gistId}`;
-    const titleLink = element("a", { className: "gist-list-title-link", href });
-    titleLink.append(element("span", {
-      className: "gist-list-title",
+    const link = element("a", { className: "library-link", href });
+    link.append(element("span", {
+      className: "library-title",
       text: entryTitle(entry)
     }));
-
-    const metadata = element("span", { className: "gist-list-meta" });
-    const author = element("span", { className: "gist-list-author" });
-    author.append(
-      authorAvatar(
-        entry.authorName,
-        entry.authorAvatarUrl,
-        "gist-list-avatar",
-        22
-      ),
-      element("span", {
-        className: "gist-list-author-name",
-        text: entry.authorName || "Unknown"
-      })
-    );
-    const revisionLink = element("a", {
-      className: "gist-list-meta-link",
-      href,
-      text: `revision ${entry.revisionNumber}`
-    });
-    const dateValue = tab === "recent"
-      ? entry.lastViewedAt || entry.updatedAt
-      : entry.updatedAt;
-    metadata.append(
-      author,
-      document.createTextNode(" - "),
-      revisionLink,
-      document.createTextNode(` - ${tab === "recent" ? "viewed" : "updated"} ${formatDate(dateValue, "compact")}`)
-    );
-    content.append(titleLink, metadata);
-    row.append(content);
+    const dateValue = libraryDate(entry, tab);
+    const aside = element("span", { className: "library-aside" });
+    const time = element("time", { text: libraryRowTime(dateValue, kind) });
+    if (dateValue) {
+      time.dateTime = dateValue;
+      time.title = formatDate(dateValue);
+    }
+    aside.append(time);
+    if (entry.revisionNumber > 1) {
+      const revision = element("span", {
+        className: "library-revision",
+        text: `r${entry.revisionNumber}`
+      });
+      revision.setAttribute("aria-label", `revision ${entry.revisionNumber}`);
+      aside.append(revision);
+    }
+    link.append(aside);
+    if (tab === "recent" && !entry.owned && entry.authorName) {
+      const byline = element("span", { className: "library-byline" });
+      byline.append(
+        authorAvatar(entry.authorName, entry.authorAvatarUrl, "library-avatar", 14),
+        document.createTextNode(entry.authorName)
+      );
+      link.append(byline);
+    }
+    row.append(link);
     item.append(row);
     return item;
   }
@@ -528,91 +572,67 @@
     app.className = "home-shell home-shell-authenticated offline-library-shell";
     app.replaceChildren();
 
-    const summary = element("section", { className: "offline-library-summary" });
-    summary.setAttribute("aria-label", "Offline library");
-    summary.append(
-      element("h1", { text: "Saved gists" }),
-      element("p", {
-        text: `${entries.length} ${entries.length === 1 ? "gist" : "gists"} available offline`
-      })
-    );
-
-    const history = element("section", {
-      className: "home-gist-history offline-library-history"
-    });
-    history.setAttribute("aria-label", "Saved gist history");
-    const tabsSection = element("div", { className: "me-tabs-section" });
-    const tabsHeader = element("div", { className: "me-tabs-header" });
-    const tabs = element("div", { className: "me-tabs" });
+    const library = element("section", { className: "library" });
+    library.setAttribute("aria-label", "Saved gists");
+    const bar = element("div", { className: "library-bar" });
+    const tabs = element("div", { className: "library-tabs" });
     tabs.setAttribute("role", "tablist");
-    tabs.setAttribute("aria-label", "Saved gist views");
+    tabs.setAttribute("aria-label", "Library");
+    const mineButton = element("button", { className: "library-tab", text: "My gists" });
     const recentButton = element("button", {
-      className: "me-tab-button",
-      text: "RECENTLY VIEWED"
+      className: "library-tab",
+      text: "Recently viewed"
     });
-    const mineButton = element("button", {
-      className: "me-tab-button",
-      text: "MY GISTS"
-    });
-    recentButton.type = mineButton.type = "button";
-    recentButton.setAttribute("role", "tab");
-    mineButton.setAttribute("role", "tab");
-    tabs.append(
-      recentButton,
-      element("span", { className: "me-tab-separator", text: "|" }),
-      mineButton
-    );
-    tabsHeader.append(tabs);
+    for (const button of [mineButton, recentButton]) {
+      button.type = "button";
+      button.setAttribute("role", "tab");
+    }
+    tabs.append(mineButton, recentButton);
+    const searchToggle = element("button", { className: "library-search-toggle" });
+    searchToggle.type = "button";
+    bar.append(tabs, searchToggle);
 
-    const search = element("div", {
-      className: "gist-search offline-library-search"
-    });
-    const searchInput = element("input", { className: "gist-search-input" });
+    const search = element("div", { className: "library-search" });
+    const searchInput = element("input", { className: "library-search-input" });
     searchInput.type = "search";
     searchInput.placeholder = "Search saved gists";
     searchInput.autocomplete = "off";
     searchInput.setAttribute("aria-label", "Search saved gists");
-    const searchStatus = element("span", { className: "gist-search-status" });
-    searchStatus.setAttribute("aria-live", "polite");
-    search.append(searchInput, searchStatus);
+    search.append(searchInput);
+    search.hidden = true;
 
-    const panel = element("div", { className: "offline-library-panel" });
+    const panel = element("div");
     panel.setAttribute("role", "tabpanel");
-    const list = element("ul", { className: "gist-list" });
-    const empty = element("p", { className: "empty-list offline-library-empty" });
-    const pager = element("div", { className: "gist-pagination" });
-    pager.setAttribute("aria-label", "Pagination");
-    const previous = element("button", {
-      className: "gist-pagination-button",
-      text: "Prev"
-    });
-    const pageStatus = element("span", { className: "gist-pagination-status" });
-    const next = element("button", {
-      className: "gist-pagination-button",
-      text: "Next"
-    });
-    previous.type = next.type = "button";
-    pager.append(previous, pageStatus, next);
-    panel.append(list, empty, pager);
-    tabsSection.append(tabsHeader, search, panel);
-    history.append(tabsSection);
-    app.append(summary, history);
+    const groups = element("div");
+    const empty = element("p", { className: "library-empty" });
+    const more = element("button", { className: "home-more-button", text: "Show more" });
+    more.type = "button";
+    panel.append(groups, empty, more);
+    library.append(bar, search, panel);
+    app.append(library);
 
     let tab = readTab();
-    let page = 0;
+    let count = ITEMS_PER_PAGE;
+
+    function paintSearchToggle() {
+      const open = !search.hidden;
+      searchToggle.setAttribute("aria-label", open ? "Close search" : "Search");
+      searchToggle.setAttribute("aria-expanded", String(open));
+      replaceIcon(searchToggle, open ? "x" : "search", 17);
+    }
 
     function selectTab(nextTab) {
       tab = nextTab;
-      page = 0;
+      count = ITEMS_PER_PAGE;
       saveTab(tab);
       paint();
     }
 
     function paint() {
-      recentButton.setAttribute("aria-selected", String(tab === "recent"));
       mineButton.setAttribute("aria-selected", String(tab === "mine"));
-      recentButton.tabIndex = tab === "recent" ? 0 : -1;
+      recentButton.setAttribute("aria-selected", String(tab === "recent"));
       mineButton.tabIndex = tab === "mine" ? 0 : -1;
+      recentButton.tabIndex = tab === "recent" ? 0 : -1;
       const query = searchInput.value.trim().toLocaleLowerCase();
       const filtered = entries
         .filter((entry) => tab === "recent" ? entry.recentlyViewed : entry.owned)
@@ -625,40 +645,44 @@
             .includes(query);
         })
         .sort((left, right) => {
-          const leftDate = Date.parse(
-            tab === "recent" ? left.lastViewedAt || "" : left.updatedAt || ""
-          );
-          const rightDate = Date.parse(
-            tab === "recent" ? right.lastViewedAt || "" : right.updatedAt || ""
-          );
+          const leftDate = Date.parse(libraryDate(left, tab) || "");
+          const rightDate = Date.parse(libraryDate(right, tab) || "");
           return (Number.isNaN(rightDate) ? 0 : rightDate) -
             (Number.isNaN(leftDate) ? 0 : leftDate);
         });
-      const pages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-      page = Math.min(page, pages - 1);
-      const visible = filtered.slice(
-        page * ITEMS_PER_PAGE,
-        (page + 1) * ITEMS_PER_PAGE
-      );
-      list.replaceChildren(...visible.map((entry) => gistListRow(entry, tab)));
+      const visible = filtered.slice(0, count);
+      const now = Date.now();
+      const sections = [];
+      for (const entry of visible) {
+        const group = libraryGroup(libraryDate(entry, tab), now);
+        let section = sections.at(-1);
+        if (!section || (!query && section.group.key !== group.key)) {
+          const node = element("div", { className: "library-group" });
+          if (!query) {
+            node.append(element("h3", { className: "library-group-label", text: group.label }));
+          }
+          const list = element("ul", { className: "library-list" });
+          node.append(list);
+          section = { group, node, list };
+          sections.push(section);
+        }
+        section.list.append(
+          gistListRow(entry, tab, query ? (group.kind === "today" ? "today" : "month") : group.kind)
+        );
+      }
+      groups.replaceChildren(...sections.map((section) => section.node));
       empty.hidden = visible.length > 0;
       empty.textContent = query
-        ? "No saved gists match your search."
+        ? "No saved gists match."
         : tab === "recent"
           ? "No recently viewed gists are saved offline."
-          : "No owned gists are saved offline.";
-      searchStatus.textContent = query
-        ? `${filtered.length} ${filtered.length === 1 ? "result" : "results"}`
-        : "";
-      previous.disabled = page === 0;
-      next.disabled = page >= pages - 1;
-      pageStatus.textContent = `Page ${page + 1} of ${pages}`;
-      pager.hidden = filtered.length <= ITEMS_PER_PAGE;
+          : "None of your gists are saved offline.";
+      more.hidden = filtered.length <= count;
     }
 
-    recentButton.addEventListener("click", () => selectTab("recent"));
     mineButton.addEventListener("click", () => selectTab("mine"));
-    for (const button of [recentButton, mineButton]) {
+    recentButton.addEventListener("click", () => selectTab("recent"));
+    for (const button of [mineButton, recentButton]) {
       button.addEventListener("keydown", (event) => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
           return;
@@ -669,18 +693,31 @@
         (nextTab === "recent" ? recentButton : mineButton).focus();
       });
     }
+    searchToggle.addEventListener("click", () => {
+      search.hidden = !search.hidden;
+      if (search.hidden && searchInput.value) {
+        searchInput.value = "";
+        paint();
+      }
+      paintSearchToggle();
+      if (!search.hidden) {
+        searchInput.focus();
+      }
+    });
     searchInput.addEventListener("input", () => {
-      page = 0;
+      count = ITEMS_PER_PAGE;
       paint();
     });
-    previous.addEventListener("click", () => {
-      page = Math.max(0, page - 1);
+    searchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        searchToggle.click();
+      }
+    });
+    more.addEventListener("click", () => {
+      count += ITEMS_PER_PAGE;
       paint();
     });
-    next.addEventListener("click", () => {
-      page += 1;
-      paint();
-    });
+    paintSearchToggle();
     paint();
   }
 

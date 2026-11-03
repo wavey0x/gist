@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiUrl } from "./api-base";
@@ -103,7 +104,10 @@ function normalizeNotificationSettings(
   };
 }
 
-export async function fetchCurrentSession(): Promise<SessionIdentity | null> {
+// The header and the page both need the session; one request per render.
+export const fetchCurrentSession = cache(loadCurrentSession);
+
+async function loadCurrentSession(): Promise<SessionIdentity | null> {
   const cookieHeader = await currentSessionCookieHeader();
   if (!cookieHeader) {
     return null;

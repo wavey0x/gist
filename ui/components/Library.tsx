@@ -10,6 +10,13 @@ import {
   type MyGistItem,
   type MyGistsPayload
 } from "../lib/my-gists";
+import {
+  dateGroup,
+  fullTimestamp,
+  rowTime,
+  validTimeZone,
+  type DateGroup
+} from "../lib/date-groups";
 import { readReadingPosition } from "../lib/reading-position";
 import {
   readRecentlyViewedGists,
@@ -18,7 +25,6 @@ import {
   type RecentGistItem
 } from "../lib/recent-viewed";
 import { ConfirmModal } from "./ConfirmModal";
-import { RelativeTime } from "./RelativeTime";
 import { SwipeRow } from "./SwipeRow";
 
 const PAGE_SIZE = 20;
@@ -33,6 +39,11 @@ type MineSort = "updated" | "created";
 type LibraryProps = {
   initialMyGists: MyGistsPayload | null;
   isAuthenticated: boolean;
+  userName?: string | null;
+  // Rendered on the server with the visitor's saved time zone and the
+  // server's clock, so the first client render matches it exactly.
+  timeZone: string;
+  serverNow: number;
 };
 
 function readStoredTab(): TabId {
@@ -62,86 +73,89 @@ function titleOf(preferred: string | null | undefined, title: string | null, id:
 }
 
 function Avatar({ name, url }: { name: string; url?: string }) {
-  const [failed, setFailed] = useState(false);
+  const [state, setState] = useState<"loading" | "loaded" | "failed">("loading");
   const source =
     url ?? (GITHUB_LOGIN_RE.test(name) ? `https://github.com/${name}.png?size=32` : null);
-  if (!source || failed) {
-    return (
-      <span className="library-avatar library-avatar-placeholder" aria-hidden="true">
-        {name.trim().charAt(0).toUpperCase() || "?"}
-      </span>
-    );
-  }
   return (
-    <img
-      className="library-avatar"
-      src={source}
-      alt=""
-      width={14}
-      height={14}
-      loading="lazy"
-      onError={() => setFailed(true)}
-    />
+    <span className="library-avatar" aria-hidden="true">
+      {state !== "loaded" ? (name.trim().charAt(0).toUpperCase() || "?") : null}
+      {source && state !== "failed" ? (
+        <img
+          src={source}
+          alt=""
+          width={14}
+          height={14}
+          loading="lazy"
+          data-loaded={state === "loaded"}
+          onLoad={() => setState("loaded")}
+          onError={() => setState("failed")}
+        />
+      ) : null}
+    </span>
   );
 }
 
-function LibraryRow({
-  href,
-  title,
-  revision,
-  meta,
-  updated,
-  progress,
-  actionLabel,
-  onAction,
-  actionIcon
-}: {
+type RowData = {
+  key: string;
   href: string;
   title: string;
   revision: number;
-  meta: ReactNode;
+  date: string;
+  byline?: { name: string; avatarUrl?: string };
   updated?: boolean;
   progress?: number;
   actionLabel: string;
-  onAction: () => void;
   actionIcon: ReactNode;
-}) {
+  onAction: () => void;
+};
+
+function LibraryRow({ row, time, timestamp }: { row: RowData; time: string; timestamp: string }) {
   return (
     <li className="library-item">
-      <SwipeRow actionLabel={actionLabel} onAction={onAction}>
+      <SwipeRow actionLabel={row.actionLabel} onAction={row.onAction}>
         <div className="library-row">
-          <Link className="library-link" href={href} prefetch={false}>
-            <span className="library-title">
-              {updated ? (
-                <span
-                  className="gist-updated-dot"
-                  role="img"
-                  aria-label="Updated since you read it"
-                  title="Updated since you read it"
-                />
+          <Link className="library-link" href={row.href} prefetch={false}>
+            {row.updated ? (
+              <span
+                className="library-dot"
+                role="img"
+                aria-label="Updated since you read it"
+                title="Updated since you read it"
+              />
+            ) : null}
+            <span className="library-title">{row.title}</span>
+            <span className="library-aside">
+              <time dateTime={row.date} title={timestamp}>
+                {time}
+              </time>
+              {row.revision > 1 ? (
+                <span className="library-revision" aria-label={`revision ${row.revision}`}>
+                  r{row.revision}
+                </span>
               ) : null}
-              {title}
             </span>
-            <span className="library-revision" aria-label={`revision ${revision}`}>
-              r{revision}
-            </span>
-            <span className="library-meta">{meta}</span>
+            {row.byline ? (
+              <span className="library-byline">
+                <Avatar name={row.byline.name} url={row.byline.avatarUrl} />
+                {row.byline.name}
+              </span>
+            ) : null}
           </Link>
           <button
             type="button"
             className="library-row-action"
-            aria-label={`${actionLabel} ${title}`}
-            title={actionLabel}
-            onClick={onAction}
+            aria-label={`${row.actionLabel} ${row.title}`}
+            title={row.actionLabel}
+            onClick={row.onAction}
             data-no-swipe
           >
-            {actionIcon}
+            {row.actionIcon}
           </button>
         </div>
-        {progress ? (
+        {row.progress ? (
           <span
             className="library-progress"
-            style={{ width: `${Math.min(100, progress * 100)}%` }}
+            style={{ width: `${Math.min(100, row.progress * 100)}%` }}
           />
         ) : null}
       </SwipeRow>
@@ -149,7 +163,61 @@ function LibraryRow({
   );
 }
 
-export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
+function RowList({
+  rows,
+  grouped,
+  now,
+  timeZone
+}: {
+  rows: RowData[];
+  grouped: boolean;
+  now: number;
+  timeZone: string;
+}) {
+  const groups: { group: DateGroup; rows: RowData[] }[] = [];
+  for (const row of rows) {
+    const group = dateGroup(row.date, now, timeZone);
+    const last = groups.at(-1);
+    if (grouped && last?.group.key === group.key) {
+      last.rows.push(row);
+    } else if (!grouped && last) {
+      last.rows.push(row);
+    } else {
+      groups.push({ group, rows: [row] });
+    }
+  }
+  return (
+    <>
+      {groups.map(({ group, rows: groupRows }) => (
+        <div className="library-group" key={grouped ? group.key : "all"}>
+          {grouped ? <h3 className="library-group-label">{group.label}</h3> : null}
+          <ul className="library-list">
+            {groupRows.map((row) => {
+              const kind = dateGroup(row.date, now, timeZone).kind;
+              return (
+                <LibraryRow
+                  key={row.key}
+                  row={row}
+                  time={rowTime(row.date, grouped ? kind : kind === "today" ? "today" : "month", timeZone)}
+                  timestamp={fullTimestamp(row.date, timeZone)}
+                />
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </>
+  );
+}
+
+export function Library({
+  initialMyGists,
+  isAuthenticated,
+  userName,
+  timeZone: initialTimeZone,
+  serverNow
+}: LibraryProps) {
+  const [clock, setClock] = useState({ now: serverNow, timeZone: initialTimeZone });
   const router = useRouter();
   const [tab, setTab] = useState<TabId>(isAuthenticated ? "mine" : "recent");
   const [sort, setSort] = useState<MineSort>("updated");
@@ -175,6 +243,7 @@ export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
 
   const refresh = useCallback(() => {
     setRecent(readRecentlyViewedGists());
+    setClock((current) => ({ ...current, now: Date.now() }));
     setReloadToken((value) => value + 1);
   }, []);
 
@@ -183,6 +252,11 @@ export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
       setTab(readStoredTab());
     }
     setRecent(readRecentlyViewedGists());
+    setClock({
+      now: Date.now(),
+      timeZone:
+        validTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone) ?? initialTimeZone
+    });
     function handleStorage(event: StorageEvent) {
       if (event.key === RECENTLY_VIEWED_STORAGE_KEY || event.key === null) {
         setRecent(readRecentlyViewedGists());
@@ -364,36 +438,31 @@ export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
         </p>
       );
     } else {
+      const byCreated = sort === "created" && !query;
       list = (
-        <ul className="library-list">
-          {mine.map((gist) => {
+        <RowList
+          grouped={!query}
+          now={clock.now}
+          timeZone={clock.timeZone}
+          rows={mine.map((gist) => {
             const title = titleOf(gist.display_title, gist.title, gist.id);
             const read = lastReadRevision.get(gist.id);
-            return (
-              <LibraryRow
-                key={gist.id}
-                href={`/${gist.id}`}
-                title={title}
-                revision={gist.revision_number}
-                updated={read !== undefined && gist.revision_number > read}
-                meta={
-                  <>
-                    {sort === "created" && !query ? <span>created</span> : null}
-                    <RelativeTime
-                      value={sort === "created" && !query ? gist.created_at : gist.updated_at}
-                    />
-                  </>
-                }
-                actionLabel="Delete"
-                actionIcon={<Trash2 aria-hidden="true" size={15} strokeWidth={1.8} />}
-                onAction={() => {
-                  setDeleteError(null);
-                  setPendingDelete({ id: gist.id, title });
-                }}
-              />
-            );
+            return {
+              key: gist.id,
+              href: `/${gist.id}`,
+              title,
+              revision: gist.revision_number,
+              date: byCreated ? gist.created_at : gist.updated_at,
+              updated: read !== undefined && gist.revision_number > read,
+              actionLabel: "Delete",
+              actionIcon: <Trash2 aria-hidden="true" size={15} strokeWidth={1.8} />,
+              onAction: () => {
+                setDeleteError(null);
+                setPendingDelete({ id: gist.id, title });
+              }
+            };
           })}
-        </ul>
+        />
       );
       if (mine.length < mineTotal) {
         more = (
@@ -417,40 +486,35 @@ export function Library({ initialMyGists, isAuthenticated }: LibraryProps) {
       </p>
     );
   } else {
+    const me = userName?.trim().toLowerCase();
     list = (
-      <ul className="library-list">
-        {filteredRecent.slice(0, recentCount).map((gist) => {
-          const title = gist.title?.trim() || gist.id;
+      <RowList
+        grouped={!query}
+        now={clock.now}
+        timeZone={clock.timeZone}
+        rows={filteredRecent.slice(0, recentCount).map((gist) => {
           const latest = latestOwnRevision.get(gist.id);
-          const reading = readReadingPosition(gist.id, gist.revision_number);
-          return (
-            <LibraryRow
-              key={gist.id}
-              href={`/${gist.id}`}
-              title={title}
-              revision={gist.revision_number}
-              updated={latest !== undefined && latest > gist.revision_number}
-              progress={reading?.fraction}
-              meta={
-                <>
-                  <span className="library-author">
-                    <Avatar name={gist.author_name} url={gist.author_avatar_url} />
-                    {gist.author_name}
-                  </span>
-                  <span aria-hidden="true">·</span>
-                  <RelativeTime value={gist.viewed_at} />
-                </>
-              }
-              actionLabel="Remove"
-              actionIcon={<X aria-hidden="true" size={15} strokeWidth={1.8} />}
-              onAction={() => {
-                removeRecentlyViewedGist(gist.id);
-                setRecent(readRecentlyViewedGists());
-              }}
-            />
-          );
+          return {
+            key: gist.id,
+            href: `/${gist.id}`,
+            title: gist.title?.trim() || gist.id,
+            revision: gist.revision_number,
+            date: gist.viewed_at,
+            byline:
+              gist.author_name.trim().toLowerCase() === me
+                ? undefined
+                : { name: gist.author_name, avatarUrl: gist.author_avatar_url },
+            updated: latest !== undefined && latest > gist.revision_number,
+            progress: readReadingPosition(gist.id, gist.revision_number)?.fraction,
+            actionLabel: "Remove",
+            actionIcon: <X aria-hidden="true" size={15} strokeWidth={1.8} />,
+            onAction: () => {
+              removeRecentlyViewedGist(gist.id);
+              setRecent(readRecentlyViewedGists());
+            }
+          };
         })}
-      </ul>
+      />
     );
     if (filteredRecent.length > recentCount) {
       more = (

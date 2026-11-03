@@ -8,6 +8,7 @@ import {
 } from "../lib/listen-queue";
 import {
   Check,
+  ListChecks,
   ListPlus,
   Moon,
   Pause,
@@ -128,6 +129,12 @@ export function ArticleAudio({
     : { currentTime: 0, duration: 0, playbackRate: engine.playbackRate, playing: false };
   const listenQueue = useListenQueue();
   const queued = listenQueue.items.some((item) => item.gist_id === gistId);
+  const [justAdded, setJustAdded] = useState(false);
+  useEffect(() => {
+    if (!justAdded) return;
+    const timer = window.setTimeout(() => setJustAdded(false), 2200);
+    return () => window.clearTimeout(timer);
+  }, [justAdded]);
   const upNextCount = countUpNext(listenQueue.items, engine.track?.gistId ?? null);
   const track = useMemo<AudioTrack | null>(
     () =>
@@ -515,22 +522,32 @@ export function ArticleAudio({
           {active && !playerOpen && viewState === "ready" && track ? (
             <button
               type="button"
-              className="icon-button"
+              className={`icon-button article-audio-add${queued ? " article-audio-add-queued" : ""}`}
               aria-label={queued ? "In your playlist" : "Add to playlist"}
               aria-pressed={queued}
               title={queued ? "In your playlist" : "Add to playlist"}
               disabled={queued}
-              onClick={() =>
+              onClick={() => {
                 addToQueue(gistId, {
                   title: track.title,
                   author_name: track.author,
                   revision_number: track.revisionNumber,
                   audio_url: track.url
-                })
-              }
+                });
+                setJustAdded(true);
+              }}
             >
-              <ListPlus aria-hidden="true" size={18} strokeWidth={1.8} />
+              {queued ? (
+                <ListChecks aria-hidden="true" size={18} strokeWidth={1.8} />
+              ) : (
+                <ListPlus aria-hidden="true" size={18} strokeWidth={1.8} />
+              )}
             </button>
+          ) : null}
+          {justAdded ? (
+            <span className="article-audio-added" role="status">
+              Added to playlist
+            </span>
           ) : null}
           {children}
         </div>

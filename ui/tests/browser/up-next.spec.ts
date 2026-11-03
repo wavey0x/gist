@@ -143,9 +143,9 @@ test("dragging the grip moves an item down the queue", async ({ page }, testInfo
   ]);
 });
 
-test("an empty queue still shows up next with a hint", async ({ page }) => {
+test("an empty playlist takes no room", async ({ page }) => {
   await mockQueue(page, []);
   await page.goto("/");
-  const upNext = page.getByRole("region", { name: "Playlist" });
-  await expect(upNext.getByText(/Empty\. Add audio/)).toBeVisible();
+  await expect(page.getByRole("region", { name: "Library" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Playlist" })).toHaveCount(0);
 });
