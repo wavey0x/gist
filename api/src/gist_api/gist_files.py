@@ -28,6 +28,7 @@ LANGUAGE_BY_EXTENSION = {
     ".json": "json",
     ".jsx": "jsx",
     ".kt": "kotlin",
+    ".lean": "lean4",
     ".md": "markdown",
     ".markdown": "markdown",
     ".mjs": "javascript",

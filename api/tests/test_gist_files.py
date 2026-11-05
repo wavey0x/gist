@@ -69,6 +69,7 @@ def test_lead_file_and_classification_are_deterministic():
     assert lead_filename(["z.txt", "a.py"]) == "a.py"
     assert file_kind("README.MD") == "markdown"
     assert file_kind("test.py") == "source"
+    assert file_kind("Periphery.lean") == "source"
     assert file_kind("LICENSE") == "text"
 
 

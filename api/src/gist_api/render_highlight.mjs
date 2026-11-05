@@ -9,6 +9,7 @@ const LANGUAGE_ALIASES = new Map([
   ['py3', 'python'],
   ['python3', 'python'],
   ['golang', 'go'],
+  ['lean', 'lean4'],
   ['sh', 'shell'],
   ['bash', 'shell'],
   ['zsh', 'shell'],

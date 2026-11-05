@@ -271,6 +271,15 @@ Markdown-heavy inline math stays intact: $`x_i * y_i`$.
     assert "math-enrichment/" in result.version
 
 
+def test_lean_sources_and_fences_use_the_lean4_grammar():
+    source = render_source_result("theorem t : 1 = 1 := by decide\n", "lean4")
+    fenced = render_markdown_result("```lean\ndef x : Nat := 1\n```\n")
+
+    assert "highlight highlight-source-lean4" in source.html
+    assert '<span class="pl-k">theorem</span>' in source.html
+    assert "highlight highlight-source-lean4" in fenced.html
+
+
 def test_rendering_replaces_xml_invalid_control_characters():
     # JSON turns an unescaped "\frac" into a form feed followed by "rac".
     markdown = "Ratio $\x0crac{a}{b}$ and \x00 \x1b text\n\n$$\n\x08eta\n$$\n"
