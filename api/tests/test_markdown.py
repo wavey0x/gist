@@ -5,6 +5,7 @@ import gist_api.markdown as markdown_module
 from gist_api.db import gist_connection
 from gist_api.markdown import (
     render_markdown_result,
+    render_plain_text_result,
     render_source_result,
     render_version,
 )
@@ -268,6 +269,33 @@ Markdown-heavy inline math stays intact: $`x_i * y_i`$.
     assert r"\int_0^1 x^2\,dx" in display[2].text_content()
     assert "WAVEYGISTMATHTOKEN" not in result.html
     assert "math-enrichment/" in result.version
+
+
+def test_rendering_replaces_xml_invalid_control_characters():
+    # JSON turns an unescaped "\frac" into a form feed followed by "rac".
+    markdown = "Ratio $\x0crac{a}{b}$ and \x00 \x1b text\n\n$$\n\x08eta\n$$\n"
+    result = render_markdown_result(markdown)
+
+    assert "$\ufffdrac{a}{b}$" in result.html
+    assert "\ufffdeta" in result.html
+    assert "\x0c" not in result.html
+    assert "\x00" not in result.html
+    assert "\ufffd" in render_source_result("x = 1\x0c\n", "python").html
+    assert "\ufffd" in render_plain_text_result("a\x1bb").html
+
+
+def test_create_gist_with_control_characters_keeps_raw_content(client, app):
+    write_key = make_key(app, name="control-chars")
+    markdown = "# Styfi\n\n$\x0crac{a}{b}$\n"
+    created = create_gist(client, write_key, markdown=markdown)
+    assert created.status_code == 201
+    gist_id = created.get_json()["id"]
+
+    public = client.get(f"/api/v1/gists/{gist_id}/render")
+    assert public.status_code == 200
+    readme = public.get_json()["files"]["README.md"]
+    assert readme["content"] == markdown
+    assert "$\ufffdrac{a}{b}$" in readme["rendered_html"]
 
 
 def test_markdown_rendering_preserves_commonmark_escapes_and_ignores_non_math():

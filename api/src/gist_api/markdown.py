@@ -43,6 +43,10 @@ DEFAULT_NODE_BIN_CANDIDATES = (
     "/opt/nodejs/current/bin/node",
 )
 
+# lxml rejects text that XML 1.0 cannot hold. Stray control characters, such as
+# the form feed JSON makes of an unescaped "\frac", render as U+FFFD instead.
+XML_INVALID_CHARS_RE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+
 SCRIPTABLE_TAGS = {"script", "style", "svg", "math", "iframe"}
 SCRIPTABLE_TEXT_RE = re.compile(
     r"<(script|style|svg|math|iframe)\b[^>]*>.*?</\1\s*>",
@@ -1682,6 +1686,7 @@ def render_markdown_result(
     allowed_image_src_prefixes=(),
     highlight_budget=None,
 ):
+    markdown = _xml_safe_text(markdown)
     math_protected_markdown, math_expressions = _protect_math_expressions(markdown)
     protected_markdown, mermaid_placeholder_languages = _protect_mermaid_fences(
         math_protected_markdown
@@ -1726,7 +1731,12 @@ def render_markdown_result(
     )
 
 
+def _xml_safe_text(value):
+    return XML_INVALID_CHARS_RE.sub("\ufffd", value)
+
+
 def render_source_result(content, language, *, highlight_budget=None):
+    content = _xml_safe_text(content)
     budget = highlight_budget or HighlightBudget()
     byte_count = len(content.encode("utf-8"))
     item = None
@@ -1785,6 +1795,7 @@ def render_source_result(content, language, *, highlight_budget=None):
 
 
 def render_plain_text_result(content):
+    content = _xml_safe_text(content)
     root = etree.Element("div")
     root.append(_plain_code_block("text", content))
     return RenderedMarkdown(
