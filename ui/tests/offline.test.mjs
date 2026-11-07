@@ -179,6 +179,8 @@ test("offline controls preserve every cache-supported reader interaction", () =>
   assert.match(shellScript, /className: "gist-file-action gist-file-copy"/);
   assert.match(shellScript, /View raw file/);
   assert.match(shellScript, /View rendered file/);
+  assert.match(shellScript, /codeWrapButton\(\)/);
+  assert.match(shellScript, /CODE_WRAP_KEY = "waveygist:code-wrap:v1"/);
   assert.match(shellScript, /This revision isn’t saved offline/);
   assert.match(shellScript, /Diff requires a connection/);
   assert.match(shellScript, /article-audio-overlay-docked/);

@@ -15,9 +15,18 @@ const mark = (
 ) =>
   `<a href="${image(number)}#${fragment}" title="${title}">${String(number).padStart(2, "0")}</a>`;
 const album = `<h1 id="gallery-test">Field notes</h1><p>Read the numbered photo references without leaving the article.</p>${"<p>We followed the path beside the lake and made these notes along the way.</p>".repeat(12)}<p id="references">${mark(1)} · ${mark(2)} · ${mark(3)}</p><p>${mark(2, "wg-gallery=album", "A duplicate title")}</p><p>Individual previews: ${mark(1, "wg-image", "Standalone lake")} · ${mark(2, "wg-image", "Standalone cabin")}</p><p><img src="${image(1)}#wg-gallery=album" alt="Lake at dawn" title="Inline lake" width="320"></p><p><a href="${image(3)}#wg-gallery=album" title="Full-size landscape"><img src="${image(4)}" alt="Landscape thumbnail" width="200"></a></p><p><a href="${image(2)}"><img src="${image(1)}#wg-gallery=album" width="180" alt="Ordinary linked image"></a></p><p><a href="https://images.example.test/external.png#wg-image" title="External image">External</a> · <a href="${image(9)}#wg-image" title="Missing image">Broken</a></p>${"<p>Continue reading the notes here.</p>".repeat(18)}`;
+const longCodeValue = "abcdefghij".repeat(35);
+const longCodeLine = `const value = "${longCodeValue}";`;
+const highlightedCode = `<div class="highlight highlight-source-js" dir="auto"><pre><span class="pl-k">const</span> value = "${longCodeValue}";</pre></div>`;
+const longPatchLine = `+MIN_A: constant(uint256) = ${"N_CONS*N_CONS*".repeat(24)}`;
+const highlightedPatch = `<div class="highlight highlight-source-diff" dir="auto"><pre>diff --git a/example.vy b/example.vy\n<span class="pl-mi1">${longPatchLine}</span></pre></div>`;
 const filesFor = (id) =>
   id.startsWith("GalleryAudio")
     ? { "README.md": `<h1>Audio article</h1>${"<p>Keep reading this article while its narration plays.</p>".repeat(100)}` }
+    : id === "GalleryCodeWrap01"
+    ? { "README.md": `<h1>Code wrapping</h1>${highlightedCode}<pre><code>${longCodeLine}</code></pre>` }
+    : id === "GalleryCodePatch01"
+    ? { "twocrypto-math.patch": highlightedPatch }
     : id === "GalleryLongText1"
     ? {
         "README.md": `<h1>Long caption</h1><p>${mark(1, "wg-image", "Lake at dawn. ".repeat(75))}</p>`
@@ -40,9 +49,11 @@ export function fixture(id, revision = 1) {
       filename,
       {
         filename,
-        kind: "markdown",
-        language: "markdown",
-        content: `# Gallery\n\n[Photo](${image(1)}#wg-gallery=album)`,
+        kind: id === "GalleryCodePatch01" ? "source" : "markdown",
+        language: id === "GalleryCodePatch01" ? "diff" : "markdown",
+        content: id === "GalleryCodePatch01" ? `diff --git a/example.vy b/example.vy\n${longPatchLine}\n` :
+          id === "GalleryCodeWrap01" ? `# Code wrapping\n\n\`\`\`js\n${longCodeLine}\n\`\`\`` :
+          `# Gallery\n\n[Photo](${image(1)}#wg-gallery=album)`,
         rendered_html,
         content_sha256: "b".repeat(64),
         byte_size: 100,
@@ -58,7 +69,7 @@ export function fixture(id, revision = 1) {
     title: "Field notes",
     display_title: "Field notes",
     author_name: "Field Notes",
-    primary_file: "README.md",
+    primary_file: Object.keys(files)[0],
     snapshot_sha256: "a".repeat(64),
     revision_number: revision,
     latest_revision_number: 2,

@@ -111,6 +111,57 @@ def test_markdown_rendering_uses_gfm_highlighting_links_and_sanitizer():
     assert "highlight/ok" in result.version
 
 
+def test_patch_source_highlights_added_and_removed_lines():
+    source = (
+        "diff --git a/example.py b/example.py\n"
+        "--- a/example.py\n"
+        "+++ b/example.py\n"
+        "@@ -1 +1 @@\n"
+        "-old = 1\n"
+        "+new = 2\n"
+    )
+    result = render_source_result(source, "diff")
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+
+    assert root.xpath('.//div[contains(@class, "highlight-source-diff")]')
+    assert root.xpath('.//span[contains(@class, "pl-md")]')
+    assert root.xpath('.//span[contains(@class, "pl-mi1")]')
+    assert "highlight/ok" in result.version
+
+
+def test_patch_file_is_highlighted_on_create_and_rerender(client, app):
+    key = make_key(app)
+    content = "--- a/example.py\n+++ b/example.py\n-old = 1\n+new = 2\n"
+    created = client.post(
+        "/api/v1/gists",
+        headers=auth_header(key),
+        json={"files": {"changes.patch": {"content": content}}},
+    )
+    assert created.status_code == 201
+    gist_id = created.get_json()["id"]
+
+    def rendered_file():
+        response = client.get(f"/api/v1/gists/{gist_id}/render")
+        assert response.status_code == 200
+        return response.get_json()["files"]["changes.patch"]
+
+    patch = rendered_file()
+    assert patch["kind"] == "source"
+    assert patch["language"] == "diff"
+    assert "highlight-source-diff" in patch["rendered_html"]
+
+    with gist_connection(app) as conn:
+        with conn:
+            conn.execute(
+                "update gist_revision_files set rendered_html = 'old' where filename = ?",
+                ("changes.patch",),
+            )
+    assert rendered_file()["rendered_html"] == "old"
+
+    rerender_gists(app, external_id=gist_id)
+    assert "highlight-source-diff" in rendered_file()["rendered_html"]
+
+
 def test_markdown_rendering_adds_targets_for_heading_fragment_links():
     result = render_markdown_result(
         "[Assignment](#assignment)\n\n"

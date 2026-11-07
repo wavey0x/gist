@@ -3,6 +3,7 @@ import pytest
 from gist_api.errors import GistError
 from gist_api.gist_files import (
     file_kind,
+    file_language,
     lead_filename,
     normalize_files,
     snapshot_sha256,
@@ -70,6 +71,10 @@ def test_lead_file_and_classification_are_deterministic():
     assert file_kind("README.MD") == "markdown"
     assert file_kind("test.py") == "source"
     assert file_kind("Periphery.lean") == "source"
+    assert file_kind("twocrypto-math.patch") == "source"
+    assert file_kind("changes.diff") == "source"
+    assert file_language("twocrypto-math.patch") == "diff"
+    assert file_language("changes.diff") == "diff"
     assert file_kind("LICENSE") == "text"
 
 

@@ -407,7 +407,8 @@ button {
   }
 }
 
-.theme-toggle-button {
+.theme-toggle-button,
+.code-wrap-toggle-button {
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
@@ -2137,6 +2138,12 @@ button {
   overflow-x: auto;
 }
 
+:root[data-code-wrap="true"] .markdown-body pre,
+:root[data-code-wrap="true"] .markdown-body pre > code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .markdown-body .math-render-output {
   display: none;
 }
@@ -2589,6 +2596,20 @@ button.gist-file-action {
   font: inherit;
 }
 
+:root[data-code-wrap="true"] .gist-code-view {
+  grid-template-columns: minmax(0, 1fr);
+  overflow-x: hidden;
+}
+
+:root[data-code-wrap="true"] .gist-line-numbers {
+  display: none;
+}
+
+:root[data-code-wrap="true"] .gist-code-content {
+  width: auto;
+  min-width: 0;
+}
+
 .raw-viewer {
   position: relative;
 }
@@ -2615,6 +2636,12 @@ button.gist-file-action {
   font-size: 13px;
   line-height: 1.5;
   white-space: pre;
+}
+
+:root[data-code-wrap="true"] .raw-markdown,
+:root[data-code-wrap="true"] .raw-markdown code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .raw-copy-button {

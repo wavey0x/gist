@@ -25,6 +25,7 @@
   const GIST_ID_RE = /^[A-Za-z0-9]{16,64}$/;
   const ROUTE_RE = /^\/([A-Za-z0-9]{16,64})(?:\/revisions\/([1-9][0-9]*))?\/?$/;
   const THEME_KEY = "theme";
+  const CODE_WRAP_KEY = "waveygist:code-wrap:v1";
   const TAB_KEY = "waveygist:home-tab:v1";
   const OFFLINE_IDENTITY_KEY = "waveygist:offline-identity:v1";
   const AUDIO_RATE_KEY = "waveygist:audio-rate:v1";
@@ -100,6 +101,12 @@
       '<path d="M8 13h2M8 17h1" />',
       '<circle cx="16" cy="17" r="3" />',
       '<path d="m18.5 19.5 2 2" />'
+    ],
+    textWrap: [
+      '<path d="m16 16-3 3 3 3" />',
+      '<path d="M3 12h14.5a1 1 0 0 1 0 7H13" />',
+      '<path d="M3 19h6" />',
+      '<path d="M3 5h18" />'
     ]
   };
 
@@ -307,6 +314,39 @@
         localStorage.setItem(THEME_KEY, next);
       } catch {
         // Theme persistence is best effort.
+      }
+    });
+    paint();
+    return button;
+  }
+
+  function codeWrapButton() {
+    const button = element("button", {
+      className: "icon-button code-wrap-toggle-button"
+    });
+    button.type = "button";
+    button.setAttribute("aria-label", "Wrap code lines");
+    button.append(icon("textWrap", 16, 1.8));
+    let wrapped = false;
+    try {
+      wrapped = localStorage.getItem(CODE_WRAP_KEY) === "true";
+    } catch {
+      // Storage may be unavailable in private browsing.
+    }
+
+    function paint() {
+      document.documentElement.dataset.codeWrap = String(wrapped);
+      button.setAttribute("aria-pressed", String(wrapped));
+      button.title = wrapped ? "Stop wrapping code lines" : "Wrap code lines";
+    }
+
+    button.addEventListener("click", () => {
+      wrapped = !wrapped;
+      paint();
+      try {
+        localStorage.setItem(CODE_WRAP_KEY, String(wrapped));
+      } catch {
+        // The current page still responds when storage is unavailable.
       }
     });
     paint();
@@ -1294,7 +1334,7 @@
       setRawVisible(false);
       toolbar.append(rawButton);
     }
-    toolbar.append(await revisionHistoryControl(payload), themeButton());
+    toolbar.append(await revisionHistoryControl(payload), codeWrapButton(), themeButton());
 
     const dockSentinel = element("span", {
       className: "article-audio-dock-sentinel"
