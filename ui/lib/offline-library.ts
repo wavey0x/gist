@@ -528,6 +528,28 @@ async function cachedGistIsComplete(entry: OfflineEntry) {
   return true;
 }
 
+async function cachedSourceRenderingIsCurrent(
+  entry: OfflineEntry,
+  gist: PublicGistPayload
+) {
+  // Non-Markdown HTML is stored unchanged; Markdown HTML may be rewritten for galleries.
+  const sourceFiles = Object.entries(gist.files).filter(
+    ([, file]) => file.kind !== "markdown"
+  );
+  if (!sourceFiles.length) return true;
+
+  const response = await (await caches.open(OFFLINE_CONTENT_CACHE)).match(entry.cacheKey);
+  if (!response) return false;
+  try {
+    const saved = await response.json() as PublicGistPayload;
+    return sourceFiles.every(([filename, file]) =>
+      saved.files?.[filename]?.rendered_html === file.rendered_html
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function cacheImage(
   imageId: string,
   parentKey: string,
@@ -610,7 +632,11 @@ async function storeGist(
   const entryKey = gistEntryKey(gist.id, gist.revision_number);
   const existing = await readEntry(entryKey);
   const now = new Date().toISOString();
-  if (existing?.identity === gist.snapshot_sha256 && await cachedGistIsComplete(existing)) {
+  if (
+    existing?.identity === gist.snapshot_sha256 &&
+    await cachedGistIsComplete(existing) &&
+    await cachedSourceRenderingIsCurrent(existing, gist)
+  ) {
     await writeEntry({
       ...existing,
       owned: existing.owned || flags.owned,

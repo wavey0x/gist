@@ -84,6 +84,26 @@ test.describe("offline reader", () => {
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-pressed", "true");
 
+      // Model a gist saved before patch files used the diff renderer.
+      await page.evaluate(async () => {
+        const cache = await caches.open("waveygist-content-v1");
+        const request = (await cache.keys()).find((key) =>
+          key.url.endsWith("/api/gists/GalleryCodePatch01/revisions/1/render")
+        );
+        if (!request) throw new Error("Saved gist missing");
+        const payload = await (await cache.match(request))?.json();
+        if (!payload) throw new Error("Saved gist payload missing");
+        payload.files["twocrypto-math.patch"].rendered_html = "<pre>old</pre>";
+        await cache.put(request, new Response(JSON.stringify(payload)));
+      });
+      await page.reload();
+      await expect.poll(() => page.evaluate(async () => {
+        const cache = await caches.open("waveygist-content-v1");
+        const response = await cache.match("/api/gists/GalleryCodePatch01/revisions/1/render");
+        const payload = await response?.json();
+        return payload?.files["twocrypto-math.patch"].rendered_html.includes("highlight-source-diff");
+      })).toBe(true);
+
       proxy.closeAllConnections();
       await new Promise<void>((resolve) => proxy.close(() => resolve()));
       if (browserName !== "webkit") await context.setOffline(true);
