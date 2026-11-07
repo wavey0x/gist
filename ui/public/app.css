@@ -2148,10 +2148,6 @@ button {
   margin-bottom: 0;
 }
 
-.markdown-body .code-wrap-block pre {
-  padding-top: 42px;
-}
-
 .markdown-body .code-wrap-block.code-lines-wrapped pre,
 .markdown-body .code-wrap-block.code-lines-wrapped pre > code {
   white-space: pre-wrap;
@@ -2619,11 +2615,6 @@ button.gist-file-action {
   position: relative;
 }
 
-.gist-code-container .gist-line-numbers,
-.gist-code-container .gist-code-content {
-  padding-top: 42px;
-}
-
 .gist-code-view {
   width: 100%;
   display: grid;
@@ -2729,7 +2720,7 @@ button.gist-file-action {
   border-radius: 6px;
   background: var(--button-bg-active);
   color: var(--page-fg);
-  padding: 42px 16px 16px;
+  padding: 16px;
   font-family:
     ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono,
     monospace;
