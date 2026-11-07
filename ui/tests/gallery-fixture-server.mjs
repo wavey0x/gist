@@ -27,6 +27,11 @@ const filesFor = (id) =>
     ? { "README.md": `<h1>Code wrapping</h1>${highlightedCode}<pre><code>${longCodeLine}</code></pre>` }
     : id === "GalleryCodePatch01"
     ? { "twocrypto-math.patch": highlightedPatch }
+    : id === "GalleryCodePanel01"
+    ? {
+        "README.md": `<h1>Code wrapping</h1>${highlightedCode}`,
+        "twocrypto-math.patch": highlightedPatch
+      }
     : id === "GalleryLongText1"
     ? {
         "README.md": `<h1>Long caption</h1><p>${mark(1, "wg-image", "Lake at dawn. ".repeat(75))}</p>`
@@ -49,9 +54,9 @@ export function fixture(id, revision = 1) {
       filename,
       {
         filename,
-        kind: id === "GalleryCodePatch01" ? "source" : "markdown",
-        language: id === "GalleryCodePatch01" ? "diff" : "markdown",
-        content: id === "GalleryCodePatch01" ? `diff --git a/example.vy b/example.vy\n${longPatchLine}\n` :
+        kind: filename.endsWith(".patch") ? "source" : "markdown",
+        language: filename.endsWith(".patch") ? "diff" : "markdown",
+        content: filename.endsWith(".patch") ? `diff --git a/example.vy b/example.vy\n${longPatchLine}\n` :
           id === "GalleryCodeWrap01" ? `# Code wrapping\n\n\`\`\`js\n${longCodeLine}\n\`\`\`` :
           `# Gallery\n\n[Photo](${image(1)}#wg-gallery=album)`,
         rendered_html,

@@ -25,7 +25,6 @@
   const GIST_ID_RE = /^[A-Za-z0-9]{16,64}$/;
   const ROUTE_RE = /^\/([A-Za-z0-9]{16,64})(?:\/revisions\/([1-9][0-9]*))?\/?$/;
   const THEME_KEY = "theme";
-  const CODE_WRAP_KEY = "waveygist:code-wrap:v1";
   const TAB_KEY = "waveygist:home-tab:v1";
   const OFFLINE_IDENTITY_KEY = "waveygist:offline-identity:v1";
   const AUDIO_RATE_KEY = "waveygist:audio-rate:v1";
@@ -101,12 +100,6 @@
       '<path d="M8 13h2M8 17h1" />',
       '<circle cx="16" cy="17" r="3" />',
       '<path d="m18.5 19.5 2 2" />'
-    ],
-    textWrap: [
-      '<path d="m16 16-3 3 3 3" />',
-      '<path d="M3 12h14.5a1 1 0 0 1 0 7H13" />',
-      '<path d="M3 19h6" />',
-      '<path d="M3 5h18" />'
     ]
   };
 
@@ -320,37 +313,38 @@
     return button;
   }
 
-  function codeWrapButton() {
-    const button = element("button", {
-      className: "icon-button code-wrap-toggle-button"
-    });
+  function paintWrapButton(button, wrapped) {
+    button.setAttribute("aria-pressed", String(wrapped));
+    button.title = wrapped ? "Stop wrapping code lines" : "Wrap code lines";
+  }
+
+  function wrapButton(label, wrapped, onToggle, className = "code-wrap-button") {
+    const button = element("button", { className, text: "Wrap" });
     button.type = "button";
-    button.setAttribute("aria-label", "Wrap code lines");
-    button.append(icon("textWrap", 16, 1.8));
-    let wrapped = false;
-    try {
-      wrapped = localStorage.getItem(CODE_WRAP_KEY) === "true";
-    } catch {
-      // Storage may be unavailable in private browsing.
-    }
-
-    function paint() {
-      document.documentElement.dataset.codeWrap = String(wrapped);
-      button.setAttribute("aria-pressed", String(wrapped));
-      button.title = wrapped ? "Stop wrapping code lines" : "Wrap code lines";
-    }
-
-    button.addEventListener("click", () => {
-      wrapped = !wrapped;
-      paint();
-      try {
-        localStorage.setItem(CODE_WRAP_KEY, String(wrapped));
-      } catch {
-        // The current page still responds when storage is unavailable.
-      }
-    });
-    paint();
+    button.setAttribute("aria-label", label);
+    paintWrapButton(button, wrapped);
+    button.addEventListener("click", onToggle);
     return button;
+  }
+
+  function addMarkdownWrapControls(root) {
+    let number = 0;
+    for (const pre of root.querySelectorAll("article.markdown-body pre")) {
+      if (pre.closest(".code-wrap-block, .mermaid-render, .math-display")) continue;
+      const code = pre.parentElement?.classList.contains("highlight")
+        ? pre.parentElement
+        : pre;
+      if (!code) continue;
+      const shell = element("div", { className: "code-wrap-block" });
+      let wrapped = false;
+      const button = wrapButton(`Wrap lines in code block ${++number}`, false, () => {
+        wrapped = !wrapped;
+        shell.classList.toggle("code-lines-wrapped", wrapped);
+        paintWrapButton(button, wrapped);
+      });
+      code.replaceWith(shell);
+      shell.append(code, button);
+    }
   }
 
   async function backedGistEntries() {
@@ -1334,7 +1328,7 @@
       setRawVisible(false);
       toolbar.append(rawButton);
     }
-    toolbar.append(await revisionHistoryControl(payload), codeWrapButton(), themeButton());
+    toolbar.append(await revisionHistoryControl(payload), themeButton());
 
     const dockSentinel = element("span", {
       className: "article-audio-dock-sentinel"
@@ -1459,8 +1453,14 @@
     }
   }
 
-  function singleRawViewer(file) {
+  function singleRawViewer(file, wrapState) {
     const viewer = element("div", { className: "raw-viewer gist-single-file" });
+    viewer.dataset.codeWrap = String(wrapState.value);
+    const wrap = wrapButton(`Wrap lines in ${file.filename}`, wrapState.value, () => {
+      wrapState.value = !wrapState.value;
+      viewer.dataset.codeWrap = String(wrapState.value);
+      paintWrapButton(wrap, wrapState.value);
+    }, "code-wrap-button raw-wrap-button");
     const copy = element("button", {
       className: "icon-button raw-copy-button"
     });
@@ -1469,7 +1469,7 @@
     copy.setAttribute("aria-label", `Copy ${file.filename}`);
     copy.append(icon("copy", 17));
     copy.addEventListener("click", () => void copyFileContent(file, copy));
-    viewer.append(copy, rawFileContent(file));
+    viewer.append(wrap, copy, rawFileContent(file));
     return viewer;
   }
 
@@ -1506,6 +1506,13 @@
 
     const actions = element("div", { className: "gist-file-actions" });
     const raw = element("button", { className: "gist-file-action", text: "Raw" });
+    let wrapped = false;
+    const wrap = wrapButton(`Wrap lines in ${file.filename}`, false, () => {
+      wrapped = !wrapped;
+      body.firstElementChild.dataset.codeWrap = String(wrapped);
+      paintWrapButton(wrap, wrapped);
+    }, "gist-file-action gist-file-wrap");
+    wrap.hidden = file.kind === "markdown";
     const copy = element("button", {
       className: "gist-file-action gist-file-copy"
     });
@@ -1513,11 +1520,12 @@
     raw.setAttribute("aria-label", `View raw ${file.filename}`);
     copy.setAttribute("aria-label", `Copy ${file.filename}`);
     copy.append(icon("copy", 14, 1.9), element("span", { text: "Copy" }));
-    actions.append(raw, copy);
+    actions.append(raw, wrap, copy);
     header.append(disclosure, actions);
     const body = element("div", { className: "gist-file-body" });
     body.id = bodyId;
     body.append(fileContent(file, true));
+    body.firstElementChild.dataset.codeWrap = String(wrapped);
     let rawVisible = false;
 
     function paintBody() {
@@ -1526,11 +1534,14 @@
           ? rawFileContent(file, true)
           : fileContent(file, true)
       );
+      body.firstElementChild.dataset.codeWrap = String(wrapped);
+      wrap.hidden = file.kind === "markdown" && !rawVisible;
       raw.textContent = rawVisible ? "Rendered" : "Raw";
       raw.setAttribute(
         "aria-label",
         `${rawVisible ? "View rendered" : "View raw"} ${file.filename}`
       );
+      addMarkdownWrapControls(body);
       refreshGalleries();
     }
 
@@ -1722,14 +1733,29 @@
 
     let currentContent = null;
     let rawVisible = false;
+    const singleWrap = { value: false };
 
     function paintContent() {
       let nextContent;
       if (singleFile && rawVisible) {
-        nextContent = singleRawViewer(singleFile);
+        nextContent = singleRawViewer(singleFile, singleWrap);
       } else if (singleFile) {
-        nextContent = element("div", { className: "gist-single-file" });
-        nextContent.append(fileContent(singleFile));
+        nextContent = element("div", {
+          className: singleFile.kind === "markdown"
+            ? "gist-single-file"
+            : "gist-single-file gist-code-container"
+        });
+        const content = fileContent(singleFile);
+        if (singleFile.kind !== "markdown") {
+          content.dataset.codeWrap = String(singleWrap.value);
+          const wrap = wrapButton(`Wrap lines in ${singleFile.filename}`, singleWrap.value, () => {
+            singleWrap.value = !singleWrap.value;
+            content.dataset.codeWrap = String(singleWrap.value);
+            paintWrapButton(wrap, singleWrap.value);
+          });
+          nextContent.append(wrap);
+        }
+        nextContent.append(content);
       } else {
         nextContent = element("div", { className: "gist-files" });
         nextContent.append(...files.map(filePanel));
@@ -1740,6 +1766,7 @@
         app.append(nextContent);
       }
       currentContent = nextContent;
+      addMarkdownWrapControls(nextContent);
       if (!rawVisible) {
         setupEntityGroupHover(nextContent);
       }

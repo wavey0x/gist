@@ -12,6 +12,7 @@ import {
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { mountGallery } from "../public/gallery-viewer.mjs";
+import { addMarkdownWrapControls } from "../lib/code-wrap";
 import { getGistHeaderTitle, getTopLevelHeading } from "../lib/gist-title";
 import {
   orderedGistFiles,
@@ -129,6 +130,7 @@ function GistFilePanel({
 }) {
   const headingId = useId();
   const bodyId = useId();
+  const [wrapped, setWrapped] = useState(false);
   const metadata = [file.language, formatByteSize(file.byte_size)]
     .filter(Boolean)
     .join(" · ");
@@ -166,6 +168,14 @@ function GistFilePanel({
           <a className="gist-file-action" href={file.raw_url}>
             Raw
           </a>
+          {!collapsed && file.kind !== "markdown" ? (
+            <CodeWrapToggle
+              wrapped={wrapped}
+              onToggle={() => setWrapped((current) => !current)}
+              className="gist-file-action gist-file-wrap"
+              label={`Wrap lines in ${file.filename}`}
+            />
+          ) : null}
           <button
             type="button"
             className="gist-file-action gist-file-copy"
@@ -189,7 +199,7 @@ function GistFilePanel({
           />
         ) : null}
         {!collapsed && file.kind !== "markdown" ? (
-          <div className="gist-code-view">
+          <div className="gist-code-view" data-code-wrap={wrapped}>
             <pre className="gist-line-numbers" aria-hidden="true">
               {sourceLineNumbers(file.content)}
             </pre>
@@ -222,6 +232,7 @@ export function GistViewer({
   const [copiedFilename, setCopiedFilename] = useState<string | null>(null);
   const [relativeDateNow, setRelativeDateNow] = useState(() => Date.now());
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const [singleFileWrapped, setSingleFileWrapped] = useState(false);
   const historyControlRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const files = orderedGistFiles(gist);
@@ -230,8 +241,13 @@ export function GistViewer({
 
   useEffect(() => {
     if (viewMode !== "files" || !contentRef.current) return;
+    addMarkdownWrapControls(contentRef.current);
     return mountGallery(contentRef.current.querySelectorAll<HTMLElement>("article.markdown-body"));
   }, [gist.id, gist.revision_number, gist.snapshot_sha256, viewMode, collapsedFilenames]);
+
+  useEffect(() => {
+    setSingleFileWrapped(false);
+  }, [gist.id, gist.revision_number]);
 
   useEffect(() => {
     if (!copiedFilename) {
@@ -642,7 +658,6 @@ export function GistViewer({
           {viewMode === "files" && singleFile?.kind === "markdown" && !rawIsVisible ? (
             <TableOfContents html={singleFile.rendered_html} />
           ) : null}
-          {viewMode !== "custom" ? <CodeWrapToggle /> : null}
           <ThemeToggle />
         </ArticleAudio>
       </header>
@@ -654,7 +669,13 @@ export function GistViewer({
       {viewMode === "custom" && customContent ? (
         customContent
       ) : rawIsVisible && singleFile ? (
-        <div className="raw-viewer gist-single-file">
+        <div className="raw-viewer gist-single-file" data-code-wrap={singleFileWrapped}>
+          <CodeWrapToggle
+            wrapped={singleFileWrapped}
+            onToggle={() => setSingleFileWrapped((current) => !current)}
+            className="code-wrap-button raw-wrap-button"
+            label={`Wrap lines in ${singleFile.filename}`}
+          />
           <button
             type="button"
             className="icon-button raw-copy-button"
@@ -684,8 +705,13 @@ export function GistViewer({
           />
         </div>
       ) : singleFile ? (
-        <div ref={contentRef} className="gist-single-file">
-          <div className="gist-code-view">
+        <div ref={contentRef} className="gist-single-file gist-code-container">
+          <CodeWrapToggle
+            wrapped={singleFileWrapped}
+            onToggle={() => setSingleFileWrapped((current) => !current)}
+            label={`Wrap lines in ${singleFile.filename}`}
+          />
+          <div className="gist-code-view" data-code-wrap={singleFileWrapped}>
             <pre className="gist-line-numbers" aria-hidden="true">
               {sourceLineNumbers(singleFile.content)}
             </pre>
@@ -699,7 +725,7 @@ export function GistViewer({
         <div className="gist-files" ref={contentRef}>
           {files.map((file) => (
             <GistFilePanel
-              key={file.filename}
+              key={`${gist.id}:${gist.revision_number}:${file.filename}`}
               file={file}
               collapsed={collapsedFilenames.has(file.filename)}
               copied={copiedFilename === file.filename}
