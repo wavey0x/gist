@@ -2161,19 +2161,17 @@ button {
 .code-wrap-button {
   position: absolute;
   z-index: 2;
-  top: 8px;
-  right: 8px;
-  min-width: 46px;
-  min-height: 28px;
+  top: 4px;
+  right: 6px;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--button-bg);
   color: var(--muted-fg);
-  padding: 3px 7px;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
+  padding: 0;
   cursor: pointer;
   user-select: none;
   opacity: 0;
@@ -2573,6 +2571,26 @@ button.gist-file-action {
   border-color: var(--border);
   background: var(--button-bg-active);
   color: var(--page-fg);
+}
+
+.gist-file-wrap {
+  justify-content: center;
+  width: 30px;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.gist-file-panel:hover .gist-file-wrap,
+.gist-file-wrap:focus-visible,
+.gist-file-wrap[aria-pressed="true"] {
+  opacity: 1;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .gist-file-wrap {
+    opacity: 1;
+  }
 }
 
 .gist-file-action:focus-visible {

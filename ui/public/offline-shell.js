@@ -100,6 +100,12 @@
       '<path d="M8 13h2M8 17h1" />',
       '<circle cx="16" cy="17" r="3" />',
       '<path d="m18.5 19.5 2 2" />'
+    ],
+    textWrap: [
+      '<path d="m16 16-3 3 3 3" />',
+      '<path d="M3 12h14.5a1 1 0 0 1 0 7H13" />',
+      '<path d="M3 19h6" />',
+      '<path d="M3 5h18" />'
     ]
   };
 
@@ -319,8 +325,9 @@
   }
 
   function wrapButton(label, wrapped, onToggle, className = "code-wrap-button") {
-    const button = element("button", { className, text: "Wrap" });
+    const button = element("button", { className });
     button.type = "button";
+    button.append(icon("textWrap", 16));
     button.setAttribute("aria-label", label);
     paintWrapButton(button, wrapped);
     button.addEventListener("click", onToggle);

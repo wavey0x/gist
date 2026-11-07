@@ -14,7 +14,7 @@ export function addMarkdownWrapControls(root: Element) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "code-wrap-button";
-    button.textContent = "Wrap";
+    button.innerHTML = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16-3 3 3 3"/><path d="M3 12h14.5a1 1 0 0 1 0 7H13"/><path d="M3 19h6"/><path d="M3 5h18"/></svg>';
     button.setAttribute("aria-label", `Wrap lines in code block ${++number}`);
     button.setAttribute("aria-pressed", "false");
     button.title = "Wrap code lines";

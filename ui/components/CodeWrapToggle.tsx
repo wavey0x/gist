@@ -1,5 +1,7 @@
 "use client";
 
+import { TextWrap } from "lucide-react";
+
 type Props = {
   wrapped: boolean;
   onToggle: () => void;
@@ -22,7 +24,7 @@ export function CodeWrapToggle({
       title={wrapped ? "Stop wrapping code lines" : "Wrap code lines"}
       onClick={onToggle}
     >
-      Wrap
+      <TextWrap aria-hidden="true" size={16} strokeWidth={1.8} />
     </button>
   );
 }

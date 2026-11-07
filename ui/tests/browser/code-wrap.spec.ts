@@ -16,6 +16,16 @@ test("wraps only the selected Markdown code block", async ({ page }) => {
   const first = blocks.first();
   const second = blocks.nth(1);
   const toggle = first.getByRole("button", { name: "Wrap lines in code block 1" });
+  await expect(toggle.locator("svg")).toHaveCount(1);
+  await expect(toggle).toHaveText("");
+  const touch = await page.evaluate(() =>
+    matchMedia("(hover: none), (pointer: coarse)").matches
+  );
+  await expect(toggle).toHaveCSS("opacity", touch ? "1" : "0");
+  if (!touch) {
+    await first.hover();
+    await expect(toggle).toHaveCSS("opacity", "1");
+  }
   await toggle.focus();
   await expect(toggle).toHaveCSS("opacity", "1");
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
@@ -60,6 +70,7 @@ test("keeps the source file control in its file header", async ({ page }) => {
   await page.goto("/GalleryCodePanel01");
   const panel = page.locator('[data-gist-filename="twocrypto-math.patch"]');
   const toggle = panel.getByRole("button", { name: "Wrap lines in twocrypto-math.patch" });
+  await expect(toggle.locator("svg")).toHaveCount(1);
   await expect(toggle).toBeVisible();
   await toggle.click();
   await expect(panel.locator(".gist-code-view")).toHaveAttribute("data-code-wrap", "true");
