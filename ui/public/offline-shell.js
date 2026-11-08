@@ -350,7 +350,9 @@
         paintWrapButton(button, wrapped);
       });
       code.replaceWith(shell);
-      shell.append(code, button);
+      const actions = element("div", { className: "code-block-actions" });
+      actions.append(button, codeCopyControl(pre.textContent || "", `Copy code block ${number}`));
+      shell.append(code, actions);
     }
   }
 
@@ -1438,26 +1440,46 @@
     return pre;
   }
 
-  async function copyFileContent(file, button, compact = false) {
-    try {
-      await navigator.clipboard.writeText(file.content || "");
-      button.setAttribute("aria-label", `${file.filename} copied`);
-      button.title = "Copied";
-      button.replaceChildren(icon("check", compact ? 14 : 17, 1.9));
-      if (compact) {
-        button.append(element("span", { text: "Copied" }));
+  function codeCopyControl(content, label, compact = false) {
+    const control = element("span", { className: "code-copy-control" });
+    const button = element("button", {
+      className: compact ? "gist-file-action gist-file-copy" : "code-copy-button"
+    });
+    button.type = "button";
+    button.setAttribute("aria-label", label);
+    button.title = "Copy code";
+    const status = element("span", { className: compact ? "sr-only" : "code-copy-status" });
+    status.setAttribute("role", "status");
+    const paint = (message = "") => {
+      button.replaceChildren(icon(message === "Copied" ? "check" : "copy", 16));
+      if (compact) button.append(element("span", { text: message === "Copied" ? "Copied" : message ? "Copy failed" : "Copy" }));
+    };
+    paint();
+    let timer;
+    let attempt = 0;
+    button.addEventListener("click", async () => {
+      const current = ++attempt;
+      clearTimeout(timer);
+      let message;
+      try {
+        await navigator.clipboard.writeText(content);
+        message = "Copied";
+      } catch {
+        message = "Couldn’t copy. Select the code and copy manually.";
       }
-      window.setTimeout(() => {
-        button.setAttribute("aria-label", `Copy ${file.filename}`);
-        button.title = compact ? "" : "Copy";
-        button.replaceChildren(icon("copy", compact ? 14 : 17, 1.9));
-        if (compact) {
-          button.append(element("span", { text: "Copy" }));
-        }
-      }, 1500);
-    } catch {
-      // Clipboard access can be unavailable in some embedded browsers.
-    }
+      if (current !== attempt || !button.isConnected) return;
+      paint(message);
+      status.textContent = button.title = message;
+      control.dataset.feedback = "true";
+      timer = setTimeout(() => {
+        paint();
+        status.textContent = "";
+        button.title = "Copy code";
+        delete control.dataset.feedback;
+      }, message === "Copied" ? 1500 : 4000);
+    });
+    control.append(button, status);
+    return control;
   }
 
   function singleRawViewer(file, wrapState) {
@@ -1467,16 +1489,10 @@
       wrapState.value = !wrapState.value;
       viewer.dataset.codeWrap = String(wrapState.value);
       paintWrapButton(wrap, wrapState.value);
-    }, "code-wrap-button raw-wrap-button");
-    const copy = element("button", {
-      className: "icon-button raw-copy-button"
     });
-    copy.type = "button";
-    copy.title = "Copy";
-    copy.setAttribute("aria-label", `Copy ${file.filename}`);
-    copy.append(icon("copy", 17));
-    copy.addEventListener("click", () => void copyFileContent(file, copy));
-    viewer.append(wrap, copy, rawFileContent(file));
+    const actions = element("div", { className: "code-block-actions" });
+    actions.append(wrap, codeCopyControl(file.content || "", `Copy ${file.filename}`));
+    viewer.append(actions, rawFileContent(file));
     return viewer;
   }
 
@@ -1520,13 +1536,9 @@
       paintWrapButton(wrap, wrapped);
     }, "gist-file-action gist-file-wrap");
     wrap.hidden = file.kind === "markdown";
-    const copy = element("button", {
-      className: "gist-file-action gist-file-copy"
-    });
-    raw.type = copy.type = "button";
+    const copy = codeCopyControl(file.content || "", `Copy ${file.filename}`, true);
+    raw.type = "button";
     raw.setAttribute("aria-label", `View raw ${file.filename}`);
-    copy.setAttribute("aria-label", `Copy ${file.filename}`);
-    copy.append(icon("copy", 14, 1.9), element("span", { text: "Copy" }));
     actions.append(raw, wrap, copy);
     header.append(disclosure, actions);
     const body = element("div", { className: "gist-file-body" });
@@ -1567,7 +1579,6 @@
       rawVisible = !rawVisible;
       paintBody();
     });
-    copy.addEventListener("click", () => void copyFileContent(file, copy, true));
     panel.append(header, body);
     return panel;
   }
@@ -1760,7 +1771,9 @@
             content.dataset.codeWrap = String(singleWrap.value);
             paintWrapButton(wrap, singleWrap.value);
           });
-          nextContent.append(wrap);
+          const actions = element("div", { className: "code-block-actions" });
+          actions.append(wrap, codeCopyControl(singleFile.content || "", `Copy ${singleFile.filename}`));
+          nextContent.append(actions);
         }
         nextContent.append(content);
       } else {

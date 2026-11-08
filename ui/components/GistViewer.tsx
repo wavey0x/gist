@@ -1,9 +1,7 @@
 "use client";
 
 import {
-  Check,
   ChevronDown,
-  Copy,
   FileCode,
   FileDiff,
   History,
@@ -22,6 +20,7 @@ import {
 } from "../lib/gists";
 import type { SiteChromeConfig } from "../lib/site-config";
 import { ArticleAudio } from "./ArticleAudio";
+import { CodeCopyButton } from "./CodeCopyButton";
 import { CodeWrapToggle } from "./CodeWrapToggle";
 import { LocalTimestamp } from "./LocalTimestamp";
 import { ReadingProgress } from "./ReadingProgress";
@@ -118,15 +117,11 @@ function sourceLineNumbers(content: string) {
 function GistFilePanel({
   file,
   collapsed,
-  copied,
-  onCollapseToggle,
-  onCopy
+  onCollapseToggle
 }: {
   file: PublicGistFile;
   collapsed: boolean;
-  copied: boolean;
   onCollapseToggle: () => void;
-  onCopy: () => void;
 }) {
   const headingId = useId();
   const bodyId = useId();
@@ -176,19 +171,8 @@ function GistFilePanel({
               label={`Wrap lines in ${file.filename}`}
             />
           ) : null}
-          <button
-            type="button"
-            className="gist-file-action gist-file-copy"
-            aria-label={copied ? `${file.filename} copied` : `Copy ${file.filename}`}
-            onClick={onCopy}
-          >
-            {copied ? (
-              <Check aria-hidden="true" size={14} strokeWidth={1.9} />
-            ) : (
-              <Copy aria-hidden="true" size={14} strokeWidth={1.9} />
-            )}
-            <span>{copied ? "Copied" : "Copy"}</span>
-          </button>
+          <CodeCopyButton content={file.content} label={`Copy ${file.filename}`}
+            className="gist-file-action gist-file-copy" compact />
         </div>
       </header>
       <div className="gist-file-body" id={bodyId} hidden={collapsed}>
@@ -229,7 +213,6 @@ export function GistViewer({
     () => new Set()
   );
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [copiedFilename, setCopiedFilename] = useState<string | null>(null);
   const [relativeDateNow, setRelativeDateNow] = useState(() => Date.now());
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const [singleFileWrapped, setSingleFileWrapped] = useState(false);
@@ -248,14 +231,6 @@ export function GistViewer({
   useEffect(() => {
     setSingleFileWrapped(false);
   }, [gist.id, gist.revision_number]);
-
-  useEffect(() => {
-    if (!copiedFilename) {
-      return undefined;
-    }
-    const timeout = window.setTimeout(() => setCopiedFilename(null), 1500);
-    return () => window.clearTimeout(timeout);
-  }, [copiedFilename]);
 
   useEffect(() => {
     if (!historyOpen) {
@@ -412,18 +387,8 @@ export function GistViewer({
     };
   }, [gist.snapshot_sha256, viewMode]);
 
-  async function copyFile(file: PublicGistFile) {
-    try {
-      await navigator.clipboard.writeText(file.content);
-      setCopiedFilename(file.filename);
-    } catch {
-      setCopiedFilename(null);
-    }
-  }
-
   function toggleRawMode() {
     setViewMode((current) => (current === "raw" ? "files" : "raw"));
-    setCopiedFilename(null);
   }
 
   function toggleFile(filename: string) {
@@ -670,29 +635,13 @@ export function GistViewer({
         customContent
       ) : rawIsVisible && singleFile ? (
         <div className="raw-viewer gist-single-file" data-code-wrap={singleFileWrapped}>
-          <CodeWrapToggle
-            wrapped={singleFileWrapped}
-            onToggle={() => setSingleFileWrapped((current) => !current)}
-            className="code-wrap-button raw-wrap-button"
-            label={`Wrap lines in ${singleFile.filename}`}
-          />
-          <button
-            type="button"
-            className="icon-button raw-copy-button"
-            aria-label={
-              copiedFilename === singleFile.filename
-                ? `${singleFile.filename} copied`
-                : `Copy ${singleFile.filename}`
-            }
-            title={copiedFilename === singleFile.filename ? "Copied" : "Copy"}
-            onClick={() => void copyFile(singleFile)}
-          >
-            {copiedFilename === singleFile.filename ? (
-              <Check aria-hidden="true" size={17} strokeWidth={1.8} />
-            ) : (
-              <Copy aria-hidden="true" size={17} strokeWidth={1.8} />
-            )}
-          </button>
+          <div className="code-block-actions">
+            <CodeWrapToggle wrapped={singleFileWrapped}
+              onToggle={() => setSingleFileWrapped((current) => !current)}
+              label={`Wrap lines in ${singleFile.filename}`} />
+            <CodeCopyButton key={`${gist.snapshot_sha256}:raw`} content={singleFile.content}
+              label={`Copy ${singleFile.filename}`} />
+          </div>
           <pre className="raw-markdown" aria-label="Raw file">
             <code>{singleFile.content}</code>
           </pre>
@@ -706,11 +655,13 @@ export function GistViewer({
         </div>
       ) : singleFile ? (
         <div ref={contentRef} className="gist-single-file gist-code-container">
-          <CodeWrapToggle
-            wrapped={singleFileWrapped}
-            onToggle={() => setSingleFileWrapped((current) => !current)}
-            label={`Wrap lines in ${singleFile.filename}`}
-          />
+          <div className="code-block-actions">
+            <CodeWrapToggle wrapped={singleFileWrapped}
+              onToggle={() => setSingleFileWrapped((current) => !current)}
+              label={`Wrap lines in ${singleFile.filename}`} />
+            <CodeCopyButton key={`${gist.snapshot_sha256}:source`} content={singleFile.content}
+              label={`Copy ${singleFile.filename}`} />
+          </div>
           <div className="gist-code-view" data-code-wrap={singleFileWrapped}>
             <pre className="gist-line-numbers" aria-hidden="true">
               {sourceLineNumbers(singleFile.content)}
@@ -728,9 +679,7 @@ export function GistViewer({
               key={`${gist.id}:${gist.revision_number}:${file.filename}`}
               file={file}
               collapsed={collapsedFilenames.has(file.filename)}
-              copied={copiedFilename === file.filename}
               onCollapseToggle={() => toggleFile(file.filename)}
-              onCopy={() => void copyFile(file)}
             />
           ))}
         </div>

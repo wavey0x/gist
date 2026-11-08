@@ -2,11 +2,16 @@ import importlib.machinery
 import importlib.util
 import io
 import json
+import os
+import subprocess
 import sys
+import threading
 import urllib.error
 from pathlib import Path
 
 import pytest
+from werkzeug.serving import make_server
+from .conftest import make_key
 
 
 HELPER_PATH = Path(__file__).resolve().parents[2] / "scripts" / "publish-gist"
@@ -255,10 +260,99 @@ def test_create_does_not_require_a_markdown_heading(monkeypatch, capsys, tmp_pat
     assert error == ""
 
 
-def test_create_requires_a_disk_file():
+@pytest.mark.parametrize("argv", [[], ["create"], ["create", "-"]])
+def test_create_accepts_stdin(monkeypatch, capsys, argv):
+    content = '# Clipboard\r\n\t`literal` $(not-a-command) & <tag>\r\n\r\n'
+    expected = content.replace("\r\n", "\n")
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(content.encode())))
+
+    def handler(_url, **kwargs):
+        assert kwargs["payload"] == {"files": {"README.md": {"content": expected}}}
+        return _json_bytes(_gist_payload(files={"README.md": expected}, title=None))
+
+    result, output, error = _run(monkeypatch, capsys, argv, handler)
+    assert (result, output, error) == (0, f"{GIST_URL}\n", "")
+
+
+@pytest.mark.parametrize("name", ["example.py", "changes.patch", "notes.txt", "résumé.md"])
+@pytest.mark.parametrize("prefix", [[], ["create", "-"]])
+def test_stdin_filename_and_title(monkeypatch, capsys, name, prefix):
+    content = "\t+hello <world>\n\n"
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(content.encode())))
+
+    def handler(_url, **kwargs):
+        assert kwargs["payload"] == {"files": {name: {"content": content}}, "title": "Snippet"}
+        return _json_bytes(_gist_payload(files={name: content}, title="Snippet"))
+
+    assert _run(monkeypatch, capsys, [*prefix, "--filename", name, "--title", "Snippet"], handler) == (0, f"{GIST_URL}\n", "")
+
+
+@pytest.mark.parametrize("content", [b"", b" \n\t", b"bad\xff", b"bad\0text"])
+def test_invalid_stdin_fails_before_credentials_or_network(monkeypatch, capsys, content):
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(content)))
+    def unexpected(*_args, **_kwargs):
+        raise AssertionError("invalid input must fail locally")
+    monkeypatch.setattr(publish_gist, "require_token", unexpected)
+    monkeypatch.setattr(publish_gist, "_request", unexpected)
+    assert publish_gist.main([]) == 1
+    output = capsys.readouterr()
+    assert not output.out
+    assert output.err
+
+
+@pytest.mark.parametrize("argv", [
+    ["--filename", ""], ["--filename", "../notes.md"],
+    ["--filename", "a\\b.py"], ["--filename", " notes.md"],
+    ["--filename", "x" * 256], ["--filename", "a\x00.py"],
+    ["create", "-", "other.md"], ["create", "notes.md", "--filename", "other.md"],
+])
+def test_invalid_stdin_arguments_fail_locally(monkeypatch, capsys, argv):
+    def unexpected():
+        raise AssertionError("invalid arguments must fail before credentials")
+    monkeypatch.setattr(publish_gist, "require_token", unexpected)
+    assert publish_gist.main(argv) == 1
+    assert capsys.readouterr().err
+
+
+def test_no_input_terminal_does_not_wait(monkeypatch, capsys):
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    assert publish_gist.main([]) == 1
+    assert "pipe text" in capsys.readouterr().err
+
+
+def test_help_does_not_publish_piped_text(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"Do not publish")))
     with pytest.raises(SystemExit) as error:
-        publish_gist.main(["create"])
-    assert error.value.code == 2
+        publish_gist.main(["--help"])
+    assert error.value.code == 0
+    assert sys.stdin.read() == "Do not publish"
+    assert "--filename" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(("argv", "name", "content", "marker"), [
+    ([], "README.md", "# From stdin\n\nHello\n", "<h1"),
+    (["--filename", "changes.patch"], "changes.patch", "--- a/test.py\n+++ b/test.py\n@@ -1 +1 @@\n-old\n+new\n", "highlight-source-diff"),
+])
+def test_cli_stdin_publishes_and_renders_end_to_end(app, client, argv, name, content, marker):
+    server = make_server("127.0.0.1", 0, app)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = subprocess.run(
+            [sys.executable, str(HELPER_PATH), *argv],
+            input=content.encode(), capture_output=True, timeout=20,
+            env={**os.environ, "WAVEY_GIST_API_BASE_URL": f"http://127.0.0.1:{server.server_port}", "WAVEY_GIST_API_KEY": make_key(app)},
+        )
+        assert result.returncode == 0, result.stderr.decode()
+        assert result.stderr == b""
+        gist_id = result.stdout.decode().strip().rsplit("/", 1)[-1]
+        payload = client.get(f"/api/v1/gists/{gist_id}/render").get_json()
+        assert payload["files"][name]["content"] == content
+        assert marker in payload["files"][name]["rendered_html"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_multipart_encoder_preserves_payload_and_unicode_image_name():

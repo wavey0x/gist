@@ -173,10 +173,10 @@ test("online and offline readers share product styles and player markup", () => 
 });
 
 test("offline controls preserve every cache-supported reader interaction", () => {
-  assert.match(shellScript, /className: "icon-button raw-copy-button"/);
+  assert.match(shellScript, /function codeCopyControl\(/);
   assert.match(shellScript, /className: "history-control"/);
   assert.match(shellScript, /className: "gist-file-actions"/);
-  assert.match(shellScript, /className: "gist-file-action gist-file-copy"/);
+  assert.match(shellScript, /"gist-file-action gist-file-copy"/);
   assert.match(shellScript, /View raw file/);
   assert.match(shellScript, /View rendered file/);
   assert.match(shellScript, /function wrapButton\(/);

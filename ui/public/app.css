@@ -2159,11 +2159,19 @@ button {
   overflow-wrap: anywhere;
 }
 
-.code-wrap-button {
+.code-block-actions {
   position: absolute;
   z-index: 2;
   top: 4px;
   right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.code-wrap-button,
+.code-copy-button {
   display: inline-grid;
   place-items: center;
   width: 34px;
@@ -2175,31 +2183,67 @@ button {
   padding: 0;
   cursor: pointer;
   user-select: none;
-  opacity: 0;
-  transition: opacity 120ms ease;
 }
 
-.code-wrap-block:hover > .code-wrap-button,
-.gist-code-container:hover > .code-wrap-button,
-.raw-viewer:hover > .raw-wrap-button,
-.code-wrap-button:focus-visible,
-.code-wrap-button[aria-pressed="true"] {
+.code-wrap-block:hover > .code-block-actions,
+.gist-code-container:hover > .code-block-actions,
+.raw-viewer:hover > .code-block-actions,
+.code-block-actions:focus-within,
+.code-block-actions:has([aria-pressed="true"]),
+.code-block-actions:has([data-feedback="true"]),
+.code-block-actions[data-feedback="true"] {
   opacity: 1;
 }
 
 .code-wrap-button:hover,
+.code-copy-button:hover,
 .code-wrap-button[aria-pressed="true"] {
   background: var(--button-bg-active);
   color: var(--page-fg);
 }
 
-.code-wrap-button:focus-visible {
+.code-wrap-button:focus-visible,
+.code-copy-button:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
+.code-copy-control {
+  position: relative;
+  display: inline-flex;
+}
+
+.code-copy-status {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: calc(100% + 5px);
+  width: max-content;
+  max-width: 220px;
+  white-space: normal;
+  font: 12px/1.4 system-ui, sans-serif;
+  color: var(--page-fg);
+  background: var(--button-bg);
+  border-radius: 4px;
+}
+
+.code-copy-status:not(:empty) {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+}
+
+/* Wrapped lines flow around the controls for just the first two lines. */
+.markdown-body .code-wrap-block.code-lines-wrapped pre::before,
+.gist-code-container .gist-code-view[data-code-wrap="true"] pre::before,
+.raw-viewer[data-code-wrap="true"] .raw-markdown::before {
+  content: "";
+  float: right;
+  width: 76px;
+  height: 28px;
+}
+
 @media (hover: none), (pointer: coarse) {
-  .code-wrap-button {
+  .code-block-actions {
     opacity: 1;
   }
 }
@@ -2742,24 +2786,6 @@ button.gist-file-action {
   overflow-wrap: anywhere;
 }
 
-.raw-wrap-button {
-  right: 50px;
-}
-
-.raw-copy-button {
-  position: absolute;
-  z-index: 1;
-  top: 8px;
-  right: 8px;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.raw-viewer:hover .raw-copy-button,
-.raw-viewer:focus-within .raw-copy-button {
-  opacity: 1;
-}
-
 .diff-viewer {
   min-width: 0;
   max-width: 100%;
@@ -3049,13 +3075,9 @@ button.gist-file-action {
   font-weight: 500;
 }
 
-@media (hover: none) {
-  .raw-copy-button {
-    opacity: 1;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
+  .code-block-actions,
+  .gist-file-wrap,
   .gist-file-chevron,
   .pull-refresh-indicator,
   .standalone-action-notice {

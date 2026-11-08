@@ -100,13 +100,38 @@ from the account page.
 ## Create A Gist
 
 The repository helper is the recommended interface for text and image
-publishing. It reads UTF-8 files directly from disk and has no third-party
+publishing. It reads UTF-8 text from files or stdin and has no third-party
 Python dependencies:
 
 ```sh
 export WAVEY_GIST_API_KEY=<api_key>
 scripts/publish-gist create README.md example.py
 ```
+
+After installing the helper as `publish-gist`, publish clipboard text or another
+command's output directly:
+
+```sh
+pbpaste | publish-gist
+pbpaste | publish-gist --filename example.py
+git diff | publish-gist --filename changes.patch
+```
+
+Piped input defaults to `README.md` and renders as Markdown. `--filename` names
+the published file; its extension selects syntax highlighting, or use `.txt`
+for plain text. `--title` sets the gist's display title independently. `pbpaste`
+is the macOS clipboard command; any command producing UTF-8 text can be piped
+into the helper on other platforms. Input redirection also works:
+
+```sh
+scripts/publish-gist create - --filename notes.md < notes.txt
+```
+
+Stdin publishes one file and cannot be combined with local text file paths.
+`--filename` applies only to stdin. Empty input is rejected, and running without
+files or piped input prints a usage hint. Text whitespace is preserved and line
+endings are normalized to LF, just as for local files. Updates continue to use
+local files. Help, read, and credential-check commands never publish stdin.
 
 Attach stable first-party images with `--image`. Reference an upload from
 Markdown as `attachment:<basename>`. PNG, JPEG, WebP, and SVG are supported;
