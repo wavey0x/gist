@@ -2246,6 +2246,13 @@ button {
   .code-block-actions {
     opacity: 1;
   }
+
+  /* Let unwrapped line endings scroll clear of the persistent touch controls. */
+  .markdown-body .code-wrap-block:not(.code-lines-wrapped) pre,
+  .gist-code-container .gist-code-view[data-code-wrap="false"] .gist-code-content,
+  .raw-viewer[data-code-wrap="false"] .raw-markdown {
+    padding-right: 88px;
+  }
 }
 
 .markdown-body .math-render-output {
