@@ -2399,10 +2399,19 @@ input:disabled {
   white-space: nowrap;
 }
 
-/* Short cells (a number, a label, a few stacked values) never wrap, so a long
-   prose column cannot squeeze them. Marked by tightenTableCells. */
+/* Every column has a floor, so a long prose column cannot squeeze its
+   neighbours. Short cells (a number, a label, a few stacked values) never
+   wrap. Longer cells keep room for about 18 characters, the same cutoff,
+   before they do; that floor applies to tables of up to five columns, where
+   it always fits a desktop page. Wider tables keep sharing the width freely.
+   Both kinds of cell are marked by tightenTableCells. */
 .markdown-body table :is(th, td).cell-tight {
   white-space: nowrap;
+}
+
+.markdown-body table:not(:has(tr > :nth-child(6))) :is(th, td).cell-roomy {
+  box-sizing: content-box;
+  min-width: 9.5em;
 }
 
 .gist-files {

@@ -16,7 +16,15 @@ for (const width of [1280, 390]) {
     });
     expect(lines).toBe(3);
     const steps = page.locator(".markdown-body tbody tr").first().locator("td").nth(3);
-    await expect(steps).not.toHaveClass(/cell-tight/);
+    await expect(steps).toHaveClass(/cell-roomy/);
+    // A mid-length cell keeps room for about 18 characters before it wraps.
+    const market = page.locator(".markdown-body tbody tr").first().locator("td").nth(1);
+    await expect(market).toHaveClass(/cell-roomy/);
+    const room = await market.evaluate((cell) => {
+      const style = getComputedStyle(cell);
+      return (cell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)) / parseFloat(style.fontSize);
+    });
+    expect(room).toBeGreaterThanOrEqual(9.4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 }
