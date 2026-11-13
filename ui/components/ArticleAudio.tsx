@@ -7,7 +7,8 @@ import {
   Play,
   RotateCcw,
   RotateCw,
-  Volume2
+  Volume2,
+  X
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
@@ -600,6 +601,18 @@ export function ArticleAudio({
                 </div>
               ) : null}
             </div>
+            <button
+              type="button"
+              className="article-audio-close-button"
+              aria-label="Close audio player"
+              title="Close"
+              onClick={() => {
+                closePlayer();
+                setSpeedMenuOpen(false);
+              }}
+            >
+              <X aria-hidden="true" size={17} strokeWidth={1.8} />
+            </button>
             <div className="article-audio-timeline">
               <span className="article-audio-time" aria-hidden="true">
                 {formatPlaybackTime(currentTime)}

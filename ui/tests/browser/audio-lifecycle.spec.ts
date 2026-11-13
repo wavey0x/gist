@@ -477,3 +477,18 @@ test("the raw view keeps the audio control and leaves playback running", async (
   await page.getByRole("button", { name: "View rendered file" }).click();
   await expect(page.getByRole("button", { name: "Hide article audio player" })).toBeVisible();
 });
+
+test("the player has a close button that clears it and stops playback", async ({ page }) => {
+  await start(page);
+  const player = page.getByRole("group", { name: "Article audio player" });
+  // Close sits at the trailing edge, clear of the speed control.
+  const close = (await player.getByRole("button", { name: "Close audio player" }).boundingBox())!;
+  const speed = (await player.getByRole("button", { name: /Playback speed/ }).boundingBox())!;
+  const frame = (await player.boundingBox())!;
+  expect(frame.x + frame.width - (close.x + close.width)).toBeLessThan(16);
+  expect(speed.x + speed.width).toBeLessThan(close.x);
+  await player.getByRole("button", { name: "Close audio player" }).click();
+  await expect(player).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Play article audio", exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Array.from(document.querySelectorAll("audio")).every((node) => node.paused))).toBe(true);
+});

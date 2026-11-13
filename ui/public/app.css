@@ -1533,6 +1533,25 @@ input:disabled {
 
 .article-audio-toolbar-group .toolbar {
   grid-column: auto;
+  gap: 6px;
+}
+
+/* Article actions are a set of outlined buttons, so each reads as a control
+   and keeps its place whichever view is showing. */
+.article-audio-toolbar-group .toolbar .icon-button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.article-audio-toolbar-group .toolbar .icon-button:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--hover);
+}
+
+.article-audio-toolbar-group .toolbar .icon-button[aria-pressed="true"],
+.article-audio-toolbar-group .toolbar .icon-button[aria-expanded="true"] {
+  border-color: var(--line-strong);
+  background: var(--selected);
 }
 
 .article-audio-spinner {
@@ -1559,7 +1578,7 @@ input:disabled {
   height: 6px;
   border-radius: 50%;
   background: var(--ok);
-  box-shadow: 0 0 0 2px var(--bg);
+  box-shadow: 0 0 0 2px var(--surface);
 }
 
 .icon-button.article-audio-button-ready[aria-pressed="true"]::after {
@@ -1624,7 +1643,8 @@ input:disabled {
 
 .article-audio-play-button,
 .article-audio-skip-button,
-.article-audio-speed-button {
+.article-audio-speed-button,
+.article-audio-close-button {
   display: inline-grid;
   height: 44px;
   place-items: center;
@@ -1642,6 +1662,7 @@ input:disabled {
 
 .article-audio-transport {
   grid-column: 2;
+  grid-row: 1;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -1756,9 +1777,25 @@ input:disabled {
 }
 
 .article-audio-speed-control {
-  grid-column: 3;
+  grid-column: 1;
+  grid-row: 1;
   position: relative;
+  justify-self: start;
+}
+
+.article-audio-close-button {
+  grid-column: 3;
+  grid-row: 1;
   justify-self: end;
+  width: 38px;
+  color: var(--muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .article-audio-close-button:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
 }
 
 .article-audio-speed-button {
@@ -1774,7 +1811,7 @@ input:disabled {
   position: absolute;
   z-index: 2;
   top: calc(100% + 7px);
-  right: -2px;
+  left: -2px;
   width: 92px;
   display: grid;
   gap: 1px;
