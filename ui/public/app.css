@@ -407,10 +407,19 @@ button {
   }
 }
 
-.theme-toggle-button {
+.icon-button.theme-toggle-button {
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--muted-fg);
+  padding: 0;
+}
+
+.icon-button.theme-toggle-button:hover {
+  background: var(--button-bg-active);
+  color: var(--page-fg);
 }
 
 .login-form {
@@ -4076,29 +4085,4 @@ body:has(.home-shell) .app-header-inner {
   gap: 16px;
   padding: 14px 0;
   border-bottom: 1px solid var(--divider);
-}
-
-.article-audio-add-queued,
-.article-audio-add-queued:disabled {
-  color: rgb(var(--audio-accent-rgb));
-  opacity: 1;
-}
-
-.article-audio-added {
-  align-self: center;
-  color: rgb(var(--audio-accent-rgb));
-  font-size: 12px;
-  white-space: nowrap;
-  animation: article-audio-added 2200ms ease forwards;
-}
-
-@keyframes article-audio-added {
-  0%, 80% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .article-audio-added {
-    animation: none;
-  }
 }

@@ -26,7 +26,6 @@ import { LocalTimestamp } from "./LocalTimestamp";
 import { ReadingProgress } from "./ReadingProgress";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
 import { TableOfContents } from "./TableOfContents";
-import { ThemeToggle } from "./ThemeToggle";
 
 type ViewMode = "files" | "raw" | "custom";
 
@@ -623,7 +622,6 @@ export function GistViewer({
           {viewMode === "files" && singleFile?.kind === "markdown" && !rawIsVisible ? (
             <TableOfContents html={singleFile.rendered_html} />
           ) : null}
-          <ThemeToggle />
         </ArticleAudio>
       </header>
 

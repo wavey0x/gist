@@ -3,6 +3,7 @@ import { fetchCurrentSession } from "../lib/auth";
 import { StandaloneAppControls } from "./StandaloneAppControls";
 import { ConnectivityIndicator } from "./ConnectivityIndicator";
 import { OfflineIdentityRecorder } from "./OfflineIdentityRecorder";
+import { ThemeToggle } from "./ThemeToggle";
 
 async function getHeaderSession() {
   try {
@@ -57,6 +58,7 @@ export async function AppHeader() {
               Log in
             </Link>
           )}
+          <ThemeToggle />
           <StandaloneAppControls />
         </nav>
       </div>

@@ -495,7 +495,7 @@
     shareButton.setAttribute("aria-label", "Share this page");
     shareButton.append(icon("share", 16, 1.9));
     shareButton.addEventListener("click", () => void shareCurrentPage(shareButton));
-    nav.append(shareButton);
+    nav.append(themeButton(), shareButton);
 
     if (
       matchMedia("(display-mode: standalone)").matches ||
@@ -1337,7 +1337,7 @@
       setRawVisible(false);
       toolbar.append(rawButton);
     }
-    toolbar.append(await revisionHistoryControl(payload), themeButton());
+    toolbar.append(await revisionHistoryControl(payload));
 
     const dockSentinel = element("span", {
       className: "article-audio-dock-sentinel"
