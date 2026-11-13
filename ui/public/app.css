@@ -3405,9 +3405,37 @@ button.gist-file-action {
 }
 
 .mini-player-seek {
-  grid-column: 1 / -1;
+  grid-column: 1 / 3;
   height: 24px;
   touch-action: none;
+}
+
+.mini-player-speed {
+  width: 44px;
+  height: 28px;
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted-fg);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+}
+
+.mini-player-speed:hover {
+  background: var(--button-bg-active);
+  color: var(--page-fg);
+}
+
+.mini-player-speed:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 
 .mini-player-seek::-webkit-slider-thumb {

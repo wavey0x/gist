@@ -15,7 +15,6 @@ import type { CSSProperties, ReactNode } from "react";
 import {
   audioIsAvailableFor,
   closePlayer,
-  hydratePlaybackRate,
   isTrack,
   noteTrackCached,
   openTrack,
@@ -174,10 +173,6 @@ export function ArticleAudio({
       void refreshListenQueue();
     }
   }, [active]);
-
-  useEffect(() => {
-    hydratePlaybackRate();
-  }, []);
 
   useEffect(() => {
     if (active && track) {

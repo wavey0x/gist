@@ -1,22 +1,28 @@
 "use client";
 
 import { Pause, Play, RotateCcw, RotateCw, X } from "lucide-react";
-import type { CSSProperties } from "react";
+import { useEffect, type CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   closePlayer,
+  hydratePlaybackRate,
   persistPosition,
+  PLAYBACK_RATES,
   seek,
+  selectPlaybackRate,
   skip,
   togglePlayback,
   useAudioEngine
 } from "../lib/audio-engine";
-import { formatPlaybackTime } from "../lib/audio-format";
+import { formatPlaybackRate, formatPlaybackTime } from "../lib/audio-format";
 
 export function MiniPlayer() {
-  const { currentTime, duration, opened, playing, buffering, message, track } = useAudioEngine();
+  const { currentTime, duration, opened, playing, buffering, message, playbackRate, track } = useAudioEngine();
   const pathname = usePathname();
+  useEffect(() => {
+    hydratePlaybackRate();
+  }, []);
   if (!track || !opened) {
     return null;
   }
@@ -99,6 +105,17 @@ export function MiniPlayer() {
         onKeyUp={() => persistPosition(true)}
         onBlur={() => persistPosition(true)}
       />
+      <select
+        className="mini-player-speed"
+        aria-label="Playback speed"
+        title="Playback speed"
+        value={playbackRate}
+        onChange={(event) => selectPlaybackRate(Number(event.currentTarget.value))}
+      >
+        {PLAYBACK_RATES.map((rate) => (
+          <option key={rate} value={rate}>{formatPlaybackRate(rate)}</option>
+        ))}
+      </select>
     </aside>
   );
 }

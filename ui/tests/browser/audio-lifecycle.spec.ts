@@ -340,3 +340,38 @@ test("the mini-player timeline supports touch, dragging and keyboard seeking wit
   await mini.getByRole("button", { name: "Pause article audio" }).click();
   await mini.screenshot({ path: testInfo.outputPath("mini-player-scrubber.png") });
 });
+
+test("mini-player speed stays in sync with the article player and survives reopening from the playlist", async ({ page }, testInfo) => {
+  await start(page);
+  await action(page, "pause");
+  const audio = page.locator("audio");
+  await page.locator(".app-brand").click();
+  const mini = page.getByRole("complementary", { name: "Now playing" });
+  const speed = mini.getByRole("combobox", { name: "Playback speed" });
+  await expect(speed).toHaveValue("1");
+  await speed.selectOption("1.5");
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.playbackRate)).toBe(1.5);
+  expect(await audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem("waveygist:audio-rate:v1"))).toBe("1.5");
+  await mini.getByRole("link").click();
+  await page.getByRole("button", { name: "Playback speed 1.5×" }).click();
+  await page.getByRole("group", { name: "Playback speed", exact: true }).getByRole("button", { name: "1.25×", exact: true }).click();
+  await page.locator(".app-brand").click();
+  await expect(speed).toHaveValue("1.25");
+  await mini.getByRole("button", { name: "Play article audio" }).click();
+  await speed.selectOption("1.75");
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.playbackRate)).toBe(1.75);
+  expect(await audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+  await mini.getByRole("button", { name: "Pause article audio" }).click();
+  await mini.screenshot({ path: testInfo.outputPath("mini-player-speed.png") });
+  // Start directly from the home playlist after a reload, without mounting an article player.
+  await page.route("**/api/me/listen-queue", route => route.fulfill({ json: { items: [{
+    gist_id: id, title: "Saved recording", author_name: "Field Notes", latest_revision_number: 1,
+    revision_number: 1, status: "ready", duration_ms: 40000, audio_url: `${endpoint}/audio`,
+    updating: false, added_at: "2026-11-13T12:00:00Z"
+  }] } }));
+  await page.reload();
+  await page.getByRole("button", { name: "Play Saved recording", exact: true }).click();
+  await expect(speed).toHaveValue("1.75");
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.playbackRate)).toBe(1.75);
+});
