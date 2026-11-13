@@ -3564,17 +3564,39 @@ body:has(.mini-player) {
   touch-action: pan-y;
 }
 
+/* Fills the row behind its content, so any amount of drag shows solid colour.
+   Hidden at rest so it can never peek through or take a tap. */
 .swipe-row-action {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-end;
-  padding-right: 18px;
+  visibility: hidden;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
   background: var(--danger);
   color: var(--on-danger);
+  font: inherit;
   font-size: 13px;
   font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.swipe-row-action span {
+  display: grid;
+  place-items: center;
+  width: 88px;
+}
+
+.swipe-row-active .swipe-row-action {
+  visibility: visible;
+}
+
+.swipe-row-action:focus-visible {
+  outline-offset: -3px;
 }
 
 .swipe-row-content {
@@ -3582,8 +3604,13 @@ body:has(.mini-player) {
   background: var(--bg);
 }
 
+.swipe-row-dragging {
+  will-change: transform;
+}
+
 .swipe-row-settling {
-  transition: transform 180ms ease;
+  transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
 }
 
 .up-next-list,
@@ -3922,11 +3949,10 @@ body:has(.mini-player) {
 
 .library-link {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 16px;
-  row-gap: 3px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
   padding: 10px 0;
   color: inherit;
   text-decoration: none;
@@ -3958,13 +3984,29 @@ body:has(.mini-player) {
   letter-spacing: -0.006em;
 }
 
-.library-aside {
-  display: inline-flex;
-  gap: 8px;
+/* One quiet detail line right under the title: who, when, which revision.
+   Everything about a gist sits in one place, so the eye never crosses the row. */
+.library-meta {
+  display: flex;
+  align-items: center;
+  min-width: 0;
   color: var(--muted);
   font-size: 12px;
-  font-variant-numeric: tabular-nums;
+  line-height: 16px;
   white-space: nowrap;
+}
+
+.library-meta > * + *::before,
+.library-aside > * + *::before {
+  content: "\00b7";
+  margin: 0 6px;
+  color: var(--faint);
+}
+
+.library-aside {
+  flex: none;
+  display: inline-flex;
+  font-variant-numeric: tabular-nums;
 }
 
 .library-revision {
@@ -3972,23 +4014,23 @@ body:has(.mini-player) {
 }
 
 .library-byline {
-  grid-column: 1;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  min-width: 0;
+}
+
+.library-byline-name {
   min-width: 0;
   overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .library-avatar {
   position: relative;
   flex: none;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
   display: inline-grid;
   place-items: center;
   overflow: hidden;
@@ -4049,11 +4091,6 @@ body:has(.mini-player) {
   .home-shell-authenticated {
     gap: 28px;
     padding: 18px 16px 36px;
-  }
-
-  /* Same shape as playlist rows: the title, then one quiet detail line. */
-  .library-link {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 

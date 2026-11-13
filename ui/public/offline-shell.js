@@ -562,6 +562,15 @@
       text: entryTitle(entry)
     }));
     const dateValue = libraryDate(entry, tab);
+    const meta = element("span", { className: "library-meta" });
+    if (entry.authorName) {
+      const byline = element("span", { className: "library-byline" });
+      byline.append(
+        authorAvatar(entry.authorName, entry.authorAvatarUrl, "library-avatar", 16),
+        element("span", { className: "library-byline-name", text: entry.authorName })
+      );
+      meta.append(byline);
+    }
     const aside = element("span", { className: "library-aside" });
     const time = element("time", { text: libraryRowTime(dateValue, now) });
     if (dateValue) {
@@ -577,15 +586,8 @@
       revision.setAttribute("aria-label", `revision ${entry.revisionNumber}`);
       aside.append(revision);
     }
-    link.append(aside);
-    if (tab === "recent" && !entry.owned && entry.authorName) {
-      const byline = element("span", { className: "library-byline" });
-      byline.append(
-        authorAvatar(entry.authorName, entry.authorAvatarUrl, "library-avatar", 14),
-        document.createTextNode(entry.authorName)
-      );
-      link.append(byline);
-    }
+    meta.append(aside);
+    link.append(meta);
     row.append(link);
     item.append(row);
     return item;

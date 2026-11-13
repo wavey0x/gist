@@ -77,8 +77,8 @@ function Avatar({ name, url }: { name: string; url?: string }) {
         <img
           src={source}
           alt=""
-          width={14}
-          height={14}
+          width={16}
+          height={16}
           loading="lazy"
           data-loaded={state === "loaded"}
           onLoad={() => setState("loaded")}
@@ -106,7 +106,11 @@ type RowData = {
 function LibraryRow({ row, time, timestamp }: { row: RowData; time: string; timestamp: string }) {
   return (
     <li className="library-item">
-      <SwipeRow actionLabel={row.actionLabel} onAction={row.onAction}>
+      <SwipeRow
+        actionLabel={row.actionLabel}
+        actionAriaLabel={`${row.actionLabel} ${row.title}`}
+        onAction={row.onAction}
+      >
         <div className="library-row">
           <Link className="library-link" href={row.href} prefetch={false}>
             <span className="library-title">
@@ -120,22 +124,24 @@ function LibraryRow({ row, time, timestamp }: { row: RowData; time: string; time
               ) : null}
               {row.title}
             </span>
-            <span className="library-aside">
-              <time dateTime={row.date} title={timestamp}>
-                {time}
-              </time>
-              {row.revision > 1 ? (
-                <span className="library-revision" aria-label={`revision ${row.revision}`}>
-                  r{row.revision}
+            <span className="library-meta">
+              {row.byline ? (
+                <span className="library-byline">
+                  <Avatar name={row.byline.name} url={row.byline.avatarUrl} />
+                  <span className="library-byline-name">{row.byline.name}</span>
                 </span>
               ) : null}
-            </span>
-            {row.byline ? (
-              <span className="library-byline">
-                <Avatar name={row.byline.name} url={row.byline.avatarUrl} />
-                {row.byline.name}
+              <span className="library-aside">
+                <time dateTime={row.date} title={timestamp}>
+                  {time}
+                </time>
+                {row.revision > 1 ? (
+                  <span className="library-revision" aria-label={`revision ${row.revision}`}>
+                    r{row.revision}
+                  </span>
+                ) : null}
               </span>
-            ) : null}
+            </span>
           </Link>
           <button
             type="button"
@@ -416,6 +422,9 @@ export function Library({
               title,
               revision: gist.revision_number,
               date: byCreated ? gist.created_at : gist.updated_at,
+              byline: gist.author_name.trim()
+                ? { name: gist.author_name, avatarUrl: gist.author_avatar_url }
+                : undefined,
               updated: read !== undefined && gist.revision_number > read,
               actionLabel: "Delete",
               actionIcon: <Trash2 aria-hidden="true" size={15} strokeWidth={1.8} />,
@@ -449,7 +458,6 @@ export function Library({
       </p>
     );
   } else {
-    const me = userName?.trim().toLowerCase();
     list = (
       <RowList
         now={clock.now}
@@ -462,10 +470,9 @@ export function Library({
             title: gist.title?.trim() || gist.id,
             revision: gist.revision_number,
             date: gist.viewed_at,
-            byline:
-              gist.author_name.trim().toLowerCase() === me
-                ? undefined
-                : { name: gist.author_name, avatarUrl: gist.author_avatar_url },
+            byline: gist.author_name.trim()
+              ? { name: gist.author_name, avatarUrl: gist.author_avatar_url }
+              : undefined,
             updated: latest !== undefined && latest > gist.revision_number,
             progress: readReadingPosition(gist.id, gist.revision_number)?.fraction,
             actionLabel: "Remove",

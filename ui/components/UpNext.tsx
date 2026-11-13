@@ -365,7 +365,11 @@ export function UpNext() {
                 }`}
                 style={transform ? { transform } : undefined}
               >
-                <SwipeRow actionLabel="Remove" onAction={() => remove(item)}>
+                <SwipeRow
+                  actionLabel="Remove"
+                  actionAriaLabel={`Remove ${item.title}`}
+                  onAction={() => remove(item)}
+                >
                   <div className="up-next-row">
                     {rows.length > 1 ? (
                       <button
