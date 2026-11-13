@@ -42,13 +42,26 @@ test("on touch, code block buttons appear on a tap and leave on a tap elsewhere"
   await expect(second.locator(".code-block-actions")).toBeHidden();
 });
 
-test("on a phone, code blocks keep their frame inside the page gutter", async ({ page, browserName }) => {
+test("on a phone, a code block is framed and its code lines up with the prose", async ({ page, browserName }) => {
   test.skip(browserName !== "chromium", "Mobile emulation here is Chromium-only");
   await page.goto("/GalleryCodeWrap01");
   const block = page.locator(".code-wrap-block pre").first();
   const box = (await block.boundingBox())!;
-  expect(box.x).toBeGreaterThanOrEqual(15);
-  expect(box.x + box.width).toBeLessThanOrEqual(390 - 15);
-  expect(await block.evaluate((pre) => parseFloat(getComputedStyle(pre).borderLeftWidth))).toBeGreaterThan(0);
+  // The frame stays on screen with a sliver of margin and keeps its border and corners.
+  expect(box.x).toBeGreaterThanOrEqual(4);
+  expect(box.x + box.width).toBeLessThanOrEqual(390 - 4);
+  const style = await block.evaluate((pre) => {
+    const computed = getComputedStyle(pre);
+    return {
+      border: parseFloat(computed.borderLeftWidth),
+      radius: parseFloat(computed.borderTopLeftRadius),
+      text: pre.getBoundingClientRect().left + parseFloat(computed.borderLeftWidth) + parseFloat(computed.paddingLeft)
+    };
+  });
+  expect(style.border).toBeGreaterThan(0);
+  expect(style.radius).toBeGreaterThan(0);
+  // The code starts where the prose starts, so it has the full text width.
+  const heading = (await page.locator(".markdown-body h1").first().boundingBox())!;
+  expect(Math.abs(style.text - heading.x)).toBeLessThanOrEqual(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

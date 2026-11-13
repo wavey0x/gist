@@ -3277,11 +3277,19 @@ a.diff-step:focus-visible {
     padding: 10px 16px 20px;
   }
 
-  /* Code needs every column it can get on a phone, so the inner padding is
-     tight, but the block keeps its frame inside the page gutter. */
+  /* Code needs every column it can get on a phone. The frame steps out into
+     the page gutter so the code itself lines up with the prose and gets the
+     full text width, while the block still reads as a framed, rounded box. */
   .markdown-body pre,
   .markdown-body .code-wrap-block pre {
     padding: 10px;
+  }
+
+  .markdown-body > pre,
+  .markdown-body > .code-wrap-block {
+    margin-right: -11px;
+    margin-left: -11px;
+    max-width: none;
   }
 
   .markdown-body h1 {
