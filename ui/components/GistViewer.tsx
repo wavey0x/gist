@@ -25,7 +25,6 @@ import { GistHeading } from "./GistHeading";
 import { GistFilePanel, sourceLineNumbers } from "./GistFilePanel";
 import { ReadingProgress } from "./ReadingProgress";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
-import { TableOfContents } from "./TableOfContents";
 import { refreshJson, usePageRefresh, useRefreshRoute } from "../lib/page-refresh";
 import { getAudioEngineState } from "../lib/audio-engine";
 
@@ -305,7 +304,7 @@ export function GistViewer({
   const narrationIsActive =
     canUseNarration &&
     !customContent &&
-    viewMode === "files" &&
+    (viewMode === "files" || rawIsVisible) &&
     primaryFile?.kind === "markdown";
 
   function historyDiffUrl(item: RevisionHistoryItem) {
@@ -450,9 +449,6 @@ export function GistViewer({
               </div>
             ) : null}
           </div>
-          {viewMode === "files" && singleFile?.kind === "markdown" && !rawIsVisible ? (
-            <TableOfContents html={singleFile.rendered_html} />
-          ) : null}
         </ArticleAudio>
       </header>
 

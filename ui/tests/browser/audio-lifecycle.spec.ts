@@ -464,3 +464,16 @@ test("a stream that drops while hidden switches to the downloaded copy instead o
     await expect(page.getByText("Connection lost. Reconnecting…", { exact: true })).toHaveCount(0);
   } finally { release(); }
 });
+
+test("the raw view keeps the audio control and leaves playback running", async ({ page }) => {
+  await start(page);
+  await page.getByRole("button", { name: "View raw file" }).click();
+  await expect(page.locator(".raw-markdown")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Hide article audio player" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View revision history" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Table of contents" })).toHaveCount(0);
+  const before = await page.locator("audio").evaluate((node: HTMLAudioElement) => node.currentTime);
+  await expect.poll(() => page.locator("audio").evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThan(before);
+  await page.getByRole("button", { name: "View rendered file" }).click();
+  await expect(page.getByRole("button", { name: "Hide article audio player" })).toBeVisible();
+});

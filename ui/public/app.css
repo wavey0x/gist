@@ -214,8 +214,7 @@ input:disabled {
 }
 
 .popover-item,
-.article-audio-speed-option,
-.toc-item {
+.article-audio-speed-option {
   border: 0;
   border-radius: var(--r-md);
   background: transparent;
@@ -234,9 +233,7 @@ input:disabled {
 
 .popover-item:hover:not(:disabled),
 .article-audio-speed-option:hover,
-.article-audio-speed-option[aria-pressed="true"],
-.toc-item:hover,
-.toc-item[aria-current="location"] {
+.article-audio-speed-option[aria-pressed="true"] {
   background: var(--hover);
 }
 
@@ -3247,23 +3244,6 @@ button.gist-file-action {
 
 .saved-preview-controls {
   visibility: hidden;
-}
-
-.table-of-contents {
-  width: min(280px, calc(100vw - 32px));
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 6px;
-}
-
-.toc-item {
-  display: block;
-  padding: 6px 8px;
-}
-
-.toc-item-3 {
-  padding-left: 20px;
-  color: var(--muted);
 }
 
 .listen-from-here {
