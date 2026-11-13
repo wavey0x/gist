@@ -1,3 +1,5 @@
+export { isStandaloneDisplay } from "../public/standalone-navigation.mjs";
+
 export type PushSubscriptionPayload = {
   endpoint: string;
   keys: {
@@ -63,16 +65,6 @@ export function isIosDevice() {
   return (
     /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-  );
-}
-
-export function isStandaloneDisplay() {
-  const standaloneNavigator = navigator as Navigator & {
-    standalone?: boolean;
-  };
-  return (
-    standaloneNavigator.standalone === true ||
-    window.matchMedia("(display-mode: standalone)").matches
   );
 }
 

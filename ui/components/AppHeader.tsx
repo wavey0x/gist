@@ -4,6 +4,7 @@ import { StandaloneAppControls } from "./StandaloneAppControls";
 import { ConnectivityIndicator } from "./ConnectivityIndicator";
 import { OfflineIdentityRecorder } from "./OfflineIdentityRecorder";
 import { ThemeToggle } from "./ThemeToggle";
+import { StandaloneBackButton } from "./StandaloneBackButton";
 
 async function getHeaderSession() {
   try {
@@ -30,10 +31,13 @@ export async function AppHeader() {
         }
       />
       <div className="app-header-inner">
-        <Link className="app-brand" href="/" aria-label="waveygist home">
-          <span className="brand-mark-strong">wavey</span>
-          <span className="brand-mark-light">gist</span>
-        </Link>
+        <div className="app-brand-group">
+          <StandaloneBackButton />
+          <Link className="app-brand" href="/" aria-label="waveygist home">
+            <span className="brand-mark-strong">wavey</span>
+            <span className="brand-mark-light">gist</span>
+          </Link>
+        </div>
         <nav className="app-nav" aria-label="Site">
           <ConnectivityIndicator />
           {session ? (

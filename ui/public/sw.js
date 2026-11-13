@@ -21,11 +21,13 @@ const OFFLINE_SHELL_ASSETS = [
   SHELL_URL,
   "/offline-shell.css",
   "/offline-shell.js",
+  "/standalone-navigation.mjs",
   "/icons/icon-192.png",
   "/icons/icon-512.png"
 ];
 const SHELL_ASSETS = [...OFFLINE_SHELL_ASSETS, ...SHARED_SHELL_ASSETS];
 const GIST_PATH_RE = /^\/[A-Za-z0-9]{16,64}(?:\/.*)?$/;
+const RAW_PATH_RE = /^\/([A-Za-z0-9]{16,64})(?:\/revisions\/([1-9][0-9]*))?\/raw(?:\/([^/]+))?\/?$/;
 const IMAGE_PATH_RE = /^\/api\/images\/img_[A-Za-z0-9_-]{16,64}$/;
 const AUDIO_PATH_RE =
   /^\/api\/gists\/[A-Za-z0-9]{16,64}\/revisions\/[1-9][0-9]*\/narration\/audio$/;
@@ -133,17 +135,53 @@ async function hasSavedCopy(url) {
   return saved.some((request) => new URL(request.url).pathname.startsWith(prefix));
 }
 
+async function savedRawResponse(url) {
+  const [, gistId, revision, encodedFilename] = RAW_PATH_RE.exec(url.pathname);
+  const headers = {
+    "Content-Type": "text/plain; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "no-store"
+  };
+  try {
+    const cache = await caches.open(CONTENT_CACHE);
+    const prefix = `/api/gists/${gistId}/revisions/`;
+    const candidates = (await cache.keys()).filter((request) => {
+      const path = new URL(request.url).pathname;
+      return path.startsWith(prefix) && /^\d+\/render$/.test(path.slice(prefix.length)) &&
+        (!revision || path === `${prefix}${revision}/render`);
+    }).sort((a, b) => Number(new URL(b.url).pathname.split("/")[5]) -
+      Number(new URL(a.url).pathname.split("/")[5]));
+    const response = candidates[0] && await cache.match(candidates[0]);
+    if (response) {
+      const payload = await response.json();
+      const filename = encodedFilename ? decodeURIComponent(encodedFilename) : payload.primary_file;
+      const file = Object.hasOwn(payload.files, filename) ? payload.files[filename] : null;
+      if (!file || typeof file.content !== "string") {
+        return new Response("Not found\n", { status: 404, headers });
+      }
+      return new Response(file.content, { headers: {
+        ...headers,
+        "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(filename)}`
+      } });
+    }
+  } catch { /* Keep unavailable Raw pages plain text too. */ }
+  return new Response("This file is not saved offline. Reconnect and try again.\n", {
+    status: 503, headers
+  });
+}
+
 // Weak signal can hold a request open for minutes, so a saved copy wins eventually.
 async function navigationResponse(networkResponse, url) {
-  const shell = async () =>
-    (await caches.open(SHELL_CACHE)).match(SHELL_URL);
+  const fallbackResponse = async () => RAW_PATH_RE.test(url.pathname)
+    ? savedRawResponse(url)
+    : (await caches.open(SHELL_CACHE)).match(SHELL_URL);
   let timer;
   const timedOut = new Promise((resolve) => {
     timer = setTimeout(() => resolve(null), NAVIGATION_TIMEOUT_MS);
   });
   try {
     if (self.navigator?.onLine === false && (await hasSavedCopy(url))) {
-      const offline = await shell();
+      const offline = await fallbackResponse();
       if (offline) {
         return offline;
       }
@@ -152,10 +190,10 @@ async function navigationResponse(networkResponse, url) {
     if (response) {
       return response;
     }
-    const fallback = (await hasSavedCopy(url)) ? await shell() : null;
+    const fallback = (await hasSavedCopy(url)) ? await fallbackResponse() : null;
     return fallback ?? (await networkResponse);
   } catch {
-    return (await shell()) ?? Response.error();
+    return (await fallbackResponse()) ?? Response.error();
   } finally {
     clearTimeout(timer);
   }

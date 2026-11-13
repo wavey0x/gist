@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Check, Copy } from "lucide-react";
 
 async function fetchApiKey() {
   const response = await fetch("/api/me/key", { cache: "no-store" });
@@ -13,6 +14,7 @@ async function fetchApiKey() {
 
 export function ApiKeyCopyButton() {
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!copied) {
@@ -23,6 +25,7 @@ export function ApiKeyCopyButton() {
   }, [copied]);
 
   async function copyApiKey() {
+    setError("");
     try {
       // Safari only allows a clipboard write that starts inside the tap.
       if (typeof ClipboardItem === "function") {
@@ -39,18 +42,23 @@ export function ApiKeyCopyButton() {
       setCopied(true);
     } catch {
       setCopied(false);
+      setError("Couldn’t copy the API key. Try again.");
     }
   }
 
   return (
-    <button
-      type="button"
-      className="api-key-copy-action"
-      data-copied={copied ? "true" : "false"}
-      aria-live="polite"
-      onClick={copyApiKey}
-    >
-      <span>{copied ? "Copied!" : "Copy API key"}</span>
-    </button>
+    <span className="code-copy-control">
+      <button
+        type="button"
+        className="icon-button api-key-copy-action"
+        data-copied={copied ? "true" : "false"}
+        aria-label="Copy API key"
+        title={copied ? "Copied" : "Copy API key"}
+        onClick={copyApiKey}
+      >
+        {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+      </button>
+      <span role="status" className={error ? "code-copy-status" : "sr-only"}>{error || (copied ? "Copied" : "")}</span>
+    </span>
   );
 }

@@ -345,6 +345,23 @@ input:disabled {
   gap: 14px;
 }
 
+.app-brand-group {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.icon-button.standalone-back-button {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  margin-left: -12px;
+}
+
+.standalone-back-button[hidden] {
+  display: none;
+}
+
 .app-brand {
   min-width: 0;
   display: inline-flex;
@@ -655,35 +672,8 @@ input:disabled {
   line-height: 1.4;
 }
 
-.api-key-copy-action {
-  min-width: 74px;
-  display: inline-flex;
-  align-items: baseline;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  padding: 0;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.4;
-  cursor: pointer;
-  text-align: left;
-}
-
-.api-key-copy-action:hover {
-  color: var(--text);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
 .api-key-copy-action[data-copied="true"] {
   color: var(--text);
-}
-
-.api-key-copy-action:focus-visible {
-  color: var(--text);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .alert-settings {
@@ -2179,7 +2169,8 @@ input:disabled {
 }
 
 .code-wrap-button svg,
-.code-copy-button svg {
+.code-copy-button svg,
+.gist-file-copy svg {
   width: 14px;
   height: 14px;
 }
@@ -2204,6 +2195,13 @@ input:disabled {
 .code-copy-control {
   position: relative;
   display: inline-flex;
+}
+
+.gist-file-copy {
+  width: 28px;
+  justify-content: center;
+  padding-right: 4px;
+  padding-left: 4px;
 }
 
 .code-copy-status {
@@ -3212,16 +3210,6 @@ button.gist-file-action {
     display: none;
   }
 
-  .gist-file-copy {
-    width: 28px;
-    justify-content: center;
-    padding-right: 4px;
-    padding-left: 4px;
-  }
-
-  .gist-file-copy span {
-    display: none;
-  }
 }
 
 .loading-skeleton {

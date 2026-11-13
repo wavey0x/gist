@@ -171,7 +171,7 @@ function GistFilePanel({
             />
           ) : null}
           <CodeCopyButton content={file.content} label={`Copy ${file.filename}`}
-            className="gist-file-action gist-file-copy" compact />
+            className="gist-file-action gist-file-copy" />
         </div>
       </header>
       <div className="gist-file-body" id={bodyId} hidden={collapsed}>

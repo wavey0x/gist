@@ -44,6 +44,7 @@
   const ICON_PATHS = {
     check: ['<path d="m9 11 3 3L22 4" />'],
     chevronDown: ['<path d="m6 9 6 6 6-6" />'],
+    chevronLeft: ['<path d="m15 18-6-6 6-6" />'],
     copy: [
       '<rect width="14" height="14" x="8" y="8" rx="2" ry="2" />',
       '<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />'
@@ -473,7 +474,8 @@
     }
   }
 
-  function setupOfflineHeader() {
+  let standaloneNavigation;
+  async function setupOfflineHeader() {
     const nav = document.querySelector(".app-nav");
     if (!nav) {
       return;
@@ -512,6 +514,17 @@
       navigator.standalone === true
     ) {
       document.documentElement.classList.add("standalone-app");
+      const { installStandaloneNavigation } = await import("/standalone-navigation.mjs");
+      const back = element("button", { className: "icon-button standalone-back-button" });
+      back.type = "button";
+      back.append(icon("chevronLeft", 18, 1.7));
+      standaloneNavigation = installStandaloneNavigation(({ canGoBack, isHome }) => {
+        back.hidden = isHome;
+        back.title = canGoBack ? "Back" : "Back to home";
+        back.setAttribute("aria-label", back.title);
+      });
+      back.addEventListener("click", () => standaloneNavigation.back(() => location.replace("/")));
+      document.querySelector(".app-brand-group").prepend(back);
     }
   }
 
@@ -1546,12 +1559,12 @@
     });
     button.type = "button";
     button.setAttribute("aria-label", label);
-    button.title = "Copy code";
-    const status = element("span", { className: compact ? "sr-only" : "code-copy-status" });
+    button.title = label;
+    const status = element("span", { className: "sr-only" });
     status.setAttribute("role", "status");
     const paint = (message = "") => {
       button.replaceChildren(icon(message === "Copied" ? "check" : "copy", 16));
-      if (compact) button.append(element("span", { text: message === "Copied" ? "Copied" : message ? "Copy failed" : "Copy" }));
+      status.className = message && message !== "Copied" ? "code-copy-status" : "sr-only";
     };
     paint();
     let timer;
@@ -1573,7 +1586,7 @@
       timer = setTimeout(() => {
         paint();
         status.textContent = "";
-        button.title = "Copy code";
+        button.title = label;
         delete control.dataset.feedback;
       }, message === "Copied" ? 1500 : 4000);
     });
@@ -1595,7 +1608,7 @@
     return viewer;
   }
 
-  function filePanel(file) {
+  function filePanel(file, rawUrl) {
     const panel = element("section", { className: "gist-file-panel" });
     const safeId = file.content_sha256?.slice(0, 12) || Math.random().toString(36).slice(2);
     const headingId = `offline-file-heading-${safeId}`;
@@ -1627,7 +1640,7 @@
     disclosure.append(chevron, identity);
 
     const actions = element("div", { className: "gist-file-actions" });
-    const raw = element("button", { className: "gist-file-action", text: "Raw" });
+    const raw = element("a", { className: "gist-file-action", text: "Raw", href: rawUrl });
     let wrapped = false;
     const wrap = wrapButton(`Wrap lines in ${file.filename}`, false, () => {
       wrapped = !wrapped;
@@ -1636,7 +1649,6 @@
     }, "gist-file-action gist-file-wrap");
     wrap.hidden = file.kind === "markdown";
     const copy = codeCopyControl(file.content || "", `Copy ${file.filename}`, true);
-    raw.type = "button";
     raw.setAttribute("aria-label", `View raw ${file.filename}`);
     actions.append(raw, wrap, copy);
     header.append(disclosure, actions);
@@ -1644,24 +1656,6 @@
     body.id = bodyId;
     body.append(fileContent(file, true));
     body.firstElementChild.dataset.codeWrap = String(wrapped);
-    let rawVisible = false;
-
-    function paintBody() {
-      body.replaceChildren(
-        rawVisible
-          ? rawFileContent(file, true)
-          : fileContent(file, true)
-      );
-      body.firstElementChild.dataset.codeWrap = String(wrapped);
-      wrap.hidden = file.kind === "markdown" && !rawVisible;
-      raw.textContent = rawVisible ? "Rendered" : "Raw";
-      raw.setAttribute(
-        "aria-label",
-        `${rawVisible ? "View rendered" : "View raw"} ${file.filename}`
-      );
-      addMarkdownWrapControls(body);
-      refreshGalleries();
-    }
 
     disclosure.addEventListener("click", () => {
       const collapsed = panel.dataset.collapsed !== "true";
@@ -1673,10 +1667,6 @@
         `${collapsed ? "Expand" : "Collapse"} ${file.filename}`
       );
       refreshGalleries();
-    });
-    raw.addEventListener("click", () => {
-      rawVisible = !rawVisible;
-      paintBody();
     });
     panel.append(header, body);
     return panel;
@@ -1877,7 +1867,9 @@
         nextContent.append(content);
       } else {
         nextContent = element("div", { className: "gist-files" });
-        nextContent.append(...files.map(filePanel));
+        nextContent.append(...files.map((file) => filePanel(file,
+          `/${payload.id}/revisions/${payload.revision_number}/raw/${encodeURIComponent(file.filename)}`
+        )));
       }
       if (currentContent) {
         currentContent.replaceWith(nextContent);
@@ -1990,7 +1982,7 @@
 
   async function start() {
     applyTheme(readTheme());
-    setupOfflineHeader();
+    await setupOfflineHeader();
     showOffline();
     connectionStatus?.addEventListener("click", () => {
       if (reconnectVerified) {

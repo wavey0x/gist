@@ -33,7 +33,7 @@ export function addMarkdownWrapControls(root: Element) {
     const copyIcon = svg('<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>');
     copy.innerHTML = copyIcon;
     const status = document.createElement("span");
-    status.className = "code-copy-status";
+    status.className = "sr-only";
     status.setAttribute("role", "status");
     const actions = document.createElement("div");
     actions.className = "code-block-actions";
@@ -52,11 +52,13 @@ export function addMarkdownWrapControls(root: Element) {
       if (current !== attempt || !copy.isConnected) return;
       copy.innerHTML = message === "Copied" ? svg('<path d="m5 12 4 4L19 6"/>') : copyIcon;
       copy.title = status.textContent = message;
+      status.className = message === "Copied" ? "sr-only" : "code-copy-status";
       actions.dataset.feedback = "true";
       timer = setTimeout(() => {
         copy.innerHTML = copyIcon;
         copy.title = "Copy code";
         status.textContent = "";
+        status.className = "sr-only";
         delete actions.dataset.feedback;
       }, message === "Copied" ? 1500 : 4000);
     });

@@ -209,6 +209,7 @@ test("install precaches the complete canonical shell", async () => {
     "/offline-shell.html",
     "/offline-shell.css",
     "/offline-shell.js",
+    "/standalone-navigation.mjs",
     "/icons/icon-192.png",
     "/icons/icon-512.png",
     "/github-markdown.css",
@@ -316,6 +317,39 @@ test("a stalled navigation opens a saved gist from the shell", async () => {
   assert.equal(await response.text(), "cached:/offline-shell.html");
 });
 
+test("offline Raw preserves the requested file and revision without app framing", async () => {
+  const harness = workerHarness();
+  const cache = await harness.caches.open("waveygist-content-v1");
+  const id = "AbCdEf0123456789";
+  for (const revision of [1, 2, 10]) {
+    await cache.put(`/api/gists/${id}/revisions/${revision}/render`, new Response(JSON.stringify({
+      primary_file: "README.md",
+      files: {
+        "README.md": { content: `# Revision ${revision}\n` },
+        "data sample.json": { content: `{"revision":${revision}}\n` }
+      }
+    })));
+  }
+  async function navigate(path) {
+    let response;
+    harness.listeners.get("fetch")({
+      request: { method: "GET", mode: "navigate", url: `https://gist.wavey.info/${id}${path}` },
+      respondWith(value) { response = value; },
+      waitUntil() {}
+    });
+    return response;
+  }
+  const pinned = await navigate("/revisions/2/raw/data%20sample.json");
+  assert.equal(pinned.status, 200);
+  assert.equal(pinned.headers.get("content-type"), "text/plain; charset=utf-8");
+  assert.equal(pinned.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(await pinned.text(), '{"revision":2}\n');
+  assert.equal(await (await navigate("/raw")).text(), "# Revision 10\n");
+  assert.equal((await navigate("/revisions/3/raw")).status, 503);
+  assert.equal((await navigate("/raw/missing.json")).status, 404);
+  assert.equal((await navigate("/raw/__proto__")).status, 404);
+});
+
 test("online navigation refreshes unversioned offline-only assets", async () => {
   const harness = workerHarness(async () => new Response("online"));
   let responsePromise;
@@ -340,6 +374,7 @@ test("online navigation refreshes unversioned offline-only assets", async () => 
     "/offline-shell.html",
     "/offline-shell.css",
     "/offline-shell.js",
+    "/standalone-navigation.mjs",
     "/icons/icon-192.png",
     "/icons/icon-512.png"
   ]);

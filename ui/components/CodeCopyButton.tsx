@@ -7,10 +7,9 @@ type Props = {
   content: string;
   label: string;
   className?: string;
-  compact?: boolean;
 };
 
-export function CodeCopyButton({ content, label, className = "code-copy-button", compact = false }: Props) {
+export function CodeCopyButton({ content, label, className = "code-copy-button" }: Props) {
   const [status, setStatus] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const attempt = useRef(0);
@@ -34,11 +33,10 @@ export function CodeCopyButton({ content, label, className = "code-copy-button",
   return (
     <span className="code-copy-control" data-feedback={status ? "true" : undefined}>
       <button type="button" className={className} aria-label={label}
-        title={status || "Copy code"} onClick={() => void copy()}>
+        title={status || label} onClick={() => void copy()}>
         {status === "Copied" ? <Check aria-hidden="true" size={16} strokeWidth={1.8} /> : <Copy aria-hidden="true" size={16} strokeWidth={1.8} />}
-        {compact ? <span>{status === "Copied" ? "Copied" : status ? "Copy failed" : "Copy"}</span> : null}
       </button>
-      <span className={compact ? "sr-only" : "code-copy-status"} role="status">{status}</span>
+      <span className={status && status !== "Copied" ? "code-copy-status" : "sr-only"} role="status">{status}</span>
     </span>
   );
 }

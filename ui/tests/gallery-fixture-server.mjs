@@ -21,7 +21,12 @@ const highlightedCode = `<div class="highlight highlight-source-js" dir="auto"><
 const longPatchLine = `+MIN_A: constant(uint256) = ${"N_CONS*N_CONS*".repeat(24)}`;
 const highlightedPatch = `<div class="highlight highlight-source-diff" dir="auto"><pre>diff --git a/example.vy b/example.vy\n<span class="pl-mi1">${longPatchLine}</span></pre></div>`;
 const filesFor = (id) =>
-  id === "GalleryReading01"
+  id === "GalleryRawFiles01"
+    ? {
+        "README.md": '<h1>Raw files</h1><p><a href="/GalleryRawFiles01/revisions/1/raw/data%20sample.json">JSON source</a></p>',
+        "data sample.json": '<pre>{"message":"Raw stays raw"}</pre>'
+      }
+    : id === "GalleryReading01"
     ? { "README.md": readFileSync(new URL("./fixtures/reading.html", import.meta.url), "utf8") }
     : id.startsWith("GalleryAudio")
     ? { "README.md": `<h1>Audio article</h1>${"<p>Keep reading this article while its narration plays.</p>".repeat(100)}` }
@@ -56,15 +61,16 @@ export function fixture(id, revision = 1) {
       filename,
       {
         filename,
-        kind: filename.endsWith(".patch") ? "source" : "markdown",
-        language: filename.endsWith(".patch") ? "diff" : "markdown",
-        content: filename.endsWith(".patch") ? `diff --git a/example.vy b/example.vy\n${longPatchLine}\n` :
+        kind: /\.(patch|json)$/.test(filename) ? "source" : "markdown",
+        language: filename.endsWith(".patch") ? "diff" : filename.endsWith(".json") ? "json" : "markdown",
+        content: filename.endsWith(".json") ? '{"message":"Raw stays raw"}\n' :
+          filename.endsWith(".patch") ? `diff --git a/example.vy b/example.vy\n${longPatchLine}\n` :
           id === "GalleryCodeWrap01" ? `# Code wrapping\n\n\`\`\`js\n${longCodeLine}\n\`\`\`` :
           `# Gallery\n\n[Photo](${image(1)}#wg-gallery=album)`,
         rendered_html,
         content_sha256: "b".repeat(64),
         byte_size: 100,
-        raw_url: `/${id}/raw`
+        raw_url: `/${id}/revisions/${revision}/raw/${encodeURIComponent(filename)}`
       }
     ])
   );

@@ -28,6 +28,7 @@ test("writes to the real clipboard from a keyboard activation", async ({ page, c
   await block.getByRole("button", { name: "Copy code block 1" }).focus();
   await page.keyboard.press("Enter");
   await expect(block.getByRole("status")).toHaveText("Copied");
+  await expect(block.getByRole("status")).toHaveClass("sr-only");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await block.locator("pre").textContent());
 });
 
@@ -153,11 +154,13 @@ test("keeps the source file control in its file header", async ({ page }) => {
   await expect(page.locator(".code-wrap-block pre")).toHaveCSS("white-space", "pre");
   await panel.getByRole("button", { name: "Collapse twocrypto-math.patch" }).click();
   const copy = panel.getByRole("button", { name: "Copy twocrypto-math.patch", exact: true });
+  await expect(copy).toHaveText("");
   await copy.click();
-  await expect(copy).toHaveText("Copied");
+  await expect(copy).toHaveText("");
+  await expect(copy.locator("svg.lucide-check")).toBeVisible();
   await page.evaluate(() => localStorage.setItem("test-deny-copy", "true"));
   await copy.click();
-  await expect(copy).toHaveText("Copy failed");
+  await expect(copy).toHaveText("");
   await expect(panel.getByRole("status")).toContainText("Select the code");
   await panel.getByRole("button", { name: "Expand twocrypto-math.patch" }).click();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
