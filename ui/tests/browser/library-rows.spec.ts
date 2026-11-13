@@ -84,7 +84,8 @@ test("my gists show the author avatar too", async ({ page, context }) => {
   await expect(row.locator(".library-byline-name")).toHaveText("Review Agent");
 });
 
-test("swiping a row reveals Remove and waits for a tap to confirm", async ({ page, context }) => {
+test("swiping a row reveals Remove and waits for a tap to confirm", async ({ page, context, browserName }) => {
+  test.skip(browserName !== "chromium", "Touch is driven through CDP, which only Chromium has");
   await page.setViewportSize({ width: 390, height: 844 });
   await seedRecent(page);
   const library = page.getByRole("region", { name: "Library" });
@@ -119,7 +120,8 @@ test("swiping a row reveals Remove and waits for a tap to confirm", async ({ pag
   await expect(library.getByRole("link", { name: /Long read/ })).toHaveCount(0);
 });
 
-test("an open row closes when another part of the page is touched", async ({ page, context }) => {
+test("an open row closes when another part of the page is touched", async ({ page, context, browserName }) => {
+  test.skip(browserName !== "chromium", "Touch is driven through CDP, which only Chromium has");
   await page.setViewportSize({ width: 390, height: 844 });
   await seedRecent(page);
   const item = page.getByRole("region", { name: "Library" }).locator(".library-item").first();
