@@ -492,3 +492,12 @@ test("the player has a close button that clears it and stops playback", async ({
   await expect(page.getByRole("button", { name: "Play article audio", exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => Array.from(document.querySelectorAll("audio")).every((node) => node.paused))).toBe(true);
 });
+
+test("the diff view keeps the audio control", async ({ page }) => {
+  await page.route("**/narration", route => route.fulfill({ json: ready }));
+  await page.goto(`/${id}/diff/1..2`);
+  await expect(page.locator(".diff-viewer")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Play article audio", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View files" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View revision history" })).toBeVisible();
+});

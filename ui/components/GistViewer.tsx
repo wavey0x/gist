@@ -303,8 +303,7 @@ export function GistViewer({
   const rawIsVisible = viewMode === "raw" && Boolean(singleFile);
   const narrationIsActive =
     canUseNarration &&
-    !customContent &&
-    (viewMode === "files" || rawIsVisible) &&
+    (viewMode === "files" || viewMode === "custom" || rawIsVisible) &&
     primaryFile?.kind === "markdown";
 
   function historyDiffUrl(item: RevisionHistoryItem) {

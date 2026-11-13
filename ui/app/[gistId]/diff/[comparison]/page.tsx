@@ -10,6 +10,7 @@ import {
   fetchPublicGistPayload
 } from "../../../../lib/gists";
 import { buildGistMetadata } from "../../../../lib/gist-metadata";
+import { fetchCurrentSession } from "../../../../lib/auth";
 import { getSiteChromeConfig } from "../../../../lib/site-config";
 
 export const dynamic = "force-dynamic";
@@ -76,9 +77,10 @@ export default async function GistRevisionDiffPage({ params }: PageProps) {
     notFound();
   }
 
-  const [fromRevision, toRevision] = await Promise.all([
+  const [fromRevision, toRevision, session] = await Promise.all([
     fetchPublicGist(gistId, String(revisions.fromRevisionNumber)),
-    fetchPublicGist(gistId, String(revisions.toRevisionNumber))
+    fetchPublicGist(gistId, String(revisions.toRevisionNumber)),
+    fetchCurrentSession()
   ]);
 
   const chrome = getSiteChromeConfig();
@@ -86,6 +88,7 @@ export default async function GistRevisionDiffPage({ params }: PageProps) {
   return (
     <main className="page-shell">
       <GistViewer
+        canUseNarration={session?.can_generate_audio === true}
         chrome={chrome}
         gist={toRevision}
         customDiffFromRevisionNumber={fromRevision.revision_number}
