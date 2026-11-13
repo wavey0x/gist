@@ -2098,8 +2098,16 @@ input:disabled {
   border-bottom-color: var(--line-strong);
   background: var(--selected);
   color: var(--ink);
-  font-size: inherit;
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Column labels are captions: they wrap into even lines and rest on the
+   bottom edge, directly above their data. Row headers stay with their row. */
+.markdown-body table thead th {
+  vertical-align: bottom;
+  text-wrap: balance;
 }
 
 .markdown-body table th:not([align], [style]) {
