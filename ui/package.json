@@ -11,7 +11,8 @@
     "test:mermaid": "node --test tests/mermaid-theme.test.mjs",
     "typecheck": "tsc --noEmit",
     "test:gallery": "node --test tests/gallery.test.mjs",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:design": "node --test tests/design-tokens.test.mjs"
   },
   "dependencies": {
     "diff": "^9.0.0",

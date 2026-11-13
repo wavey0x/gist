@@ -3,7 +3,6 @@
 import { refreshListenQueue } from "../lib/listen-queue";
 import {
   Check,
-  Moon,
   Pause,
   Play,
   RotateCcw,
@@ -25,7 +24,6 @@ import {
   seek,
   selectPlaybackRate,
   skip,
-  cycleSleepTimer,
   togglePlayback,
   useAudioEngine,
   type AudioTrack
@@ -627,22 +625,6 @@ export function ArticleAudio({
               >
                 {formatPlaybackTime(duration)}
               </span>
-            </div>
-            <div className="article-audio-extras">
-              <button
-                type="button"
-                className="article-audio-sleep-button"
-                aria-label={
-                  engine.sleepMinutes
-                    ? `Sleep timer ${engine.sleepMinutes} minutes`
-                    : "Sleep timer off"
-                }
-                title="Sleep timer"
-                onClick={cycleSleepTimer}
-              >
-                <Moon aria-hidden="true" size={13} strokeWidth={1.8} />
-                <span>{engine.sleepMinutes ? `${engine.sleepMinutes}m` : "Off"}</span>
-              </button>
             </div>
             {engine.message || engine.buffering ? (
               <span className="article-audio-playback-error" role="status">

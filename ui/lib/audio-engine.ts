@@ -33,8 +33,6 @@ export type AudioEngineState = {
   duration: number;
   playbackRate: number;
   message: string;
-  sleepEndsAt: number | null;
-  sleepMinutes: number | null;
 };
 
 type SourceSwap = {
@@ -48,7 +46,6 @@ type NavigatorWithAudioSession = Navigator & {
 };
 
 export const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2] as const;
-export const SLEEP_MINUTES = [15, 30, 60] as const;
 export const POSITION_KEY_PREFIX = "waveygist:audio-position:v1:";
 
 const PLAYBACK_RATE_STORAGE_KEY = "waveygist:audio-rate:v1";
@@ -63,9 +60,7 @@ const INITIAL_STATE: AudioEngineState = {
   currentTime: 0,
   duration: 0,
   playbackRate: 1,
-  message: "",
-  sleepEndsAt: null,
-  sleepMinutes: null
+  message: ""
 };
 
 let state = INITIAL_STATE;
@@ -435,10 +430,6 @@ function handleTimeUpdate() {
   }
   update({ currentTime: audio.currentTime });
   persistPosition();
-  if (state.sleepEndsAt !== null && Date.now() >= state.sleepEndsAt) {
-    update({ sleepEndsAt: null, sleepMinutes: null });
-    pausePlayback();
-  }
 }
 
 function handleEnded() {
@@ -718,7 +709,7 @@ export function closePlayer() {
   if (audio) {
     audio.preload = "metadata";
   }
-  update({ opened: false, sleepEndsAt: null, sleepMinutes: null });
+  update({ opened: false });
   syncMediaMetadata();
 }
 
@@ -893,13 +884,4 @@ export function playNext() {
   if (track) {
     openTrack(track);
   }
-}
-
-export function cycleSleepTimer() {
-  const index = SLEEP_MINUTES.findIndex((minutes) => minutes === state.sleepMinutes);
-  const minutes = SLEEP_MINUTES[index + 1] ?? null;
-  update({
-    sleepMinutes: minutes,
-    sleepEndsAt: minutes === null ? null : Date.now() + minutes * 60 * 1000
-  });
 }

@@ -5,6 +5,7 @@ import { AppHeader } from "../components/AppHeader";
 import { MiniPlayer } from "../components/MiniPlayer";
 import { PwaRuntime } from "../components/PwaRuntime";
 import { resolveApiBaseUrl } from "../lib/api-base";
+import { THEME_COLORS } from "../lib/theme-color";
 
 const LAUNCH_SCREENS = [
   [375, 667, 2],
@@ -78,16 +79,16 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d1117" }
+    { media: "(prefers-color-scheme: light)", color: THEME_COLORS.light },
+    { media: "(prefers-color-scheme: dark)", color: THEME_COLORS.dark }
   ]
 };
 
 // Painted before any stylesheet so launching never flashes the wrong color.
 const launchBackground =
-  "html{background:#fff}" +
-  "@media (prefers-color-scheme:dark){html:not([data-theme=light]){background:#0d1117}}" +
-  "html[data-theme=dark]{background:#0d1117}";
+  `html{background:${THEME_COLORS.light}}` +
+  `@media (prefers-color-scheme:dark){html:not([data-theme=light]){background:${THEME_COLORS.dark}}}` +
+  `html[data-theme=dark]{background:${THEME_COLORS.dark}}`;
 
 const themeScript = `
 (() => {

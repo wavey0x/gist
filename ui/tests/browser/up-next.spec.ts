@@ -93,6 +93,29 @@ test("the queue can be reordered from the grip", async ({ page }) => {
   await expect(upNext.locator(".up-next-title").first()).toHaveText("Second listen");
 });
 
+test("tapping the grip opens a menu that reorders without dragging", async ({ page }) => {
+  const queue = await mockQueue(page, [
+    item("QueueFirst000001", "First listen"),
+    item("QueueSecond00001", "Second listen"),
+    item("QueueThird000001", "Third listen")
+  ]);
+  await page.goto("/");
+  const upNext = page.getByRole("region", { name: "Playlist" });
+  await upNext.getByRole("button", { name: "Reorder Third listen" }).click();
+  const menu = upNext.getByRole("menu", { name: "Move Third listen" });
+  await expect(menu.getByRole("menuitem", { name: "Move down" })).toBeDisabled();
+  await menu.getByRole("menuitem", { name: "Move to top" }).click();
+  await expect.poll(() => queue.puts.at(-1)).toEqual([
+    "QueueThird000001", "QueueFirst000001", "QueueSecond00001"
+  ]);
+  await expect(menu).toBeHidden();
+
+  await upNext.getByRole("button", { name: "Reorder First listen" }).click();
+  await expect(upNext.getByRole("menu")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(upNext.getByRole("menu")).toBeHidden();
+});
+
 test("playing an article puts it at the front of up next", async ({ page }) => {
   const queue = await mockQueue(page, [item("QueueFirst000001", "First listen")]);
   await page.route(`**${endpoint}`, (route) =>

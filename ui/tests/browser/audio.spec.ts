@@ -152,7 +152,7 @@ test("ready during an older sync triggers a fresh manifest and waits for the act
   }
 });
 
-test("the button moves from blue waiting to green ready and only opens on click", async ({ page }, testInfo) => {
+test("the button moves from a waiting spinner to a ready dot and only opens on click", async ({ page }, testInfo) => {
   let requested = false;
   let done = false;
   let posts = 0;
@@ -171,10 +171,11 @@ test("the button moves from blue waiting to green ready and only opens on click"
     // Even a former notification URL must leave the player closed.
     await page.goto(`/${id}?audio=ready`);
     await expect(button).toHaveAttribute("aria-label", "Checking article audio");
-    await expect(button).toHaveCSS("animation-name", "article-audio-wait-pulse");
-    await expect(button).toHaveCSS("animation-duration", "2s");
+    // Waiting is the spinner alone; the button itself never pulses or glows.
+    await expect(page.locator(".article-audio-spinner")).toBeVisible();
+    await expect(button).toHaveCSS("animation-name", "none");
     await expect(button).toBeDisabled();
-    // The button matches the 34px toolbar buttons on every device (a76265f).
+    // The button keeps the shared toolbar button size in every state.
     const size = await button.boundingBox();
     await expect(player).toHaveCount(0);
     initial.release();
@@ -184,7 +185,7 @@ test("the button moves from blue waiting to green ready and only opens on click"
     await expect(button).toHaveCSS("outline-style", "solid");
     await button.press("Enter");
     await expect(button).toHaveAttribute("aria-label", "Preparing article audio");
-    await expect(button).toHaveCSS("animation-name", "article-audio-wait-pulse");
+    await expect(page.locator(".article-audio-spinner")).toBeVisible();
     await expect(page.locator(".article-audio-overlay")).toHaveCount(0);
     await expect(page.locator(".article-audio-message")).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("audio-waiting.png") });
@@ -286,15 +287,12 @@ test("an unplayable local copy falls back to the stream at the same state", asyn
   expect(await audio.evaluate((node: HTMLAudioElement) => node.error)).toBeNull();
 });
 
-test("audio keeps playing across pages with a mini-player and a sleep timer", async ({ page }) => {
+test("audio keeps playing across pages with a mini-player", async ({ page }) => {
   await page.route(`**${endpoint}`, (route) => route.fulfill({ json: ready }));
   await page.goto(`/${id}`);
   await page.getByRole("button", { name: "Play article audio" }).click();
   const audio = page.locator("audio");
   await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
-  const sleep = page.getByRole("button", { name: "Sleep timer off" });
-  await sleep.click();
-  await expect(page.getByRole("button", { name: "Sleep timer 15 minutes" })).toBeVisible();
   await page.locator(".app-brand").click();
   await expect(page).toHaveURL(/\/$/);
   const mini = page.getByRole("complementary", { name: "Now playing" });

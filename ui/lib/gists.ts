@@ -129,6 +129,14 @@ function lazyLoadImages(html: string) {
   );
 }
 
+// Wide tables scroll inside their own box instead of crushing their columns.
+// The offline shell applies the same wrapper in offline-shell.js.
+export function wrapTables(html: string) {
+  return html
+    .replace(/<table(?=[\s>])/gi, '<div class="table-scroll"><table')
+    .replace(/<\/table>/gi, "</table></div>");
+}
+
 export function normalizePublicGistPayload(
   gistId: string,
   payload: unknown
@@ -177,7 +185,13 @@ export function normalizePublicGistPayload(
   const files = Object.fromEntries(
     Object.entries(gist.files as PublicGistPayload["files"]).map(([filename, file]) => [
       filename,
-      { ...file, rendered_html: lazyLoadImages(file.rendered_html) }
+      {
+        ...file,
+        rendered_html:
+          file.kind === "markdown"
+            ? wrapTables(lazyLoadImages(file.rendered_html))
+            : lazyLoadImages(file.rendered_html)
+      }
     ])
   );
   return { ...gist, files } as PublicGistPayload;

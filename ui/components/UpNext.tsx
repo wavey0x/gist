@@ -27,7 +27,10 @@ import { readRecentlyViewedGists } from "../lib/recent-viewed";
 import { SwipeRow } from "./SwipeRow";
 
 const COLLAPSED_COUNT = 4;
-const ROW_HEIGHT = 50;
+// Must match .up-next-row in app.css.
+const ROW_HEIGHT = 56;
+// A press that moves less than this is a tap, which opens the reorder menu.
+const TAP_SLOP = 5;
 const UNDO_MS = 5000;
 const SEED_KEY = "waveygist:listen-queue-seeded:v1";
 
@@ -131,6 +134,9 @@ export function UpNext() {
     startY: number;
     offset: number;
   } | null>(null);
+  // Dragging alone leaves some people unable to reorder, so a tap on the handle
+  // offers the same moves as a menu.
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const undoTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -160,6 +166,25 @@ export function UpNext() {
         duration: engine.duration
       }
     : null;
+
+  useEffect(() => {
+    if (!menuFor) return;
+    function close(event: Event) {
+      if (event instanceof KeyboardEvent) {
+        if (event.key === "Escape") setMenuFor(null);
+        return;
+      }
+      if (!(event.target as HTMLElement).closest?.(".up-next-menu, .up-next-grip")) {
+        setMenuFor(null);
+      }
+    }
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [menuFor]);
 
   const rows = useMemo(
     () =>
@@ -234,10 +259,17 @@ export function UpNext() {
 
   function endDrag(event: PointerEvent<HTMLButtonElement>, cancelled: boolean) {
     if (!drag || drag.pointerId !== event.pointerId) return;
-    if (!cancelled && dragTarget !== drag.from) {
+    if (!cancelled && Math.abs(drag.offset) < TAP_SLOP) {
+      setMenuFor(menuFor === drag.gistId ? null : drag.gistId);
+    } else if (!cancelled && dragTarget !== drag.from) {
       moveQueueItem(drag.gistId, dragTarget);
     }
     setDrag(null);
+  }
+
+  function moveFromMenu(gistId: string, target: number) {
+    moveQueueItem(gistId, target);
+    setMenuFor(null);
   }
 
   function shiftFor(index: number) {
@@ -296,13 +328,18 @@ export function UpNext() {
                         type="button"
                         className="up-next-grip"
                         aria-label={`Reorder ${item.title}`}
+                        aria-haspopup="menu"
+                        aria-expanded={menuFor === item.gist_id}
                         data-no-swipe
                         onPointerDown={(event) => startDrag(event, item.gist_id, index)}
                         onPointerMove={moveDrag}
                         onPointerUp={(event) => endDrag(event, false)}
                         onPointerCancel={(event) => endDrag(event, true)}
                         onKeyDown={(event) => {
-                          if (event.key === "ArrowUp" && index > 0) {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setMenuFor(menuFor === item.gist_id ? null : item.gist_id);
+                          } else if (event.key === "ArrowUp" && index > 0) {
                             event.preventDefault();
                             moveQueueItem(item.gist_id, index - 1);
                           } else if (event.key === "ArrowDown" && index < rows.length - 1) {
@@ -356,6 +393,37 @@ export function UpNext() {
                     />
                   ) : null}
                 </SwipeRow>
+                {menuFor === item.gist_id ? (
+                  <div className="up-next-menu popover" role="menu" aria-label={`Move ${item.title}`}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="popover-item"
+                      disabled={index === 0}
+                      onClick={() => moveFromMenu(item.gist_id, 0)}
+                    >
+                      Move to top
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="popover-item"
+                      disabled={index === 0}
+                      onClick={() => moveFromMenu(item.gist_id, index - 1)}
+                    >
+                      Move up
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="popover-item"
+                      disabled={index === rows.length - 1}
+                      onClick={() => moveFromMenu(item.gist_id, index + 1)}
+                    >
+                      Move down
+                    </button>
+                  </div>
+                ) : null}
               </li>
             );
           })}

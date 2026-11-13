@@ -1,4 +1,7 @@
 /*
+ * Surfaces, text and borders come from the foundations in app.css, so articles
+ * cannot drift from the app. Content colors (syntax, alerts) stay their own.
+ *
  * Keep github-markdown-css tied to the app theme, not to OS
  * prefers-color-scheme. The upstream stylesheet places these variables inside
  * media queries, so light mode can otherwise inherit dark Markdown table/code
@@ -7,24 +10,24 @@
 
 :root[data-theme="light"] .markdown-body {
   color-scheme: light;
-  --fgColor-accent: #0969da;
+  --fgColor-accent: var(--link);
   --fgColor-attention: #9a6700;
   --fgColor-danger: #d1242f;
-  --fgColor-default: #1f2328;
+  --fgColor-default: var(--text);
   --fgColor-done: #8250df;
-  --fgColor-muted: #59636e;
+  --fgColor-muted: var(--muted);
   --fgColor-success: #1a7f37;
   --bgColor-attention-muted: #fff8c5;
   --bgColor-danger-muted: #ffebe9;
-  --bgColor-default: #ffffff;
-  --bgColor-muted: #f6f8fa;
-  --bgColor-neutral-muted: #818b981f;
-  --borderColor-accent-emphasis: #0969da;
+  --bgColor-default: var(--bg);
+  --bgColor-muted: var(--inset);
+  --bgColor-neutral-muted: var(--hover);
+  --borderColor-accent-emphasis: var(--link);
   --borderColor-attention-emphasis: #9a6700;
   --borderColor-danger-emphasis: #cf222e;
-  --borderColor-default: #d1d9e0;
+  --borderColor-default: var(--line);
   --borderColor-done-emphasis: #8250df;
-  --borderColor-muted: #d1d9e0b3;
+  --borderColor-muted: var(--line-soft);
   --borderColor-neutral-muted: var(--borderColor-muted);
   --borderColor-success-emphasis: #1a7f37;
   --focus-outlineColor: var(--borderColor-accent-emphasis);
@@ -67,24 +70,24 @@
 
 :root[data-theme="dark"] .markdown-body {
   color-scheme: dark;
-  --fgColor-accent: #4493f8;
+  --fgColor-accent: var(--link);
   --fgColor-attention: #d29922;
   --fgColor-danger: #f85149;
-  --fgColor-default: #f0f6fc;
+  --fgColor-default: var(--text);
   --fgColor-done: #ab7df8;
-  --fgColor-muted: #9198a1;
+  --fgColor-muted: var(--muted);
   --fgColor-success: #3fb950;
   --bgColor-attention-muted: #bb800926;
   --bgColor-danger-muted: #67060c;
-  --bgColor-default: #0d1117;
-  --bgColor-muted: #151b23;
-  --bgColor-neutral-muted: #656c7633;
-  --borderColor-accent-emphasis: #1f6feb;
+  --bgColor-default: var(--bg);
+  --bgColor-muted: var(--inset);
+  --bgColor-neutral-muted: var(--hover);
+  --borderColor-accent-emphasis: var(--link);
   --borderColor-attention-emphasis: #9e6a03;
   --borderColor-danger-emphasis: #da3633;
-  --borderColor-default: #3d444d;
+  --borderColor-default: var(--line);
   --borderColor-done-emphasis: #8957e5;
-  --borderColor-muted: #3d444db3;
+  --borderColor-muted: var(--line-soft);
   --borderColor-neutral-muted: var(--borderColor-muted);
   --borderColor-success-emphasis: #238636;
   --focus-outlineColor: var(--borderColor-accent-emphasis);
