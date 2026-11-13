@@ -75,6 +75,22 @@ let playAttempt = 0;
 let networkInterrupted = false;
 let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
 let recoveryAttempts = 0;
+// True from a recovery attempt until audio is actually playing again. A reload
+// that fails while the network is still down reports "source not supported",
+// not a network error, and must not end the recovery.
+let recovering = false;
+// About five minutes of backoff before asking the listener to step in.
+const MAX_RECOVERY_ATTEMPTS = 12;
+let copyRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let copyRetryAttempts = 0;
+const MAX_COPY_RETRIES = 8;
+// A next-track download still in flight when that track starts. The track
+// finishes it instead of starting the same download again.
+let handedDownload: {
+  key: string;
+  controller: AbortController;
+  promise: Promise<Blob | null>;
+} | null = null;
 let localCopy: {
   generation: number;
   loading: Promise<void> | null;
@@ -360,6 +376,7 @@ function element() {
   });
   created.addEventListener("playing", () => {
     networkInterrupted = false;
+    recovering = false;
     clearNetworkRecovery();
     recoveryAttempts = 0;
     update({ buffering: false, message: "" });
@@ -389,7 +406,16 @@ function element() {
   });
   refreshCachedQueueTracks();
   window.addEventListener("pagehide", () => persistPosition(true));
-  window.addEventListener("online", recoverNetworkPlayback);
+  window.addEventListener("online", () => {
+    recoverNetworkPlayback();
+    // Even a stream that is still playing from its buffer should get its
+    // in-memory copy as soon as the connection is back.
+    if (state.opened) {
+      copyRetryAttempts = 0;
+      void ensureLocalCopy(true);
+      void prepareNextRecording();
+    }
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       adoptLocalCopy();
@@ -447,7 +473,14 @@ function handleEnded() {
   playNext();
 }
 
+function clearCopyRetry() {
+  if (copyRetryTimer !== null) clearTimeout(copyRetryTimer);
+  copyRetryTimer = null;
+}
+
 function releaseLocalCopy() {
+  clearCopyRetry();
+  copyRetryAttempts = 0;
   for (const url of [localCopy.url, localCopy.pendingUrl]) {
     if (url) URL.revokeObjectURL(url);
   }
@@ -488,13 +521,34 @@ function ensureLocalCopy(download: boolean) {
       () => null
     );
     if (!blob && download) {
-      blob = await downloadNarrationBlob(track.url).catch(() => null);
+      const handed =
+        handedDownload?.key === trackKey(track.gistId, track.revisionNumber)
+          ? handedDownload
+          : null;
+      if (handed) {
+        blob = await handed.promise.catch(() => null);
+        if (handedDownload === handed) handedDownload = null;
+      }
+      if (!blob && generation === localCopy.generation) {
+        blob = await downloadNarrationBlob(track.url).catch(() => null);
+      }
     }
     if (generation !== localCopy.generation) {
       return;
     }
     localCopy.loading = null;
+    if (!blob && download && state.opened && copyRetryAttempts < MAX_COPY_RETRIES) {
+      // The connection may be down or flaky. Keep trying in the background so
+      // playback stops depending on the network as soon as it can.
+      clearCopyRetry();
+      const delay = Math.min(30_000, 2_000 * 2 ** Math.min(copyRetryAttempts++, 4));
+      copyRetryTimer = setTimeout(() => {
+        copyRetryTimer = null;
+        if (state.opened && generation === localCopy.generation) void ensureLocalCopy(true);
+      }, delay);
+    }
     if (blob) {
+      copyRetryAttempts = 0;
       localCopy.pendingUrl = URL.createObjectURL(
         blob.type ? blob : new Blob([blob], { type: "audio/mpeg" })
       );
@@ -548,7 +602,19 @@ function handleAudioError() {
       adoptLocalCopy(true);
       return;
     }
-    networkInterrupted = playbackWanted && audio.error?.code === MediaError.MEDIA_ERR_NETWORK;
+    if (networkInterrupted && recoveryTimer !== null) {
+      // Already waiting to retry; play() rejecting and the error event both
+      // report the same failure.
+      return;
+    }
+    const exhausted = recoveryAttempts >= MAX_RECOVERY_ATTEMPTS;
+    networkInterrupted =
+      playbackWanted && !exhausted && (
+        audio.error?.code === MediaError.MEDIA_ERR_NETWORK ||
+        recovering ||
+        !navigator.onLine
+      );
+    if (!networkInterrupted) recovering = false;
     update({
       playing: networkInterrupted,
       buffering: networkInterrupted,
@@ -576,10 +642,12 @@ function setSource(track: AudioTrack) {
   persistPosition(true);
   playbackWanted = false;
   networkInterrupted = false;
+  recovering = false;
   clearNetworkRecovery();
   recoveryAttempts = 0;
   ++playAttempt;
   releaseLocalCopy();
+  releaseHandedDownload();
   lastSavedTime = 0;
   positionRestored = false;
   update({ track, currentTime: 0, duration: 0, playing: false, buffering: false, message: "" });
@@ -633,6 +701,7 @@ async function playAudio(failureMessage = "Audio could not be played.") {
 function pausePlayback() {
   playbackWanted = false;
   networkInterrupted = false;
+  recovering = false;
   clearNetworkRecovery();
   ++playAttempt;
   audio?.pause();
@@ -644,6 +713,8 @@ function pausePlayback() {
 function recoverNetworkPlayback() {
   if (networkInterrupted && playbackWanted) {
     void playAudio();
+    // Set after playAudio, which starts every attempt from a clean slate.
+    recovering = true;
     void ensureLocalCopy(true);
   }
 }
@@ -707,7 +778,9 @@ export function openTrack(track: AudioTrack) {
 
 export function closePlayer() {
   pausePlayback();
+  clearCopyRetry();
   releasePreparedRecording();
+  releaseHandedDownload();
   if (audio) {
     audio.preload = "metadata";
   }
@@ -806,7 +879,7 @@ let preparedRecording: {
   key: string;
   blob: Blob | null;
   controller: AbortController;
-  loading: Promise<void> | null;
+  loading: Promise<Blob | null> | null;
 } | null = null;
 
 function releasePreparedRecording() {
@@ -814,11 +887,30 @@ function releasePreparedRecording() {
   preparedRecording = null;
 }
 
+function releaseHandedDownload() {
+  handedDownload?.controller.abort();
+  handedDownload = null;
+}
+
 function takePreparedRecording(track: AudioTrack) {
-  const blob = preparedRecording?.key === trackKey(track.gistId, track.revisionNumber)
-    ? preparedRecording.blob : null;
+  const prepared = preparedRecording;
+  if (prepared?.key !== trackKey(track.gistId, track.revisionNumber)) {
+    releasePreparedRecording();
+    return null;
+  }
+  if (!prepared.blob && prepared.loading) {
+    // Still downloading: let it finish for this track instead of aborting it
+    // and fetching the same recording again.
+    handedDownload = {
+      key: prepared.key,
+      controller: prepared.controller,
+      promise: prepared.loading
+    };
+    preparedRecording = null;
+    return null;
+  }
   releasePreparedRecording();
-  return blob;
+  return prepared.blob;
 }
 
 async function prepareNextRecording() {
@@ -830,22 +922,27 @@ async function prepareNextRecording() {
     return;
   }
   const key = trackKey(next.gistId, next.revisionNumber);
-  if (preparedRecording?.key === key) return preparedRecording.loading;
+  // A download that failed earlier is tried again; one that is running or
+  // finished is left alone.
+  if (preparedRecording?.key === key && (preparedRecording.blob || preparedRecording.loading)) {
+    return preparedRecording.loading;
+  }
   releasePreparedRecording();
   const prepared = {
     key,
     blob: null as Blob | null,
     controller: new AbortController(),
-    loading: null as Promise<void> | null
+    loading: null as Promise<Blob | null> | null
   };
   preparedRecording = prepared;
   prepared.loading = (async () => {
     let blob = await cachedNarrationBlob(next.gistId, next.revisionNumber).catch(() => null);
-    if (prepared.controller.signal.aborted) return;
+    if (prepared.controller.signal.aborted) return null;
     if (!blob) blob = await downloadNarrationBlob(next.url, prepared.controller.signal).catch(() => null);
-    if (preparedRecording !== prepared) return;
-    prepared.blob = blob?.type ? blob : blob ? new Blob([blob], { type: "audio/mpeg" }) : null;
+    const typed = blob?.type ? blob : blob ? new Blob([blob], { type: "audio/mpeg" }) : null;
+    prepared.blob = typed;
     prepared.loading = null;
+    return typed;
   })();
   return prepared.loading;
 }

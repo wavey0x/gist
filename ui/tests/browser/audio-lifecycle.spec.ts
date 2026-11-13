@@ -501,3 +501,101 @@ test("the diff view keeps the audio control", async ({ page }) => {
   await expect(page.getByRole("button", { name: "View files" })).toBeVisible();
   await expect(page.getByRole("button", { name: "View revision history" })).toBeVisible();
 });
+
+test("recovery keeps trying when the first reload also fails, then resumes at the same position", async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**${endpoint}/audio`, async route => {
+    if (route.request().resourceType() === "fetch") await gate;
+    await fulfillAudio(route);
+  });
+  try {
+    await start(page);
+    await action(page, "seekto", { seekTime: 12 });
+    await page.clock.install();
+    // The stream drops with a network error. While the connection is still
+    // down, each reload fails the way browsers report it: source not supported.
+    await page.evaluate(() => {
+      const audio = document.querySelector("audio")!;
+      const originalLoad = audio.load.bind(audio);
+      const originalPlay = audio.play.bind(audio);
+      let code = 0;
+      let failingReloads = 2;
+      Object.defineProperty(audio, "error", { get: () => code ? { code } : null });
+      audio.load = () => {
+        if (failingReloads > 0) {
+          failingReloads--;
+          code = 4;
+          return;
+        }
+        code = 0;
+        originalLoad();
+      };
+      audio.play = () => code
+        ? Promise.reject(new DOMException("No supported source", "NotSupportedError"))
+        : originalPlay();
+      Object.assign(window, { dropAudio: () => {
+        code = 2;
+        audio.pause();
+        audio.dispatchEvent(new Event("error"));
+      } });
+    });
+    await page.evaluate(() => (window as unknown as { dropAudio(): void }).dropAudio());
+    const reconnecting = page.getByText("Connection lost. Reconnecting…", { exact: true });
+    await expect(reconnecting).toBeVisible();
+    const element = page.locator("audio");
+    // First and second retries fail; the player must still be trying, not asking for a tap.
+    await page.clock.runFor(2100);
+    await expect(reconnecting).toBeVisible();
+    await expect(page.getByText(/Tap play to retry/)).toHaveCount(0);
+    await page.clock.runFor(4100);
+    await expect(reconnecting).toBeVisible();
+    expect(await page.evaluate(() => navigator.mediaSession.playbackState)).toBe("playing");
+    // The third retry gets through.
+    await page.clock.runFor(8100);
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThanOrEqual(12);
+    await expect(reconnecting).toHaveCount(0);
+  } finally { release(); }
+});
+
+test("a next recording still downloading at handoff is finished, not fetched again", async ({ page }) => {
+  const nextId = "QueueNextAudio01";
+  const entries = [id, nextId].map((gistId, index) => ({
+    gist_id: gistId, title: index ? "Next recording" : "First recording", author_name: "Field Notes",
+    latest_revision_number: 1, revision_number: 1, status: "ready", duration_ms: 40000,
+    audio_url: `/api/gists/${gistId}/revisions/1/narration/audio`, updating: false,
+    added_at: "2026-11-13T12:00:00Z"
+  }));
+  let items = [...entries];
+  await page.route("**/api/me/listen-queue", async route => {
+    if (route.request().method() === "PUT") {
+      items = route.request().postDataJSON().gist_ids.map((gistId: string) => entries.find(item => item.gist_id === gistId));
+    }
+    await route.fulfill({ json: { items } });
+  });
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let nextDownloads = 0;
+  await page.route(`**/api/gists/${nextId}/revisions/1/narration/audio`, async route => {
+    if (route.request().resourceType() === "fetch") {
+      nextDownloads++;
+      await gate;
+    }
+    await fulfillAudio(route);
+  });
+  try {
+    await start(page);
+    await expect.poll(() => nextDownloads).toBe(1);
+    // The first recording ends while the next one is still downloading.
+    await action(page, "seekto", { seekTime: 39.5 });
+    await expect.poll(() => page.evaluate(() => navigator.mediaSession.metadata?.title)).toBe("Next recording");
+    const element = page.locator("audio");
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThan(0);
+    release();
+    // The same download completes and becomes the in-memory copy.
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
+    expect(nextDownloads).toBe(1);
+    expect(await element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+  } finally { release(); }
+});
