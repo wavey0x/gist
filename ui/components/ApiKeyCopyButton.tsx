@@ -47,18 +47,30 @@ export function ApiKeyCopyButton() {
   }
 
   return (
-    <span className="code-copy-control">
+    <div className="settings-row">
+      <div className="settings-row-text">
+        <span className="settings-row-label">API key</span>
+        <span
+          className="settings-row-note"
+          data-tone={error ? "danger" : undefined}
+          role="status"
+        >
+          {error || "Lets your agents publish gists as you. Keep it private."}
+        </span>
+      </div>
       <button
         type="button"
-        className="icon-button api-key-copy-action"
+        className="settings-button api-key-copy-action"
         data-copied={copied ? "true" : "false"}
-        aria-label="Copy API key"
-        title={copied ? "Copied" : "Copy API key"}
         onClick={copyApiKey}
       >
-        {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+        {copied ? (
+          <Check size={15} strokeWidth={1.8} aria-hidden="true" />
+        ) : (
+          <Copy size={15} strokeWidth={1.8} aria-hidden="true" />
+        )}
+        {copied ? "Copied" : "Copy key"}
       </button>
-      <span role="status" className={error ? "code-copy-status" : "sr-only"}>{error || (copied ? "Copied" : "")}</span>
-    </span>
+    </div>
   );
 }

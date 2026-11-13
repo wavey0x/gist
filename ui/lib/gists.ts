@@ -1,3 +1,4 @@
+import { tightenTableCells } from "./table-cells";
 import { notFound } from "next/navigation";
 import { apiUrl } from "./api-base";
 
@@ -179,7 +180,7 @@ export function normalizePublicGistPayload(
       filename,
       {
         ...file,
-        rendered_html: lazyLoadImages(file.rendered_html)
+        rendered_html: tightenTableCells(lazyLoadImages(file.rendered_html))
       }
     ])
   );

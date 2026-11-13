@@ -118,15 +118,13 @@ test.describe("installed app", () => {
     await expect(page.locator(".pull-refresh")).toHaveAttribute("data-state", "idle");
   });
 
-  test("settings refresh keeps open sections and is keyboard accessible", async ({ page, context }) => {
+  test("settings refresh is keyboard accessible", async ({ page, context }) => {
     await context.addCookies([{ name: "wg_session", value: "audio-test", url: "http://127.0.0.1:4310" }]);
     await page.goto("/me");
-    await page.getByText("Stats", { exact: true }).click();
-    const stats = page.locator("details").filter({ hasText: "Stats" });
     const refresh = page.getByRole("button", { name: "Refresh this page" });
     await refresh.focus();
     await refresh.press("Enter");
     await expect(page.locator(".pull-refresh [role=status]")).toHaveText("Updated");
-    await expect(stats).toHaveAttribute("open", "");
+    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   });
 });

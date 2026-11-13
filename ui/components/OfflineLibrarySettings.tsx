@@ -93,6 +93,8 @@ function statusText(summary: OfflineLibrarySummary) {
 
 export function OfflineLibrarySettings() {
   const titleId = useId();
+  const groupId = useId();
+  const limitId = useId();
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [busy, setBusy] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
@@ -152,70 +154,113 @@ export function OfflineLibrarySettings() {
     summary.byteLimit > 0 ? (summary.byteSize / summary.byteLimit) * 100 : 0
   );
 
+  const limitReached =
+    summary.storageFull && summary.targetCount > summary.availableCount;
+  const hasContent = summary.enabled || summary.byteSize > 0;
+
   return (
-    <section className="offline-settings" aria-labelledby={titleId}>
-      <div className="offline-settings-heading">
-        <div className="offline-settings-copy">
-          <h1 id={titleId}>Offline Library</h1>
-          <p>
-            Keep my latest gists, recent reading, and requested audio on this
-            device.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="settings-switch"
-          role="switch"
-          aria-checked={summary.enabled}
-          aria-labelledby={titleId}
-          aria-busy={busy}
-          disabled={busy || !summary.supported}
-          onClick={() => void toggleEnabled()}
-        >
-          <span className="settings-switch-thumb" aria-hidden="true" />
-        </button>
-      </div>
-
-      <p className="offline-settings-status" role="status">
-        {statusText(summary)}
-      </p>
-
-      <div className="offline-storage-summary">
-        <div className="offline-storage-label">
-          <span>{formatBytes(summary.byteSize)}</span>
-          <span>of {limitLabel(summary.byteLimit)}</span>
-        </div>
-        <progress
-          className="offline-storage-meter"
-          max="100"
-          value={progress}
-          aria-label={`${formatBytes(summary.byteSize)} of ${limitLabel(summary.byteLimit)} used`}
-        />
-      </div>
-
-      <div className="offline-settings-actions">
-        <label className="offline-limit-control">
-          <span>Storage limit</span>
-          <select
-            value={summary.byteLimit}
+    <section className="settings-group" aria-labelledby={groupId}>
+      <h2 className="settings-group-label" id={groupId}>
+        Offline
+      </h2>
+      <div className="settings-card">
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <span className="settings-row-label" id={titleId}>
+              Offline library
+            </span>
+            <span className="settings-row-note">
+              Keep your latest gists, recent reading and requested audio on
+              this device.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="settings-switch"
+            role="switch"
+            aria-checked={summary.enabled}
+            aria-labelledby={titleId}
+            aria-busy={busy}
             disabled={busy || !summary.supported}
-            onChange={(event) => void changeLimit(event.currentTarget.value)}
+            onClick={() => void toggleEnabled()}
           >
-            {OFFLINE_BYTE_LIMITS.map((limit) => (
-              <option key={limit} value={limit}>
-                {limitLabel(limit)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          className="offline-clear-button"
-          disabled={busy || summary.byteSize === 0}
-          onClick={() => setClearOpen(true)}
-        >
-          Clear offline content
-        </button>
+            <span className="settings-switch-thumb" aria-hidden="true" />
+          </button>
+        </div>
+
+        {hasContent ? (
+          <>
+            <div className="settings-storage">
+              <div className="settings-row">
+                <div className="settings-row-text">
+                  <span className="settings-row-label" id={limitId}>
+                    Storage
+                  </span>
+                  <span className="settings-row-note">
+                    {formatBytes(summary.byteSize)} of{" "}
+                    {limitLabel(summary.byteLimit)}
+                    {" · "}
+                    <span
+                      className="offline-settings-status"
+                      role="status"
+                      data-tone={limitReached ? "danger" : undefined}
+                    >
+                      {statusText(summary)}
+                    </span>
+                  </span>
+                </div>
+                <select
+                  className="settings-select"
+                  aria-label="Storage limit"
+                  value={summary.byteLimit}
+                  disabled={busy || !summary.supported}
+                  onChange={(event) =>
+                    void changeLimit(event.currentTarget.value)
+                  }
+                >
+                  {OFFLINE_BYTE_LIMITS.map((limit) => (
+                    <option key={limit} value={limit}>
+                      {limitLabel(limit)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <progress
+                className="offline-storage-meter"
+                max="100"
+                value={progress}
+                data-full={limitReached ? "true" : undefined}
+                aria-label={`${formatBytes(summary.byteSize)} of ${limitLabel(summary.byteLimit)} used`}
+              />
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-row-text">
+                <span className="settings-row-label">
+                  Clear offline content
+                </span>
+                <span className="settings-row-note">
+                  Removes everything saved on this device and turns the
+                  library off.
+                </span>
+              </div>
+              <button
+                type="button"
+                className="settings-button"
+                data-tone="danger"
+                aria-label="Clear offline content"
+                disabled={busy || summary.byteSize === 0}
+                onClick={() => setClearOpen(true)}
+              >
+                Clear
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="settings-card-note offline-settings-status" role="status">
+            {statusText(summary)}
+          </p>
+        )}
       </div>
 
       <ConfirmModal

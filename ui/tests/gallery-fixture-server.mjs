@@ -42,6 +42,12 @@ const filesFor = (id) =>
     ? { "README.md": "<h1>Oracle markets</h1><p>Diff fixture.</p>", "calc.py": "<pre>def total(values): ...</pre>" }
     : id === "GalleryDiffProse1"
     ? { "README.md": "<h1>Oracle markets</h1><p>Diff fixture.</p>" }
+    : id === "GalleryTable0001"
+    ? {
+        "README.md": '<h1>Priority actions</h1><div class="table-scroll"><table><thead><tr><th>Priority</th><th>Market</th><th>Metrics</th><th>Recommended steps, in order</th></tr></thead><tbody>' +
+          [1, 2, 3].map((n) => `<tr><td>${n}</td><td><a href="#m${n}">sUSDe-long-v2 — protocol LLv1</a></td><td><strong>Debt:</strong> 1.93m<br><strong>Liq:</strong> $48.07m<br><strong>Oracle:</strong> $1.32m</td><td><strong>1. eDAO:</strong> Set the mint ceiling to zero, burning unused allocation.<br><strong>2. DAO governance, with engineering:</strong> Approve a reviewed replacement addressing pricing, after rechecking feed health and the peg, and monitor independent prices and feed freshness because the bound can mask a depeg.</td></tr>`).join("") +
+          "</tbody></table></div>"
+      }
     : id === "GalleryRawFiles01"
     ? {
         "README.md": '<h1>Raw files</h1><p><a href="/GalleryRawFiles01/revisions/1/raw/data%20sample.json">JSON source</a></p>',

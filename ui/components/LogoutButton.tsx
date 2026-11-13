@@ -47,7 +47,7 @@ export function LogoutButton() {
           }
         }}
       >
-        <button className="account-logout-button" type="submit">
+        <button className="settings-button account-logout-button" type="submit">
           Log out
         </button>
       </form>

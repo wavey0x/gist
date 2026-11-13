@@ -217,20 +217,13 @@ export function AlertSettings({
     }
   }
 
-  if (!settings.available) {
-    return (
-      <section className="alert-settings" aria-labelledby="alert-settings-title">
-        <h1 id="alert-settings-title">Notifications</h1>
-        <p className="alert-status">Not configured.</p>
-      </section>
-    );
-  }
-
   let browserStatus: string | null = "Checking…";
-  if (browserState === "unsupported") {
+  if (!settings.available) {
+    browserStatus = "Not configured.";
+  } else if (browserState === "unsupported") {
     browserStatus = "Not supported in this browser.";
   } else if (browserState === "ios-install") {
-    browserStatus = "Add to Home Screen to enable alerts.";
+    browserStatus = "Add Wavey Gist to your Home Screen to turn on alerts.";
   } else if (browserState === "blocked") {
     browserStatus = "Blocked in system settings.";
   } else if (browserState === "unavailable") {
@@ -238,91 +231,81 @@ export function AlertSettings({
   } else if (browserState === "ready" || browserState === "enabled") {
     browserStatus = null;
   }
+  const enabled = settings.available && browserState === "enabled";
+  const canToggle =
+    settings.available && (browserState === "ready" || browserState === "enabled");
 
   return (
-    <section className="alert-settings" aria-labelledby="alert-settings-title">
-      <div className="alert-settings-heading">
-        <h1 id="alert-settings-title">Notifications</h1>
-      </div>
-
-      <div className="alert-browser-row">
-        <div className="alert-preference-copy">
-          <span className="alert-preference-label">This browser</span>
-          {browserStatus ? (
-            <span className="alert-preference-description">
-              {browserStatus}
+    <section className="settings-group" aria-labelledby="alert-settings-title">
+      <h2 className="settings-group-label" id="alert-settings-title">
+        Notifications
+      </h2>
+      <div className="settings-card">
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <span className="settings-row-label" id="device-alert-label">
+              Notifications on this device
             </span>
-          ) : null}
-        </div>
-        <div className="alert-enrollment">
-          {browserState === "ready" ? (
-            <button
-              className="alert-enrollment-button"
-              type="button"
-              onClick={() => void enableAlerts()}
-              disabled={browserBusy}
-            >
-              {browserBusy ? "Enabling…" : "Enable"}
-            </button>
-          ) : null}
-          {browserState === "enabled" ? (
-            <button
-              className="alert-enrollment-button"
-              type="button"
-              onClick={() => void disableAlerts()}
-              disabled={browserBusy}
-            >
-              {browserBusy ? "Disabling…" : "Disable"}
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {browserState === "enabled" ? (
-        <div className="alert-preferences" aria-label="Alert types">
-          <p className="alert-preferences-title">Notify me when</p>
-          <div className="alert-preference-row">
-            <span
-              className="alert-preference-label"
-              id="new-gist-alert-label"
-            >
-              New gist published
+            <span className="settings-row-note">
+              {browserStatus ??
+                "Get an alert when gists are published or edited."}
             </span>
-            <NotificationSwitch
-              checked={settings.new_gist}
-              disabled={savingSetting !== null}
-              labelId="new-gist-alert-label"
-              saving={savingSetting === "new_gist"}
-              onToggle={() =>
-                void updateSetting("new_gist", !settings.new_gist)
-              }
-            />
           </div>
-          <div className="alert-preference-row">
-            <span
-              className="alert-preference-label"
-              id="edited-gist-alert-label"
-            >
-              Gist edited
-            </span>
-            <NotificationSwitch
-              checked={settings.edited_gist}
-              disabled={savingSetting !== null}
-              labelId="edited-gist-alert-label"
-              saving={savingSetting === "edited_gist"}
-              onToggle={() =>
-                void updateSetting("edited_gist", !settings.edited_gist)
-              }
-            />
-          </div>
+          <NotificationSwitch
+            checked={enabled}
+            disabled={!canToggle || browserBusy}
+            labelId="device-alert-label"
+            saving={browserBusy}
+            onToggle={() => void (enabled ? disableAlerts() : enableAlerts())}
+          />
         </div>
-      ) : null}
 
-      {message ? (
-        <p className="alert-message" role="status" aria-live="polite">
-          {message}
-        </p>
-      ) : null}
+        {enabled ? (
+          <>
+            <div className="settings-row">
+              <div className="settings-row-text">
+                <span className="settings-row-label" id="new-gist-alert-label">
+                  New gist published
+                </span>
+              </div>
+              <NotificationSwitch
+                checked={settings.new_gist}
+                disabled={savingSetting !== null}
+                labelId="new-gist-alert-label"
+                saving={savingSetting === "new_gist"}
+                onToggle={() =>
+                  void updateSetting("new_gist", !settings.new_gist)
+                }
+              />
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-text">
+                <span
+                  className="settings-row-label"
+                  id="edited-gist-alert-label"
+                >
+                  Gist edited
+                </span>
+              </div>
+              <NotificationSwitch
+                checked={settings.edited_gist}
+                disabled={savingSetting !== null}
+                labelId="edited-gist-alert-label"
+                saving={savingSetting === "edited_gist"}
+                onToggle={() =>
+                  void updateSetting("edited_gist", !settings.edited_gist)
+                }
+              />
+            </div>
+          </>
+        ) : null}
+
+        {message ? (
+          <p className="settings-card-note" role="status" aria-live="polite">
+            {message}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 }

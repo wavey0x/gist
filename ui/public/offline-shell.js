@@ -1528,12 +1528,32 @@
     return Array.from({ length: Math.max(1, lines) }, (_, index) => index + 1).join("\n");
   }
 
+  // Mirrors tightenTableCells in lib/table-cells.ts: short table cells keep
+  // their lines whole so a long prose column cannot squeeze them.
+  function tightenTableCells(html) {
+    if (!html || !html.includes("<table")) {
+      return html;
+    }
+    return html.replace(/<(td|th)\b([^>]*)>([\s\S]*?)<\/\1>/gi, (cell, tag, attrs, inner) => {
+      if (/\bclass\s*=/.test(attrs) || /<(?:p|ul|ol|li|pre|div|blockquote|table|img|h[1-6])\b/i.test(inner)) {
+        return cell;
+      }
+      const lines = inner
+        .split(/<br\s*\/?>/i)
+        .map((line) => line.replace(/<[^>]*>/g, "").replace(/&(?:#\d+|#x[\da-f]+|[a-z]+);/gi, "x").trim());
+      if (!lines.some(Boolean) || lines.some((line) => line.length > 18)) {
+        return cell;
+      }
+      return `<${tag}${attrs} class="cell-tight">${inner}</${tag}>`;
+    });
+  }
+
   function fileContent(file, panel = false) {
     if (file.kind === "markdown") {
       const article = element("article", {
         className: panel ? "markdown-body gist-file-markdown" : "markdown-body"
       });
-      article.innerHTML = file.rendered_html;
+      article.innerHTML = tightenTableCells(file.rendered_html);
       return article;
     }
     const codeView = element("div", { className: "gist-code-view" });
