@@ -18,6 +18,36 @@ test("a backend-rendered table keeps its focusable horizontal scroll region", as
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test("tables sit in a rounded frame with a distinct header and faint stripes", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.goto("/GalleryReading01");
+  const frame = page.locator(".markdown-body .table-scroll").first();
+  await expect(frame).toHaveCSS("border-top-left-radius", "8px");
+  await expect(frame).toHaveCSS("border-top-width", "1px");
+  const styles = await frame.evaluate((node) => {
+    const css = (element: Element | null, property: string) =>
+      element ? getComputedStyle(element).getPropertyValue(property) : "";
+    const rows = node.querySelectorAll("tbody tr");
+    return {
+      header: css(node.querySelector("th"), "background-color"),
+      plain: css(rows[0], "background-color"),
+      striped: css(rows[1], "background-color"),
+      lastColumnRight: css(node.querySelector("tr > :last-child"), "border-right-width"),
+      firstColumnRight: css(node.querySelector("tr > :first-child"), "border-right-width"),
+      lastRowBottom: css(rows[rows.length - 1]?.firstElementChild ?? null, "border-bottom-width"),
+      frameWidth: node.getBoundingClientRect().width,
+      tableWidth: node.querySelector("table")!.getBoundingClientRect().width
+    };
+  });
+  expect(styles.header).not.toBe(styles.plain);
+  expect(styles.header).not.toBe(styles.striped);
+  expect(styles.firstColumnRight).toBe("1px");
+  expect(styles.lastColumnRight).toBe("0px");
+  expect(styles.lastRowBottom).toBe("0px");
+  // The frame hugs the table, with no empty strip inside it.
+  expect(Math.abs(styles.frameWidth - styles.tableWidth)).toBeLessThanOrEqual(2);
+});
+
 test("an article uses the full page width, in line with its toolbar", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 860 });
   await page.goto("/GalleryReading01");
