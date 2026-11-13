@@ -51,7 +51,7 @@
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
     monospace;
-  --measure: 70ch;
+  --reading-width: 800px;
   --header-h: 48px;
   color-scheme: light;
 }
@@ -189,7 +189,7 @@ input:disabled {
 .login-form input::placeholder,
 .gist-search-input::placeholder,
 .library-search-input::placeholder {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 /* Floating surfaces are the only elevated things in the app. */
@@ -1115,7 +1115,7 @@ input:disabled {
 .gist-sort-button {
   border: 0;
   background: transparent;
-  color: var(--faint);
+  color: var(--muted);
   padding: 0;
   font: inherit;
   font-size: 12px;
@@ -1440,7 +1440,7 @@ input:disabled {
 }
 
 .gist-date-label {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .gist-date-line-with-tooltip {
@@ -1960,11 +1960,11 @@ input:disabled {
 
 .history-item-date,
 .history-item-latest {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .history-item-availability {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .history-item[aria-disabled="true"],
@@ -2006,9 +2006,10 @@ input:disabled {
   word-break: break-word;
 }
 
-/* Prose holds a readable measure; tables, code and images use the full width. */
-.markdown-body > :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6) {
-  max-width: var(--measure);
+/* Rendered articles share one edge for prose, lists, tables and code.
+   Source files keep the full page width. */
+.markdown-body:not(.gist-code-content) {
+  max-width: var(--reading-width);
 }
 
 .markdown-body :is(h1, h2, h3) {
@@ -2548,7 +2549,7 @@ input:disabled {
 
 .gist-file-meta {
   flex: 0 0 auto;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
 }
@@ -2664,7 +2665,7 @@ button.gist-file-action {
   left: 0;
   min-width: calc(2ch + 6px);
   background: var(--bg);
-  color: var(--faint);
+  color: var(--muted);
   padding: 12px 4px 12px 2px;
   text-align: right;
   user-select: none;
@@ -2909,7 +2910,7 @@ button.gist-file-action {
   min-width: 48px;
   border-right: 1px solid var(--line-soft);
   background: var(--inset);
-  color: var(--faint);
+  color: var(--muted);
   padding: 0 8px;
   text-align: right;
   user-select: none;
@@ -3020,10 +3021,26 @@ button.gist-file-action {
     padding: 10px 16px 20px;
   }
 
-  /* Code needs every column it can get on a phone. */
+  /* Code needs every column it can get on a phone: bleed blocks to the
+     screen edges and line the code up with the prose column. */
   .markdown-body pre,
   .markdown-body .code-wrap-block pre {
     padding: 10px;
+  }
+
+  .markdown-body > pre,
+  .markdown-body > .code-wrap-block {
+    margin-right: -16px;
+    margin-left: -16px;
+    max-width: none;
+  }
+
+  .markdown-body > pre,
+  .markdown-body > .code-wrap-block pre {
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+    padding: 10px 16px;
   }
 
   .markdown-body h1 {
@@ -3431,6 +3448,47 @@ button.gist-file-action {
   font-variant-numeric: tabular-nums;
 }
 
+/* Small phones keep the full title/time row above comfortably sized controls. */
+@media (max-width: 360px) {
+  .mini-player {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .mini-player-title {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    padding: 6px 6px 2px;
+  }
+
+  .mini-player-transport {
+    grid-row: 2;
+  }
+
+  .mini-player-speed {
+    grid-column: 2;
+    grid-row: 2;
+    width: 44px;
+    height: 44px;
+  }
+
+  .mini-player > .mini-player-button {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .mini-player-button {
+    width: 44px;
+  }
+
+  .mini-player-seek {
+    grid-row: 3;
+  }
+
+  body:has(.mini-player) {
+    --mini-player-space: 156px;
+  }
+}
+
 .gist-updated-dot {
   display: inline-block;
   flex: none;
@@ -3443,7 +3501,7 @@ button.gist-file-action {
 }
 
 body:has(.mini-player) {
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 112px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mini-player-space, 112px));
 }
 
 /* Home: Up next + Library */
@@ -3647,7 +3705,7 @@ body:has(.mini-player) {
 }
 
 .up-next-tag-muted {
-  color: var(--faint);
+  color: var(--muted);
   font-weight: 500;
 }
 
@@ -3711,13 +3769,7 @@ body:has(.mini-player) {
 @media (hover: hover) and (pointer: fine) {
   .up-next-row:hover,
   .library-row:hover {
-    background: linear-gradient(
-      90deg,
-      transparent,
-      var(--hover) 12px,
-      var(--hover) calc(100% - 12px),
-      transparent
-    );
+    background: var(--hover);
   }
 }
 
@@ -3848,7 +3900,7 @@ body:has(.mini-player) {
 .library-sort-button {
   border: 0;
   background: transparent;
-  color: var(--faint);
+  color: var(--muted);
   padding: 2px 0;
   font-size: 12px;
   font-weight: 600;
@@ -3970,28 +4022,22 @@ body:has(.mini-player) {
   }
 }
 
-/* The hover action sits in the margin past the date on wide screens, so it
-   never covers the date or takes width from the row. */
+/* Keep a permanent action slot on pointer devices, so showing the button
+   never covers a date or moves the text. Touch uses the existing swipe action. */
 .library-row-action {
   position: absolute;
   top: 50%;
   right: 0;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   transform: translateY(-50%);
   border-radius: var(--r-md);
-  background: var(--bg);
-  box-shadow: -16px 0 12px var(--bg);
+  background: transparent;
 }
 
-@media (hover: hover) and (pointer: fine) and (min-width: 860px) {
-  .library .swipe-row {
-    overflow: visible;
-  }
-
-  .library-row-action {
-    right: -40px;
-    background: transparent;
-    box-shadow: none;
+@media (hover: hover) and (pointer: fine) {
+  .library-link {
+    padding-right: 44px;
   }
 }
 

@@ -341,6 +341,25 @@ test("the mini-player timeline supports touch, dragging and keyboard seeking wit
   await mini.screenshot({ path: testInfo.outputPath("mini-player-scrubber.png") });
 });
 
+test("the narrow mini-player keeps timing readable and transport controls usable", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await start(page);
+  await action(page, "pause");
+  await page.locator(".app-brand").click();
+  const player = page.getByRole("complementary", { name: "Now playing" });
+  await expect(player.locator(".mini-player-meta")).toContainText(" / ");
+  expect(await player.locator(".mini-player-meta").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  const title = (await player.locator(".mini-player-title").boundingBox())!;
+  const transport = (await player.locator(".mini-player-transport").boundingBox())!;
+  expect(title.y + title.height).toBeLessThanOrEqual(transport.y);
+  const skip = player.getByRole("button", { name: "Skip forward 10 seconds" });
+  const box = (await skip.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  await skip.click();
+  await expect.poll(() => page.locator("audio").evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThanOrEqual(10);
+});
+
 test("mini-player speed stays in sync with the article player and survives reopening from the playlist", async ({ page }, testInfo) => {
   await start(page);
   await action(page, "pause");
@@ -409,7 +428,7 @@ test("a stream that drops while hidden switches to the downloaded copy instead o
     await page.evaluate(() => (window as unknown as { dropAudio(): void }).dropAudio());
     await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
     await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
-    expect(await element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThanOrEqual(12);
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThanOrEqual(12);
     await expect(page.getByText("Connection lost. Reconnecting…", { exact: true })).toHaveCount(0);
   } finally { release(); }
 });

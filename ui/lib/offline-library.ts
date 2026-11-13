@@ -6,6 +6,7 @@ import {
   type PublicGistPayload
 } from "./gists";
 import { galleryOptions, prepareGalleryImages } from "../public/gallery-model.mjs";
+import { migrateSavedTables } from "../public/offline-table-migration.mjs";
 
 export const OFFLINE_DB_NAME = "waveygist-offline";
 export const OFFLINE_DB_VERSION = 1;
@@ -181,6 +182,9 @@ function openDatabase() {
       reject(request.error ?? new Error("Could not open offline storage"));
     request.onblocked = () =>
       reject(new Error("Offline storage upgrade is blocked"));
+  }).then(async (database) => {
+    await migrateSavedTables(database, OFFLINE_CONTENT_CACHE);
+    return database;
   });
   return databasePromise;
 }

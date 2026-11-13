@@ -21,7 +21,9 @@ const highlightedCode = `<div class="highlight highlight-source-js" dir="auto"><
 const longPatchLine = `+MIN_A: constant(uint256) = ${"N_CONS*N_CONS*".repeat(24)}`;
 const highlightedPatch = `<div class="highlight highlight-source-diff" dir="auto"><pre>diff --git a/example.vy b/example.vy\n<span class="pl-mi1">${longPatchLine}</span></pre></div>`;
 const filesFor = (id) =>
-  id.startsWith("GalleryAudio")
+  id === "GalleryReading01"
+    ? { "README.md": readFileSync(new URL("./fixtures/reading.html", import.meta.url), "utf8") }
+    : id.startsWith("GalleryAudio")
     ? { "README.md": `<h1>Audio article</h1>${"<p>Keep reading this article while its narration plays.</p>".repeat(100)}` }
     : id === "GalleryCodeWrap01"
     ? { "README.md": `<h1>Code wrapping</h1>${highlightedCode}<pre><code>${longCodeLine}</code></pre>` }

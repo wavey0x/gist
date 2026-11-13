@@ -116,6 +116,61 @@ test("tapping the grip opens a menu that reorders without dragging", async ({ pa
   await expect(upNext.getByRole("menu")).toBeHidden();
 });
 
+test("reorder menu supports click activation, keyboard navigation and focus return", async ({ page }) => {
+  const queue = await mockQueue(page, [
+    item("QueueFirst000001", "First listen"),
+    item("QueueSecond00001", "Second listen"),
+    item("QueueThird000001", "Third listen")
+  ]);
+  await page.goto("/");
+  const grip = page.getByRole("button", { name: "Reorder Second listen" });
+  // Assistive activation may dispatch a click without any pointer events.
+  await grip.evaluate((node: HTMLButtonElement) => node.click());
+  const menu = page.getByRole("menu", { name: "Move Second listen" });
+  await expect(menu.getByRole("menuitem", { name: "Move to top" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(menu.getByRole("menuitem", { name: "Move up", exact: true })).toBeFocused();
+  expect(queue.puts).toEqual([]);
+  await page.keyboard.press("End");
+  await expect(menu.getByRole("menuitem", { name: "Move down" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => queue.puts.at(-1)).toEqual([
+    "QueueFirst000001", "QueueThird000001", "QueueSecond00001"
+  ]);
+  await expect(menu).toBeHidden();
+  await expect(grip).toBeFocused();
+  await grip.press("Enter");
+  await expect(menu.getByRole("menuitem", { name: "Move to top" })).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(menu.getByRole("menuitem", { name: "Move up", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(grip).toBeFocused();
+  // Tab follows the browser's native focus preferences after the handle.
+  // Safari may skip buttons unless full keyboard access is enabled.
+  await page.keyboard.press("Tab");
+  const nextControl = await page.locator(":focus").elementHandle();
+  expect(nextControl).not.toBeNull();
+  await grip.press("Space");
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(menu).toBeHidden();
+  await expect.poll(() => nextControl!.evaluate((node) => node === document.activeElement)).toBe(true);
+});
+
+test("moving the last collapsed row down keeps its reorder handle available", async ({ page }) => {
+  await mockQueue(page, Array.from({ length: 5 }, (_, index) =>
+    item(`QueueItem000000${index}`, `Listen ${index + 1}`)
+  ));
+  await page.goto("/");
+  const grip = page.getByRole("button", { name: "Reorder Listen 4" });
+  await grip.click();
+  await page.getByRole("menuitem", { name: "Move down" }).click();
+  await expect(grip).toBeFocused();
+  await expect(page.locator(".up-next-title").last()).toHaveText("Listen 4");
+  await expect(page.locator(".up-next-title")).toHaveCount(5);
+});
+
 test("playing an article puts it at the front of up next", async ({ page }) => {
   const queue = await mockQueue(page, [item("QueueFirst000001", "First listen")]);
   await page.route(`**${endpoint}`, (route) =>

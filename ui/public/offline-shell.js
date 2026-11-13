@@ -131,6 +131,10 @@
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
+    }).then(async (database) => {
+      const { migrateSavedTables } = await import("/offline-table-migration.mjs");
+      await migrateSavedTables(database, CONTENT_CACHE);
+      return database;
     });
     return databasePromise;
   }
@@ -1498,20 +1502,12 @@
     return Array.from({ length: Math.max(1, lines) }, (_, index) => index + 1).join("\n");
   }
 
-  // Mirrors wrapTables in lib/gists.ts for saved copies of the raw payload.
-  function wrapTables(html) {
-    if (html.includes('class="table-scroll"')) return html;
-    return html
-      .replace(/<table(?=[\s>])/gi, '<div class="table-scroll"><table')
-      .replace(/<\/table>/gi, "</table></div>");
-  }
-
   function fileContent(file, panel = false) {
     if (file.kind === "markdown") {
       const article = element("article", {
         className: panel ? "markdown-body gist-file-markdown" : "markdown-body"
       });
-      article.innerHTML = wrapTables(file.rendered_html);
+      article.innerHTML = file.rendered_html;
       return article;
     }
     const codeView = element("div", { className: "gist-code-view" });

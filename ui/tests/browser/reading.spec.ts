@@ -4,6 +4,20 @@ const id = "GalleryAudio0001";
 
 test.use({ serviceWorkers: "block" });
 
+test("a backend-rendered table keeps its focusable horizontal scroll region", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/GalleryReading01");
+  const region = page.getByRole("region", { name: "Table (scroll horizontally for more columns)" });
+  await expect(page.locator(".table-scroll")).toHaveCount(1);
+  expect(await region.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
+  await region.scrollIntoViewIfNeeded();
+  await region.focus();
+  // Give WebKit a real key press; a zero-duration press can skip native scrolling.
+  await page.keyboard.press("ArrowRight", { delay: 50 });
+  await expect.poll(() => region.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test("library rows stack the date under the title on a phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

@@ -1,0 +1,47 @@
+<h1 id="reading-layout">Reading layout</h1>
+<p>These notes combine a longer explanation with code and a wide table. The article should keep consistent edges while each wide block remains independently scrollable on a narrow screen.</p>
+<div class="highlight highlight-source-js" dir="auto"><pre><span class="pl-k">const</span> <span class="pl-c1">result</span> <span class="pl-k">=</span> <span class="pl-k">await</span> <span class="pl-en">inspectApplication</span>({ identifier<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">"</span>com.example.application<span class="pl-pds">"</span></span>, policy<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">"</span>silent-block<span class="pl-pds">"</span></span>, verifySignature<span class="pl-k">:</span> <span class="pl-c1">true</span> });
+</pre></div><ol>
+<li>
+<p>Check the installed helper before continuing.</p>
+<div class="highlight highlight-source-js" dir="auto"><pre><span class="pl-k">const</span> <span class="pl-c1">helper</span> <span class="pl-k">=</span> <span class="pl-k">await</span> <span class="pl-en">findHelper</span>(<span class="pl-s"><span class="pl-pds">"</span>com.example.application<span class="pl-pds">"</span></span>);
+</pre></div></li>
+</ol>
+<h2 id="comparison">Comparison</h2>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Table (scroll horizontally for more columns)"><table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Identifier</th>
+<th>Platform</th>
+<th>Current release</th>
+<th>Previous release</th>
+<th>Status</th>
+<th>Owner</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Example application</td>
+<td>com.example.application.service.helper</td>
+<td>macOS</td>
+<td>current-release-2026-11</td>
+<td>previous-release-2026-10</td>
+<td>Ready</td>
+<td>Example team</td>
+<td>Verify the signature before continuing.</td>
+</tr>
+<tr>
+<td>Second application</td>
+<td>com.example.application.other.helper</td>
+<td>macOS</td>
+<td>current-release-2026-11</td>
+<td>previous-release-2026-10</td>
+<td>Ready</td>
+<td>Example team</td>
+<td>Preserve the original code when copying.</td>
+</tr>
+</tbody>
+</table></div>
+<p>After the table, the article continues with the same reading width.</p>
