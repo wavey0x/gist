@@ -67,3 +67,38 @@ export function addMarkdownWrapControls(root: Element) {
     shell.append(code, actions);
   }
 }
+
+// On touch screens the wrap and copy buttons stay out of the way until the
+// reader taps a code block, and leave again on a tap anywhere else. Styling
+// only honours the attribute on touch devices; hover covers the rest.
+export function mountCodeActionReveal() {
+  const blocks = ".code-wrap-block, .gist-code-container, .raw-viewer";
+  let start: { x: number; y: number; time: number } | null = null;
+  function onDown(event: PointerEvent) {
+    start = event.isPrimary ? { x: event.clientX, y: event.clientY, time: event.timeStamp } : null;
+  }
+  function onUp(event: PointerEvent) {
+    const began = start;
+    start = null;
+    const target = event.target instanceof Element ? event.target : null;
+    const block = target ? target.closest(blocks) : null;
+    for (const shown of document.querySelectorAll("[data-code-actions]")) {
+      if (shown !== block) shown.removeAttribute("data-code-actions");
+    }
+    if (!block || !target || !began) return;
+    // A drag or a long press is scrolling or selecting, not a tap.
+    const moved = Math.hypot(event.clientX - began.x, event.clientY - began.y);
+    if (moved > 10 || event.timeStamp - began.time > 500) return;
+    if (target.closest(".code-block-actions")) {
+      block.setAttribute("data-code-actions", "shown");
+    } else {
+      block.toggleAttribute("data-code-actions");
+    }
+  }
+  document.addEventListener("pointerdown", onDown, true);
+  document.addEventListener("pointerup", onUp, true);
+  return () => {
+    document.removeEventListener("pointerdown", onDown, true);
+    document.removeEventListener("pointerup", onUp, true);
+  };
+}

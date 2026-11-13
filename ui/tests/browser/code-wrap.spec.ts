@@ -79,33 +79,16 @@ test("wraps only the selected Markdown code block", async ({ page }) => {
   const touch = await page.evaluate(() =>
     matchMedia("(hover: none), (pointer: coarse)").matches
   );
-  await expect(first.locator(".code-block-actions")).toHaveCSS("opacity", touch ? "1" : "0");
-  if (!touch) {
+  // Hidden until hovered with a pointer, or until the block is tapped on touch.
+  await expect(first.locator(".code-block-actions")).toHaveCSS("opacity", "0");
+  if (touch) {
+    await first.locator("pre").tap();
+  } else {
     await first.hover();
-    await expect(first.locator(".code-block-actions")).toHaveCSS("opacity", "1");
   }
-  await toggle.focus();
   await expect(first.locator(".code-block-actions")).toHaveCSS("opacity", "1");
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   expect(await codeOverflows(page, ".code-wrap-block .highlight pre")).toBe(true);
-  if (touch) {
-    const clearance = await first.evaluate((block) => {
-      const pre = block.querySelector("pre")!;
-      pre.scrollLeft = pre.scrollWidth;
-      const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
-      let node: Node | null;
-      while ((node = walker.nextNode())) {
-        const end = node.textContent!.indexOf(";");
-        if (end < 0) continue;
-        const range = document.createRange();
-        range.setStart(node, end);
-        range.setEnd(node, end + 1);
-        return block.querySelector(".code-block-actions")!.getBoundingClientRect().left - range.getBoundingClientRect().right;
-      }
-      throw new Error("Expected a line ending in the fixture");
-    });
-    expect(clearance).toBeGreaterThanOrEqual(4);
-  }
 
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");

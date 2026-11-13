@@ -9,7 +9,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { mountGallery } from "../public/gallery-viewer.mjs";
-import { addMarkdownWrapControls } from "../lib/code-wrap";
+import { addMarkdownWrapControls, mountCodeActionReveal } from "../lib/code-wrap";
 import { getGistHeaderTitle, getTopLevelHeading } from "../lib/gist-title";
 import {
   orderedGistFiles,
@@ -120,6 +120,8 @@ export function GistViewer({
     addMarkdownWrapControls(contentRef.current);
     return mountGallery(contentRef.current.querySelectorAll<HTMLElement>("article.markdown-body"));
   }, [gist.id, gist.revision_number, gist.snapshot_sha256, viewMode, collapsedFilenames]);
+
+  useEffect(() => mountCodeActionReveal(), []);
 
   useEffect(() => {
     setSingleFileWrapped(false);

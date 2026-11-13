@@ -2263,14 +2263,19 @@ input:disabled {
   height: 14px;
 }
 
-.code-wrap-block:hover > .code-block-actions,
-.gist-code-container:hover > .code-block-actions,
-.raw-viewer:hover > .code-block-actions,
 .code-block-actions:focus-within,
-.code-block-actions:has([aria-pressed="true"]),
 .code-block-actions:has([data-feedback="true"]),
 .code-block-actions[data-feedback="true"] {
   opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .code-wrap-block:hover > .code-block-actions,
+  .gist-code-container:hover > .code-block-actions,
+  .raw-viewer:hover > .code-block-actions,
+  .code-block-actions:has([aria-pressed="true"]) {
+    opacity: 1;
+  }
 }
 
 .code-wrap-button:hover,
@@ -2313,26 +2318,34 @@ input:disabled {
   border: 1px solid var(--line);
 }
 
-/* Wrapped lines flow around the controls for just the first two lines. */
-.markdown-body .code-wrap-block.code-lines-wrapped pre::before,
-.gist-code-container .gist-code-view[data-code-wrap="true"] pre::before,
-.raw-viewer[data-code-wrap="true"] .raw-markdown::before {
-  content: "";
-  float: right;
-  width: 64px;
-  height: 22px;
-}
-
+/* On touch the controls stay hidden until the block is tapped, so no code is
+   covered and no room is held for them. */
 @media (hover: none), (pointer: coarse) {
   .code-block-actions {
-    opacity: 1;
+    visibility: hidden;
+    transition: opacity 120ms ease, visibility 0s 120ms;
   }
 
-  /* Let unwrapped line endings scroll clear of the persistent touch controls. */
-  .markdown-body .code-wrap-block:not(.code-lines-wrapped) pre,
-  .gist-code-container .gist-code-view[data-code-wrap="false"] .gist-code-content,
-  .raw-viewer[data-code-wrap="false"] .raw-markdown {
-    padding-right: 76px;
+  [data-code-actions] > .code-block-actions,
+  .code-block-actions:focus-within,
+  .code-block-actions:has([data-feedback="true"]),
+  .code-block-actions[data-feedback="true"] {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 120ms ease;
+  }
+}
+
+/* With a pointer the controls can appear at any moment, so wrapped lines flow
+   around them for the first two lines. */
+@media (hover: hover) and (pointer: fine) {
+  .markdown-body .code-wrap-block.code-lines-wrapped pre::before,
+  .gist-code-container .gist-code-view[data-code-wrap="true"] pre::before,
+  .raw-viewer[data-code-wrap="true"] .raw-markdown::before {
+    content: "";
+    float: right;
+    width: 64px;
+    height: 22px;
   }
 }
 
@@ -3264,26 +3277,11 @@ a.diff-step:focus-visible {
     padding: 10px 16px 20px;
   }
 
-  /* Code needs every column it can get on a phone: bleed blocks to the
-     screen edges and line the code up with the prose column. */
+  /* Code needs every column it can get on a phone, so the inner padding is
+     tight, but the block keeps its frame inside the page gutter. */
   .markdown-body pre,
   .markdown-body .code-wrap-block pre {
     padding: 10px;
-  }
-
-  .markdown-body > pre,
-  .markdown-body > .code-wrap-block {
-    margin-right: -16px;
-    margin-left: -16px;
-    max-width: none;
-  }
-
-  .markdown-body > pre,
-  .markdown-body > .code-wrap-block pre {
-    border-right: 0;
-    border-left: 0;
-    border-radius: 0;
-    padding: 10px 16px;
   }
 
   .markdown-body h1 {
