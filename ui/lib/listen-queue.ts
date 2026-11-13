@@ -304,9 +304,3 @@ export function nextQueueItem(currentGistId: string | null) {
     ) ?? null
   );
 }
-
-export function countUpNext(items: QueueItem[], currentGistId: string | null) {
-  return items.filter(
-    (item) => item.status === "ready" && item.gist_id !== currentGistId
-  ).length;
-}

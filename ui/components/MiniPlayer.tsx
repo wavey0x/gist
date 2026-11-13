@@ -1,21 +1,21 @@
 "use client";
 
 import { Pause, Play, RotateCcw, RotateCw, X } from "lucide-react";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   closePlayer,
+  persistPosition,
+  seek,
   skip,
   togglePlayback,
   useAudioEngine
 } from "../lib/audio-engine";
 import { formatPlaybackTime } from "../lib/audio-format";
-import { countUpNext, useListenQueue } from "../lib/listen-queue";
 
 export function MiniPlayer() {
   const { currentTime, duration, opened, playing, buffering, message, track } = useAudioEngine();
-  const { items } = useListenQueue();
-  const upNext = countUpNext(items, track?.gistId ?? null);
   const pathname = usePathname();
   if (!track || !opened) {
     return null;
@@ -26,11 +26,11 @@ export function MiniPlayer() {
     return null;
   }
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  const seekStyle = { "--audio-progress": `${progress}%` } as CSSProperties;
   const status = message || (buffering ? "Loading audio…" : "");
   const timing = `${formatPlaybackTime(currentTime)} / ${formatPlaybackTime(duration)}`;
   return (
     <aside className="mini-player" aria-label="Now playing">
-      <span className="mini-player-progress" style={{ width: `${progress}%` }} />
       <div className="mini-player-transport">
         <button
           type="button"
@@ -71,7 +71,7 @@ export function MiniPlayer() {
       <Link className="mini-player-title" href={href}>
         <span className="mini-player-name">{track.title}</span>
         <span className="mini-player-meta">
-          {status || `${timing}${upNext ? ` · ${upNext} up next` : ""}`}
+          {status || timing}
         </span>
       </Link>
       <span className="sr-only" role="status">{status}</span>
@@ -83,6 +83,22 @@ export function MiniPlayer() {
       >
         <X aria-hidden="true" size={17} strokeWidth={1.8} />
       </button>
+      <input
+        className="article-audio-seek mini-player-seek"
+        type="range"
+        min="0"
+        max={duration > 0 ? duration : 0}
+        step="0.1"
+        value={duration > 0 ? Math.min(currentTime, duration) : 0}
+        disabled={duration <= 0}
+        aria-label="Article audio position"
+        aria-valuetext={`${formatPlaybackTime(currentTime)} of ${formatPlaybackTime(duration)}`}
+        style={seekStyle}
+        onChange={(event) => seek(Number(event.currentTarget.value))}
+        onPointerUp={() => persistPosition(true)}
+        onKeyUp={() => persistPosition(true)}
+        onBlur={() => persistPosition(true)}
+      />
     </aside>
   );
 }

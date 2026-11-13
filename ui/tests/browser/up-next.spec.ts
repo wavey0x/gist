@@ -103,7 +103,8 @@ test("playing an article puts it at the front of up next", async ({ page }) => {
   await expect.poll(() => queue.puts.at(-1)).toEqual([id, "QueueFirst000001"]);
   await page.locator(".app-brand").click();
   const mini = page.getByRole("complementary", { name: "Now playing" });
-  await expect(mini.getByText(/1 up next/)).toBeVisible();
+  await expect(mini).toBeVisible();
+  await expect(mini).not.toContainText("up next");
   const upNext = page.getByRole("region", { name: "Playlist" });
   await expect(upNext.getByRole("button", { name: /^Pause / })).toBeVisible();
 });

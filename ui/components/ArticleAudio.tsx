@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  countUpNext,
-  refreshListenQueue,
-  useListenQueue
-} from "../lib/listen-queue";
+import { refreshListenQueue } from "../lib/listen-queue";
 import {
   Check,
   Moon,
@@ -124,8 +120,6 @@ export function ArticleAudio({
   const { currentTime, duration, playbackRate, playing } = isCurrentTrack
     ? engine
     : { currentTime: 0, duration: 0, playbackRate: engine.playbackRate, playing: false };
-  const listenQueue = useListenQueue();
-  const upNextCount = countUpNext(listenQueue.items, engine.track?.gistId ?? null);
   const track = useMemo<AudioTrack | null>(
     () =>
       audioUrl
@@ -654,11 +648,6 @@ export function ArticleAudio({
                 <Moon aria-hidden="true" size={13} strokeWidth={1.8} />
                 <span>{engine.sleepMinutes ? `${engine.sleepMinutes}m` : "Off"}</span>
               </button>
-              {upNextCount ? (
-                <span className="article-audio-queue-count">
-                  {upNextCount} up next
-                </span>
-              ) : null}
             </div>
             {engine.message || engine.buffering ? (
               <span className="article-audio-playback-error" role="status">

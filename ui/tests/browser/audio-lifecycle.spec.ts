@@ -293,3 +293,50 @@ test("a dropped stream retries at the same position, and pause cancels recovery"
     expect(await page.evaluate(() => navigator.mediaSession.playbackState)).toBe("paused");
   } finally { release(); }
 });
+
+test("the mini-player timeline supports touch, dragging and keyboard seeking without changing play state", async ({ page, isMobile }, testInfo) => {
+  await start(page);
+  const audio = page.locator("audio");
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.readyState)).toBeGreaterThanOrEqual(3);
+  await action(page, "pause");
+  await page.locator(".app-brand").click();
+  const mini = page.getByRole("complementary", { name: "Now playing" });
+  const slider = mini.getByRole("slider", { name: "Article audio position" });
+  await expect(slider).toBeEnabled();
+  await expect(mini).not.toContainText("up next");
+  const box = (await slider.boundingBox())!;
+  const controls = (await mini.locator(".mini-player-transport").boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(controls.y + controls.height);
+  expect(box.height).toBeGreaterThanOrEqual(24);
+  const y = box.y + box.height / 2;
+  if (isMobile) await page.touchscreen.tap(box.x + box.width * 0.75, y);
+  else await page.mouse.click(box.x + box.width * 0.75, y);
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThan(29);
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeLessThan(31);
+  expect(await audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true);
+  const storedPosition = () => page.evaluate(gistId => JSON.parse(localStorage.getItem(`waveygist:audio-position:v1:${gistId}:1`) ?? "null")?.position, id);
+  // Seek away from the end-of-article bookmark clearing threshold.
+  if (isMobile) await page.touchscreen.tap(box.x + box.width * 0.25, y);
+  else {
+    await page.mouse.move(box.x + box.width * 0.75, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.25, y, { steps: 10 });
+    await page.mouse.up();
+  }
+  await expect.poll(storedPosition).toBeGreaterThan(9);
+  await expect.poll(storedPosition).toBeLessThan(11);
+  await slider.press("Home");
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime)).toBe(0);
+  await slider.press("ArrowRight");
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeCloseTo(0.1, 1);
+  await expect(slider).toHaveAttribute("aria-valuetext", "0:00 of 0:40");
+  expect(await audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true);
+  await mini.getByRole("button", { name: "Play article audio" }).click();
+  if (isMobile) await page.touchscreen.tap(box.x + box.width * 0.5, y);
+  else await page.mouse.click(box.x + box.width * 0.5, y);
+  await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThanOrEqual(20);
+  expect(await audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+  await mini.getByRole("button", { name: "Pause article audio" }).click();
+  await mini.screenshot({ path: testInfo.outputPath("mini-player-scrubber.png") });
+});
