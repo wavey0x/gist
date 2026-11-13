@@ -321,7 +321,7 @@ input:disabled {
 
 .app-header {
   min-height: var(--header-h);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-strong);
   background: var(--bg);
   position: sticky;
   z-index: 44;
@@ -3243,23 +3243,6 @@ button.gist-file-action {
   margin: 0;
   font-size: 21px;
   font-weight: 600;
-}
-
-.reading-progress {
-  position: fixed;
-  z-index: 45;
-  top: calc(env(safe-area-inset-top, 0px) + var(--header-h));
-  left: 0;
-  width: 100%;
-  height: 2px;
-  pointer-events: none;
-}
-
-.reading-progress span {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  transform-origin: left;
 }
 
 .table-of-contents {

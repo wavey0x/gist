@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { readReadingPosition, saveReadingPosition } from "../lib/reading-position";
 
 type ReadingProgressProps = {
@@ -14,11 +14,11 @@ function scrollableHeight() {
   return document.documentElement.scrollHeight - window.innerHeight;
 }
 
+// Remembers how far into an article the reader got and returns them there.
+// It draws nothing: the library shows the saved position, and the scrollbar
+// already says where you are on the page.
 export function ReadingProgress({ gistId, revisionNumber }: ReadingProgressProps) {
-  const [progress, setProgress] = useState(0);
-
   useEffect(() => {
-    let frame: number | null = null;
     let saveTimeout: number | null = null;
     let userScrolled = false;
 
@@ -27,14 +27,7 @@ export function ReadingProgress({ gistId, revisionNumber }: ReadingProgressProps
       window.scrollTo(0, saved.fraction * scrollableHeight());
     }
 
-    function measure() {
-      frame = null;
-      const height = scrollableHeight();
-      setProgress(height > 0 ? Math.min(1, window.scrollY / height) : 0);
-    }
-
     function handleScroll() {
-      frame ??= window.requestAnimationFrame(measure);
       if (!userScrolled) {
         userScrolled = true;
         return;
@@ -50,20 +43,14 @@ export function ReadingProgress({ gistId, revisionNumber }: ReadingProgressProps
       }, SAVE_DELAY_MS);
     }
 
-    measure();
     window.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", handleScroll, { passive: true });
     return () => {
-      if (frame !== null) window.cancelAnimationFrame(frame);
       if (saveTimeout !== null) window.clearTimeout(saveTimeout);
       window.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", handleScroll);
     };
   }, [gistId, revisionNumber]);
 
-  return (
-    <div className="reading-progress" aria-hidden="true">
-      <span style={{ transform: `scaleX(${progress})` }} />
-    </div>
-  );
+  return null;
 }
