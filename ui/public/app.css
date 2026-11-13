@@ -2087,7 +2087,7 @@ input:disabled {
   background: var(--line);
 }
 
-/* Tables: row rules only, quiet headers. */
+/* Tables: compact cell grids, tinted headers and alternating body rows. */
 .markdown-body table {
   font-size: 14px;
   line-height: 1.45;
@@ -2095,17 +2095,15 @@ input:disabled {
 }
 
 .markdown-body table :is(th, td) {
-  border: 0;
-  border-bottom: 1px solid var(--line-soft);
-  padding: 10px 16px 10px 0;
+  border: 1px solid var(--line-strong);
+  padding: 6px 13px;
   vertical-align: top;
 }
 
 .markdown-body table th {
-  border-bottom-color: var(--line-strong);
-  padding-bottom: 8px;
-  color: var(--muted);
-  font-size: 12px;
+  background: var(--selected);
+  color: var(--ink);
+  font-size: inherit;
   font-weight: 600;
 }
 
@@ -2117,6 +2115,10 @@ input:disabled {
 .markdown-body table tr:nth-child(2n) {
   border: 0;
   background: transparent;
+}
+
+.markdown-body table tbody tr:nth-child(2n) {
+  background: var(--hover);
 }
 
 .markdown-body pre,
