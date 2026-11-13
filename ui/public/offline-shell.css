@@ -29,7 +29,6 @@
 }
 
 .offline-library-shell {
-  width: min(100%, 760px);
   gap: 22px;
 }
 
@@ -67,8 +66,4 @@
 .offline-shell .mermaid-render-output,
 .offline-shell .mermaid-render-error {
   display: none;
-}
-
-.offline-shell .app-header-inner {
-  width: min(100%, 760px);
 }
