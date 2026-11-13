@@ -2174,8 +2174,8 @@ button {
 .code-copy-button {
   display: inline-grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--button-bg);
@@ -2183,6 +2183,12 @@ button {
   padding: 0;
   cursor: pointer;
   user-select: none;
+}
+
+.code-wrap-button svg,
+.code-copy-button svg {
+  width: 14px;
+  height: 14px;
 }
 
 .code-wrap-block:hover > .code-block-actions,
@@ -2238,8 +2244,8 @@ button {
 .raw-viewer[data-code-wrap="true"] .raw-markdown::before {
   content: "";
   float: right;
-  width: 76px;
-  height: 28px;
+  width: 64px;
+  height: 22px;
 }
 
 @media (hover: none), (pointer: coarse) {
@@ -2251,7 +2257,7 @@ button {
   .markdown-body .code-wrap-block:not(.code-lines-wrapped) pre,
   .gist-code-container .gist-code-view[data-code-wrap="false"] .gist-code-content,
   .raw-viewer[data-code-wrap="false"] .raw-markdown {
-    padding-right: 88px;
+    padding-right: 76px;
   }
 }
 
