@@ -193,13 +193,14 @@ function commit(items: QueueItem[]) {
   return writeChain;
 }
 
-export function refreshListenQueue() {
+export function refreshListenQueue(signal?: AbortSignal) {
   hydrateFromCache();
   if (refreshing) {
     return refreshing;
   }
   refreshing = (async () => {
     await writeChain;
+    signal?.throwIfAborted();
     if (isDirty() && state.available) {
       await commit(state.items);
       return;
@@ -208,6 +209,7 @@ export function refreshListenQueue() {
     try {
       const response = await fetch(ENDPOINT, {
         cache: "no-store",
+        signal,
         headers: { Accept: "application/json" }
       });
       if (handleUnavailable(response.status)) {
@@ -217,11 +219,12 @@ export function refreshListenQueue() {
         throw new Error(`Queue read failed: ${response.status}`);
       }
       const items = parseItems(await response.json());
+      signal?.throwIfAborted();
       if (items && version === startedAt) {
         setState({ items, loaded: true, available: true, error: false });
       }
     } catch {
-      setState({ loaded: true, error: true });
+      if (!signal?.aborted) setState({ loaded: true, error: true });
     }
   })().finally(() => {
     refreshing = null;

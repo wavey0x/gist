@@ -4,6 +4,7 @@ import "katex/dist/katex.min.css";
 import { AppHeader } from "../components/AppHeader";
 import { MiniPlayer } from "../components/MiniPlayer";
 import { PwaRuntime } from "../components/PwaRuntime";
+import { PullRefresh } from "../components/PullRefresh";
 import { resolveApiBaseUrl } from "../lib/api-base";
 import { THEME_COLORS } from "../lib/theme-color";
 
@@ -139,6 +140,7 @@ export default async function RootLayout({
         <AppHeader />
         {children}
         <MiniPlayer />
+        <PullRefresh />
       </body>
     </html>
   );

@@ -20,6 +20,8 @@ import {
 } from "../lib/recent-viewed";
 import { ConfirmModal } from "./ConfirmModal";
 import { SwipeRow } from "./SwipeRow";
+import { refreshJson, usePageRefresh } from "../lib/page-refresh";
+import { getListenQueue, refreshListenQueue } from "../lib/listen-queue";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 250;
@@ -210,6 +212,35 @@ export function Library({
   const firstLoad = useRef(true);
   const showTabs = isAuthenticated;
   const activeTab: TabId = isAuthenticated ? tab : "recent";
+  const refreshView = useRef({ query, sort });
+  refreshView.current = { query, sort };
+
+  usePageRefresh(async (signal) => {
+    if (isAuthenticated) {
+      // Keep every loaded page, along with the current search and sort.
+      const pages = await Promise.all(Array.from(
+        { length: Math.max(1, Math.ceil(mine.length / PAGE_SIZE)) },
+        async (_, page) => {
+          const params = new URLSearchParams({
+            limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE),
+            sort: query ? "relevance" : sort
+          });
+          if (query) params.set("q", query);
+          return normalizeMyGistsPayload(await refreshJson(`/api/me/gists?${params}`, signal));
+        }
+      ));
+      signal.throwIfAborted();
+      if (refreshView.current.query !== query || refreshView.current.sort !== sort) return;
+      setMine(pages.flatMap((page) => page.gists));
+      setMineTotal(pages[0].pagination.total);
+      setMineError(false);
+      await refreshListenQueue(signal);
+      signal.throwIfAborted();
+      if (getListenQueue().error) return "Gists updated. Playlist couldn’t refresh.";
+    }
+    setRecent(readRecentlyViewedGists());
+    setClock((current) => ({ ...current, now: Date.now() }));
+  });
 
   const refresh = useCallback(() => {
     setRecent(readRecentlyViewedGists());

@@ -70,6 +70,10 @@ export function AlertSettings({
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
   useEffect(() => {
+    if (!savingSetting) setSettings(initialSettings);
+  }, [initialSettings]);
+
+  useEffect(() => {
     if (!settings.available) {
       return;
     }

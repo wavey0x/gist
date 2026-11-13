@@ -121,6 +121,9 @@ http
       res.end(JSON.stringify(value));
     };
     if (url.pathname === "/health") return respond(200, { ok: true });
+    if (url.pathname === "/api/v1/me/notification-settings" && req.headers.cookie === "wg_session=audio-test") {
+      return respond(200, { available: false, new_gist: false, edited_gist: false });
+    }
     if (url.pathname === "/api/v1/auth/session" && req.headers.cookie === "wg_session=audio-test") {
       return respond(200, {
         name: "Audio Test", key: "test-key", key_prefix: "test",

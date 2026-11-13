@@ -26,6 +26,8 @@ import { LocalTimestamp } from "./LocalTimestamp";
 import { ReadingProgress } from "./ReadingProgress";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
 import { TableOfContents } from "./TableOfContents";
+import { refreshJson, usePageRefresh, useRefreshRoute } from "../lib/page-refresh";
+import { getAudioEngineState } from "../lib/audio-engine";
 
 type ViewMode = "files" | "raw" | "custom";
 
@@ -220,6 +222,22 @@ export function GistViewer({
   const files = orderedGistFiles(gist);
   const singleFile = files.length === 1 ? files[0] : null;
   const primaryFile = gist.files[gist.primary_file];
+  const refreshRoute = useRefreshRoute();
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  useEffect(() => setUpdateAvailable(false), [gist.id, gist.revision_number]);
+
+  usePageRefresh(async (signal) => {
+    const payload = await refreshJson(
+      `/api/gists/${gist.id}/revisions/${gist.revision_number}/render`, signal
+    ) as PublicGistPayload;
+    const audio = getAudioEngineState();
+    if (location.pathname === `/${gist.id}` && payload.latest_revision_number > gist.revision_number &&
+        audio.opened && audio.track?.gistId === gist.id) {
+      setUpdateAvailable(true);
+      return "New revision available";
+    }
+    await refreshRoute(signal);
+  });
 
   useEffect(() => {
     if (viewMode !== "files" || !contentRef.current) return;
@@ -457,6 +475,8 @@ export function GistViewer({
           </div>
         ) : null}
         <div className="gist-heading">
+          {updateAvailable ? <button className="gist-update-action" type="button"
+            onClick={() => void refreshRoute(new AbortController().signal)}>View updated gist</button> : null}
           {headerTitle ? <h1 className="gist-title">{headerTitle}</h1> : null}
           <div className="gist-meta">
             <div className="gist-date-row">

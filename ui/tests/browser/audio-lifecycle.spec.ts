@@ -66,6 +66,38 @@ async function action(page: Page, action: MediaSessionAction, extra = {}) {
   }, { action, extra });
 }
 
+test("PWA refresh keeps the recording playing and offers a new revision without replacing narrated text", async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { value: true }));
+  await start(page);
+  const element = page.locator("audio");
+  await element.evaluate((audio: HTMLAudioElement) => {
+    audio.dataset.refreshIdentity = "original";
+    audio.currentTime = 12;
+    audio.playbackRate = 1.5;
+  });
+  const before = await element.evaluate((audio: HTMLAudioElement) => audio.currentTime);
+  const refresh = page.getByRole("button", { name: "Refresh this page" });
+  await refresh.focus();
+  await refresh.press("Enter");
+  await expect(page.getByRole("button", { name: "View updated gist" })).toBeVisible();
+  await expect(page.locator(".pull-refresh [role=status]")).toHaveText("New revision available");
+  await expect(element).toHaveAttribute("data-refresh-identity", "original");
+  expect(await element.evaluate((audio: HTMLAudioElement) => audio.paused)).toBe(false);
+  expect(await element.evaluate((audio: HTMLAudioElement) => audio.playbackRate)).toBe(1.5);
+  expect(await element.evaluate((audio: HTMLAudioElement) => audio.currentTime)).toBeGreaterThanOrEqual(before);
+  // No new revision: the server refresh merges without replacing the audio node.
+  await page.route(`**/api/gists/${id}/revisions/1/render`, async (route) => {
+    const response = await route.fetch();
+    const payload = await response.json();
+    payload.latest_revision_number = 1;
+    await route.fulfill({ json: payload });
+  });
+  await refresh.press("Enter");
+  await expect(page.locator(".pull-refresh [role=status]")).toHaveText("Updated");
+  await expect(element).toHaveAttribute("data-refresh-identity", "original");
+  expect(await element.evaluate((audio: HTMLAudioElement) => audio.paused)).toBe(false);
+});
+
 test("the mini-player and lock-screen actions seek by ten seconds without a Next button", async ({ page }) => {
   await start(page);
   const element = page.locator("audio");

@@ -22,6 +22,7 @@ const OFFLINE_SHELL_ASSETS = [
   "/offline-shell.css",
   "/offline-shell.js",
   "/standalone-navigation.mjs",
+  "/pull-refresh.mjs",
   "/icons/icon-192.png",
   "/icons/icon-512.png"
 ];

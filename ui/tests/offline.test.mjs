@@ -191,7 +191,7 @@ test("offline controls preserve every cache-supported reader interaction", () =>
 test("reconnection is verified and never interrupts active audio", () => {
   assert.match(shellScript, /method: "HEAD"/);
   assert.match(shellScript, /cache: "no-store"/);
-  assert.match(shellScript, /if \(!audioIsPlaying\(\) && Date\.now\(\) - lastReload/);
+  assert.match(shellScript, /!pullingRefresh && !audioIsPlaying\(\) && Date\.now\(\) - lastReload/);
   assert.match(shellHtml, /class="app-offline-status offline-status"[^>]*disabled/);
 });
 
@@ -210,6 +210,7 @@ test("install precaches the complete canonical shell", async () => {
     "/offline-shell.css",
     "/offline-shell.js",
     "/standalone-navigation.mjs",
+    "/pull-refresh.mjs",
     "/icons/icon-192.png",
     "/icons/icon-512.png",
     "/github-markdown.css",
@@ -375,6 +376,7 @@ test("online navigation refreshes unversioned offline-only assets", async () => 
     "/offline-shell.css",
     "/offline-shell.js",
     "/standalone-navigation.mjs",
+    "/pull-refresh.mjs",
     "/icons/icon-192.png",
     "/icons/icon-512.png"
   ]);

@@ -7,6 +7,7 @@ import { ApiKeyCopyButton } from "../../components/ApiKeyCopyButton";
 import { LocalTimestamp } from "../../components/LocalTimestamp";
 import { LogoutButton } from "../../components/LogoutButton";
 import { OfflineLibrarySettings } from "../../components/OfflineLibrarySettings";
+import { SettingsRefresh } from "../../components/SettingsRefresh";
 import {
   fetchCurrentSession,
   fetchMyGists,
@@ -35,6 +36,7 @@ export default async function MePage() {
 
   return (
     <main className="auth-shell settings-shell" aria-label="Settings">
+      <SettingsRefresh />
       <Link className="settings-back" href="/">
         <ChevronLeft aria-hidden="true" size={16} strokeWidth={1.8} />
         Home

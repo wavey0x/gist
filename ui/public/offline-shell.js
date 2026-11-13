@@ -1947,6 +1947,7 @@
     }
   }
 
+  let pullingRefresh = false;
   async function verifyReconnect() {
     if (reconnectProbe || navigator.onLine === false) {
       return reconnectProbe;
@@ -1968,7 +1969,7 @@
         // A slow link can pass this probe and then time out the page again, so
         // reload at most once a minute and leave the Refresh control otherwise.
         const lastReload = readReconnectReload();
-        if (!audioIsPlaying() && Date.now() - lastReload > RECONNECT_RELOAD_INTERVAL_MS) {
+        if (!pullingRefresh && !audioIsPlaying() && Date.now() - lastReload > RECONNECT_RELOAD_INTERVAL_MS) {
           writeReconnectReload();
           location.reload();
         }
@@ -1985,6 +1986,19 @@
   async function start() {
     applyTheme(readTheme());
     await setupOfflineHeader();
+    const { mountPullRefresh } = await import("/pull-refresh.mjs");
+    if (location.pathname !== "/login") mountPullRefresh(async (signal) => {
+      pullingRefresh = true;
+      try {
+        await verifyReconnect();
+        signal.throwIfAborted();
+        // Keep the saved reader (and its audio) alive. The existing Back online
+        // action opens the live app when the reader chooses to leave this copy.
+        return reconnectVerified ? "Back online. Live updates are available." : "You’re offline";
+      } finally {
+        pullingRefresh = false;
+      }
+    });
     showOffline();
     connectionStatus?.addEventListener("click", () => {
       if (reconnectVerified) {

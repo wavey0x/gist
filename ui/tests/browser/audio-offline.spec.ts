@@ -9,6 +9,7 @@ type CacheDiagnostics = typeof window & {
 
 test("saved audio plays through scrolling and seeking online and offline", async ({ page, context, browserName }) => {
   await page.addInitScript(() => {
+    Object.defineProperty(navigator, "standalone", { value: true });
     const diagnostics = window as CacheDiagnostics;
     diagnostics.audioCacheChecks = 0;
     diagnostics.audioCacheBodyReads = 0;
@@ -82,6 +83,14 @@ test("saved audio plays through scrolling and seeking online and offline", async
       // Lock-screen playback must not depend on the service worker or network.
       await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
       expect(await page.evaluate(() => navigator.mediaSession.playbackState)).toBe("playing");
+      if (offline) {
+        const refresh = page.getByRole("button", { name: "Refresh this page" });
+        await refresh.focus();
+        await refresh.press("Enter");
+        await expect(page.locator(".pull-refresh [role=status]")).toHaveText("You’re offline");
+        expect(await audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+        await expect(page.locator("body.offline-shell")).toBeVisible();
+      }
       await page.evaluate(() => (window as CacheDiagnostics).mediaActions.pause!({ action: "pause" }));
       await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true);
       await page.evaluate(() => (window as CacheDiagnostics).mediaActions.seekbackward!({ action: "seekbackward" }));

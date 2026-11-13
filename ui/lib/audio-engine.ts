@@ -99,6 +99,8 @@ export function useAudioEngine() {
   return useSyncExternalStore(subscribe, () => state, () => INITIAL_STATE);
 }
 
+export function getAudioEngineState() { return state; }
+
 export function trackKey(gistId: string, revisionNumber: number) {
   return `${gistId}:${revisionNumber}`;
 }
