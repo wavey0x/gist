@@ -1,17 +1,27 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { addMarkdownWrapControls } from "../lib/code-wrap";
 import { orderedGistFiles, type PublicGistPayload } from "../lib/gists";
 import { readSavedGist } from "../lib/offline-library";
+import type { SiteChromeConfig } from "../lib/site-config";
+import { GistFilePanel, sourceLineNumbers } from "./GistFilePanel";
+import { GistHeading } from "./GistHeading";
 
 const GIST_ROUTE_RE = /^\/([A-Za-z0-9]{16,64})(?:\/revisions\/([1-9][0-9]*))?\/?$/;
 
 // Paints the saved copy the moment a gist is opened; the server page replaces
 // it when it arrives, so a slow connection never shows an empty screen.
-export function SavedGistPreview() {
+export function SavedGistPreview({ chrome }: { chrome: SiteChromeConfig }) {
   const pathname = usePathname();
-  const [gist, setGist] = useState<PublicGistPayload | null>(null);
+  const contentRef = useRef<HTMLElement | null>(null);
+  const [saved, setSaved] = useState<{ pathname: string; gist: PublicGistPayload | null } | null>(null);
+  const gist = saved?.pathname === pathname ? saved.gist : null;
+
+  useLayoutEffect(() => {
+    if (gist && contentRef.current) addMarkdownWrapControls(contentRef.current);
+  }, [gist]);
 
   useEffect(() => {
     const match = GIST_ROUTE_RE.exec(pathname);
@@ -20,8 +30,8 @@ export function SavedGistPreview() {
     }
     let disposed = false;
     void readSavedGist(match[1], match[2] ? Number(match[2]) : null)
-      .then((saved) => {
-        if (!disposed) setGist(saved);
+      .then((gist) => {
+        if (!disposed) setSaved({ pathname, gist });
       })
       .catch(() => undefined);
     return () => {
@@ -29,20 +39,46 @@ export function SavedGistPreview() {
     };
   }, [pathname]);
 
-  const file = gist ? orderedGistFiles(gist)[0] : null;
+  const files = gist ? orderedGistFiles(gist) : [];
+  const file = files.length === 1 ? files[0] : null;
   return (
-    <main className="page-shell" aria-busy="true" aria-label="Loading">
-      {gist && file ? (
+    <main ref={contentRef} className={files.length > 1 ? "page-shell page-shell-gist" : "page-shell"}
+      aria-busy="true" aria-label="Loading" inert>
+      {gist ? (
         <>
-          <header className="page-header">
-            <h1 className="saved-preview-title">{gist.display_title}</h1>
+          <header className={chrome.showBrandMark ? "page-header" : "page-header page-header-no-brand"}>
+            {chrome.showBrandMark ? (
+              <div className="brand-mark">
+                <span className="brand-mark-strong">{chrome.brandName}</span>
+                <span className="brand-mark-light">gist</span>
+              </div>
+            ) : null}
+            <GistHeading gist={gist} />
+            <div className="article-audio-toolbar-group saved-preview-controls" aria-hidden="true">
+              <div className="toolbar">
+                {file ? <span className="icon-button" /> : null}
+                <span className="icon-button" />
+              </div>
+            </div>
           </header>
-          <div className="gist-single-file">
+          {file?.kind === "markdown" ? <div className="gist-single-file">
             <article
               className="markdown-body"
               dangerouslySetInnerHTML={{ __html: file.rendered_html }}
             />
-          </div>
+          </div> : file ? (
+            <div className="gist-single-file gist-code-container">
+              <div className="gist-code-view" data-code-wrap="false">
+                <pre className="gist-line-numbers" aria-hidden="true">{sourceLineNumbers(file.content)}</pre>
+                <div className="markdown-body gist-code-content"
+                  dangerouslySetInnerHTML={{ __html: file.rendered_html }} />
+              </div>
+            </div>
+          ) : (
+            <div className="gist-files">
+              {files.map((file) => <GistFilePanel key={file.filename} file={file} collapsed={false} />)}
+            </div>
+          )}
         </>
       ) : (
         <div className="loading-skeleton" aria-hidden="true">

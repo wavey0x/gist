@@ -3245,10 +3245,8 @@ button.gist-file-action {
   width: 70%;
 }
 
-.saved-preview-title {
-  margin: 0;
-  font-size: 21px;
-  font-weight: 600;
+.saved-preview-controls {
+  visibility: hidden;
 }
 
 .table-of-contents {

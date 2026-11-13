@@ -34,7 +34,7 @@ const filesFor = (id) =>
     ? { "README.md": `<h1>Code wrapping</h1>${highlightedCode}<pre><code>${longCodeLine}</code></pre>` }
     : id === "GalleryCodePatch01"
     ? { "twocrypto-math.patch": highlightedPatch }
-    : id === "GalleryCodePanel01"
+    : id === "GalleryCodePanel01" || id === "GalleryLayout001"
     ? {
         "README.md": `<h1>Code wrapping</h1>${highlightedCode}`,
         "twocrypto-math.patch": highlightedPatch
@@ -182,7 +182,11 @@ http
     const gist = url.pathname.match(
       /^\/api\/v1\/gists\/(Gallery[A-Za-z0-9]+)(?:\/revisions\/(\d+))?\/render$/
     );
-    if (gist) return respond(200, fixture(gist[1], Number(gist[2] || 1)));
+    if (gist) {
+      // Let the saved preview paint before the live response in layout tests.
+      if (gist[1] === "GalleryLayout001") await new Promise((resolve) => setTimeout(resolve, 2500));
+      return respond(200, fixture(gist[1], Number(gist[2] || 1)));
+    }
     if (url.pathname.includes("/narration")) return respond(404, {});
     respond(401, { error: { code: "unauthorized", message: "Log in" } });
   })

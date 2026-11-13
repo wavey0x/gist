@@ -1,20 +1,18 @@
 "use client";
 
 import {
-  ChevronDown,
   FileCode,
   FileDiff,
   History,
   TextSearch
 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { mountGallery } from "../public/gallery-viewer.mjs";
 import { addMarkdownWrapControls } from "../lib/code-wrap";
 import { getGistHeaderTitle, getTopLevelHeading } from "../lib/gist-title";
 import {
   orderedGistFiles,
-  type PublicGistFile,
   type PublicGistPayload,
   type RevisionHistoryItem
 } from "../lib/gists";
@@ -23,6 +21,8 @@ import { ArticleAudio } from "./ArticleAudio";
 import { CodeCopyButton } from "./CodeCopyButton";
 import { CodeWrapToggle } from "./CodeWrapToggle";
 import { LocalTimestamp } from "./LocalTimestamp";
+import { GistHeading } from "./GistHeading";
+import { GistFilePanel, sourceLineNumbers } from "./GistFilePanel";
 import { ReadingProgress } from "./ReadingProgress";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
 import { TableOfContents } from "./TableOfContents";
@@ -45,24 +45,8 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const MONTH_MS = 30 * DAY_MS;
 const YEAR_MS = 365 * DAY_MS;
-const GITHUB_LOGIN_RE =
-  /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 const ETH_ENTITY_ID_CLASS_RE = /^eth-id-[a-f0-9]{12}$/;
 const ETH_ENTITY_GROUP_HOVER_CLASS = "eth-entity-group-hover";
-
-function fallbackAuthorAvatarUrl(authorName: string) {
-  return GITHUB_LOGIN_RE.test(authorName)
-    ? `https://github.com/${authorName}.png?size=64`
-    : null;
-}
-
-function authorAvatarInitial(authorName: string) {
-  return authorName.trim().charAt(0).toUpperCase() || "?";
-}
-
-function latestRevisionCreatedAt(gist: PublicGistPayload) {
-  return gist.history.find((item) => item.is_latest)?.created_at ?? gist.updated_at;
-}
 
 function pluralize(value: number, singular: string) {
   return `${value} ${singular}${value === 1 ? "" : "s"} ago`;
@@ -93,112 +77,6 @@ function formatRelativeDate(value: string, now: number) {
   return pluralize(Math.floor(elapsed / YEAR_MS), "year");
 }
 
-function formatByteSize(byteSize: number) {
-  if (byteSize < 1024) {
-    return `${byteSize} B`;
-  }
-  return `${(byteSize / 1024).toFixed(byteSize < 10 * 1024 ? 1 : 0)} KB`;
-}
-
-function sourceLineCount(content: string) {
-  if (!content) {
-    return 1;
-  }
-  const count = content.split("\n").length;
-  return content.endsWith("\n") ? Math.max(1, count - 1) : count;
-}
-
-function sourceLineNumbers(content: string) {
-  return Array.from(
-    { length: sourceLineCount(content) },
-    (_, index) => index + 1
-  ).join("\n");
-}
-
-function GistFilePanel({
-  file,
-  collapsed,
-  onCollapseToggle
-}: {
-  file: PublicGistFile;
-  collapsed: boolean;
-  onCollapseToggle: () => void;
-}) {
-  const headingId = useId();
-  const bodyId = useId();
-  const [wrapped, setWrapped] = useState(false);
-  const metadata = [file.language, formatByteSize(file.byte_size)]
-    .filter(Boolean)
-    .join(" · ");
-
-  return (
-    <section
-      className="gist-file-panel"
-      data-gist-filename={file.filename}
-      data-collapsed={collapsed ? "true" : "false"}
-      aria-labelledby={headingId}
-    >
-      <header className="gist-file-header">
-        <button
-          type="button"
-          className="gist-file-disclosure"
-          aria-expanded={!collapsed}
-          aria-controls={bodyId}
-          aria-label={`${collapsed ? "Expand" : "Collapse"} ${file.filename}`}
-          onClick={onCollapseToggle}
-        >
-          <ChevronDown
-            className="gist-file-chevron"
-            aria-hidden="true"
-            size={15}
-            strokeWidth={1.9}
-          />
-          <span className="gist-file-identity">
-            <span className="gist-file-name" id={headingId}>
-              {file.filename}
-            </span>
-            <span className="gist-file-meta">{metadata}</span>
-          </span>
-        </button>
-        <div className="gist-file-actions">
-          <a className="gist-file-action" href={file.raw_url}>
-            Raw
-          </a>
-          {!collapsed && file.kind !== "markdown" ? (
-            <CodeWrapToggle
-              wrapped={wrapped}
-              onToggle={() => setWrapped((current) => !current)}
-              className="gist-file-action gist-file-wrap"
-              label={`Wrap lines in ${file.filename}`}
-            />
-          ) : null}
-          <CodeCopyButton content={file.content} label={`Copy ${file.filename}`}
-            className="gist-file-action gist-file-copy" />
-        </div>
-      </header>
-      <div className="gist-file-body" id={bodyId} hidden={collapsed}>
-        {!collapsed && file.kind === "markdown" ? (
-          <article
-            className="markdown-body gist-file-markdown"
-            dangerouslySetInnerHTML={{ __html: file.rendered_html }}
-          />
-        ) : null}
-        {!collapsed && file.kind !== "markdown" ? (
-          <div className="gist-code-view" data-code-wrap={wrapped}>
-            <pre className="gist-line-numbers" aria-hidden="true">
-              {sourceLineNumbers(file.content)}
-            </pre>
-            <div
-              className="markdown-body gist-code-content"
-              dangerouslySetInnerHTML={{ __html: file.rendered_html }}
-            />
-          </div>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
 export function GistViewer({
   canUseNarration = false,
   chrome,
@@ -215,7 +93,6 @@ export function GistViewer({
   );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [relativeDateNow, setRelativeDateNow] = useState(() => Date.now());
-  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const [singleFileWrapped, setSingleFileWrapped] = useState(false);
   const historyControlRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -423,27 +300,6 @@ export function GistViewer({
   const headerTitle = getGistHeaderTitle(gist);
   const articleAudioTitle =
     getTopLevelHeading(gist) ?? headerTitle ?? gist.display_title;
-  const avatarUrl =
-    gist.author_avatar_url ?? fallbackAuthorAvatarUrl(gist.author_name);
-  const visibleAvatarUrl =
-    avatarUrl && avatarUrl !== failedAvatarUrl ? avatarUrl : null;
-  const lastEditedAt =
-    gist.latest_revision_number > 1 ? latestRevisionCreatedAt(gist) : null;
-  const dateTooltipRows = lastEditedAt
-    ? [
-        { label: "created", value: gist.created_at },
-        { label: "edited", value: lastEditedAt }
-      ]
-    : [{ label: "created", value: gist.created_at }];
-  const dateTooltip = (
-    <span className="gist-date-tooltip" aria-hidden="true">
-      {dateTooltipRows.map((row) => (
-        <span className="gist-date-tooltip-row" key={row.label}>
-          {row.label}: <LocalTimestamp value={row.value} />
-        </span>
-      ))}
-    </span>
-  );
   const customDiffIsCurrent = viewMode === "custom" && customView === "diff";
   const rawIsVisible = viewMode === "raw" && Boolean(singleFile);
   const narrationIsActive =
@@ -474,55 +330,10 @@ export function GistViewer({
             <span className="brand-mark-light">gist</span>
           </div>
         ) : null}
-        <div className="gist-heading">
+        <GistHeading gist={gist}>
           {updateAvailable ? <button className="gist-update-action" type="button"
             onClick={() => void refreshRoute(new AbortController().signal)}>View updated gist</button> : null}
-          {headerTitle ? <h1 className="gist-title">{headerTitle}</h1> : null}
-          <div className="gist-meta">
-            <div className="gist-date-row">
-              <span className="gist-date-line gist-date-line-with-tooltip">
-                <span className="gist-date-label">
-                  {lastEditedAt ? "edited:" : "created:"}
-                </span>{" "}
-                <span className="gist-date-desktop">
-                  <LocalTimestamp value={lastEditedAt ?? gist.created_at} />
-                </span>
-                <span className="gist-date-mobile">
-                  <LocalTimestamp
-                    value={lastEditedAt ?? gist.created_at}
-                    variant="short"
-                  />
-                </span>
-                {dateTooltip}
-              </span>
-            </div>
-            <div className="gist-author-row">
-              <span className="gist-author-line">
-                {visibleAvatarUrl ? (
-                  <img
-                    className="gist-author-avatar"
-                    src={visibleAvatarUrl}
-                    alt=""
-                    width={18}
-                    height={18}
-                    onError={() => setFailedAvatarUrl(visibleAvatarUrl)}
-                  />
-                ) : (
-                  <span
-                    className="gist-author-avatar gist-author-avatar-placeholder"
-                    aria-hidden="true"
-                  >
-                    {authorAvatarInitial(gist.author_name)}
-                  </span>
-                )}
-                by <span className="gist-author-name">{gist.author_name}</span>
-              </span>
-              {gist.revision_number < gist.latest_revision_number ? (
-                <span>Revision {gist.revision_number}</span>
-              ) : null}
-            </div>
-          </div>
-        </div>
+        </GistHeading>
         <ArticleAudio
           active={narrationIsActive}
           articleTitle={articleAudioTitle}
