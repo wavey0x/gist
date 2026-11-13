@@ -78,7 +78,7 @@ test("up next lists the saved queue with time left and generation states", async
   await expect(upNext.getByText("Update generating")).toBeVisible();
   await expect(upNext.getByText("Generating audio…")).toBeVisible();
   await expect(upNext.getByRole("button", { name: "Play Still generating" })).toBeDisabled();
-  await expect(upNext.getByText(/^3 · /)).toBeVisible();
+  await expect(upNext.locator("header")).toHaveText("Playlist");
 });
 
 test("the queue can be reordered from the grip", async ({ page }) => {

@@ -1,0 +1,295 @@
+import { test, expect, type Page, type Route } from "@playwright/test";
+
+const id = "GalleryAudio0001";
+const endpoint = `/api/gists/${id}/revisions/1/narration`;
+const ready = { status: "ready", retryable: false, audio_url: `${endpoint}/audio` };
+// Long enough to exercise real ten-second seeks in the browser's media engine.
+const audio = Buffer.alloc(44 + 8000 * 40 * 2);
+audio.write("RIFF", 0); audio.writeUInt32LE(audio.length - 8, 4); audio.write("WAVEfmt ", 8);
+audio.writeUInt32LE(16, 16); audio.writeUInt16LE(1, 20); audio.writeUInt16LE(1, 22);
+audio.writeUInt32LE(8000, 24); audio.writeUInt32LE(16000, 28);
+audio.writeUInt16LE(2, 32); audio.writeUInt16LE(16, 34);
+audio.write("data", 36); audio.writeUInt32LE(audio.length - 44, 40);
+
+// Match production byte-range responses so streaming audio is seekable too.
+async function fulfillAudio(route: Route) {
+  const range = /^bytes=(\d+)-(\d*)$/.exec(route.request().headers().range ?? "");
+  const start = range ? Number(range[1]) : 0;
+  const end = range?.[2] ? Math.min(Number(range[2]), audio.length - 1) : audio.length - 1;
+  await route.fulfill({
+    status: range ? 206 : 200,
+    contentType: "audio/wav",
+    headers: {
+      "accept-ranges": "bytes",
+      ...(range ? { "content-range": `bytes ${start}-${end}/${audio.length}` } : {})
+    },
+    body: audio.subarray(start, end + 1)
+  });
+}
+
+type Controls = typeof window & {
+  testMediaActions: Record<string, MediaSessionActionHandler | null>;
+};
+
+test.use({ serviceWorkers: "block" });
+test.beforeEach(async ({ page, context }) => {
+  await context.addCookies([{ name: "wg_session", value: "audio-test", url: "http://127.0.0.1:4310" }]);
+  await page.route("**/api/me/offline-manifest", route => route.fulfill({ json: {
+    account_marker: "c".repeat(64), generated_at: new Date().toISOString(), gists: []
+  } }));
+  await page.route(`**${endpoint}`, route => route.fulfill({ json: ready }));
+  await page.route("**/narration/audio", fulfillAudio);
+  await page.addInitScript(() => {
+    const actions: Controls["testMediaActions"] = {};
+    (window as Controls).testMediaActions = actions;
+    const proto = Object.getPrototypeOf(navigator.mediaSession);
+    const original = proto.setActionHandler;
+    proto.setActionHandler = function(action: MediaSessionAction, handler: MediaSessionActionHandler | null) {
+      actions[action] = handler;
+      original.call(this, action, handler);
+    };
+  });
+});
+
+async function start(page: Page) {
+  await page.goto(`/${id}`);
+  await page.getByRole("button", { name: "Play article audio" }).click();
+  await expect.poll(() => page.locator("audio").evaluate((node: HTMLAudioElement) => node.readyState)).toBeGreaterThanOrEqual(3);
+  await expect.poll(() => page.locator("audio").evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThan(0);
+}
+
+async function action(page: Page, action: MediaSessionAction, extra = {}) {
+  await page.evaluate(({ action, extra }) => {
+    const handler = (window as Controls).testMediaActions[action];
+    if (!handler) throw new Error(`Missing media action: ${action}`);
+    handler({ action, ...extra });
+  }, { action, extra });
+}
+
+test("the mini-player and lock-screen actions seek by ten seconds without a Next button", async ({ page }) => {
+  await start(page);
+  const element = page.locator("audio");
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.readyState)).toBeGreaterThanOrEqual(3);
+  await action(page, "pause");
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true);
+  await action(page, "seekto", { seekTime: 15 });
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeCloseTo(15, 1);
+  await page.locator(".app-brand").click();
+  const mini = page.getByRole("complementary", { name: "Now playing" });
+  await expect(mini).toBeVisible();
+  await expect(mini.getByRole("button", { name: "Play next article" })).toHaveCount(0);
+  await mini.getByRole("button", { name: "Skip forward 10 seconds" }).click();
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeCloseTo(25, 1);
+  await mini.getByRole("button", { name: "Skip back 10 seconds" }).click();
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeCloseTo(15, 1);
+  await action(page, "seekbackward");
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeCloseTo(5, 1);
+  await action(page, "seekbackward");
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBe(0);
+  await action(page, "seekforward");
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeCloseTo(10, 1);
+  expect(await page.evaluate(() => {
+    const actions = (window as Controls).testMediaActions;
+    return [actions.previoustrack, actions.nexttrack, navigator.mediaSession.playbackState];
+  })).toEqual([null, null, "paused"]);
+  await action(page, "play");
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+  await expect.poll(() => page.evaluate(() => navigator.mediaSession.playbackState)).toBe("playing");
+  await mini.getByRole("button", { name: "Close audio player" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.mediaSession.playbackState)).toBe("none");
+});
+
+for (const close of [false, true]) {
+  test(`a delayed local copy respects ${close ? "closing" : "pausing"} playback`, async ({ page }) => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let downloading = false;
+    await page.route(`**${endpoint}/audio`, async route => {
+      if (route.request().resourceType() === "fetch") {
+        downloading = true;
+        await gate;
+      }
+      await fulfillAudio(route);
+    });
+    try {
+      await start(page);
+      await expect.poll(() => downloading).toBe(true);
+      const element = page.locator("audio");
+      await action(page, "seekto", { seekTime: 15 });
+      if (close) await page.getByRole("button", { name: "Hide article audio player" }).click();
+      else await page.getByRole("button", { name: "Pause article audio" }).click();
+      release();
+      await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
+      await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.readyState)).toBeGreaterThan(0);
+      expect(await element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true);
+      expect(await element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeCloseTo(15, 0);
+      const position = await page.evaluate(gistId => JSON.parse(localStorage.getItem(`waveygist:audio-position:v1:${gistId}:1`)!).position, id);
+      expect(position).toBeCloseTo(15, 0);
+      expect(await page.evaluate(() => navigator.mediaSession.playbackState)).toBe(close ? "none" : "paused");
+    } finally { release(); }
+  });
+}
+
+test("backgrounding a healthy stream does not replace its source when the local copy arrives", async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let downloading = false;
+  let createdLocal = false;
+  await page.exposeFunction("localCopyCreated", () => { createdLocal = true; });
+  await page.addInitScript(() => {
+    const original = URL.createObjectURL;
+    URL.createObjectURL = blob => {
+      void (window as unknown as { localCopyCreated(): void }).localCopyCreated();
+      return original(blob);
+    };
+  });
+  await page.route(`**${endpoint}/audio`, async route => {
+    if (route.request().resourceType() === "fetch") { downloading = true; await gate; }
+    await fulfillAudio(route);
+  });
+  try {
+    await start(page);
+    await expect.poll(() => downloading).toBe(true);
+    const element = page.locator("audio");
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.readyState)).toBeGreaterThanOrEqual(3);
+    const source = await element.evaluate((node: HTMLAudioElement) => node.currentSrc);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    release();
+    await expect.poll(() => createdLocal).toBe(true);
+    expect(await element.evaluate((node: HTMLAudioElement) => node.currentSrc)).toBe(source);
+    expect(await element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+    await action(page, "pause");
+    expect(await element.evaluate((node: HTMLAudioElement) => node.currentSrc)).toBe(source);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
+    expect(await element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true);
+  } finally { release(); }
+});
+
+
+test("pausing during loading cancels the pending play request", async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**${endpoint}/audio`, async route => {
+    await gate;
+    await fulfillAudio(route);
+  });
+  try {
+    await page.goto(`/${id}`);
+    await page.getByRole("button", { name: "Play article audio" }).click();
+    const pause = page.getByRole("button", { name: "Pause article audio" });
+    await expect(pause).toHaveAttribute("aria-busy", "true");
+    await expect(page.getByRole("status").filter({ hasText: "Loading audio…" })).toBeVisible();
+    await pause.click();
+    release();
+    const element = page.locator("audio");
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.readyState)).toBeGreaterThan(0);
+    expect(await element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true);
+    await expect(page.getByRole("button", { name: "Play article audio", exact: true })).toHaveAttribute("aria-busy", "false");
+    expect(await page.evaluate(() => navigator.mediaSession.playbackState)).toBe("paused");
+  } finally { release(); }
+});
+
+test("the next recording is ready before the current one ends in the background", async ({ page }) => {
+  const nextId = "QueueNextAudio01";
+  const entries = [id, nextId].map((gistId, index) => ({
+    gist_id: gistId, title: index ? "Next recording" : "First recording", author_name: "Field Notes",
+    latest_revision_number: 1, revision_number: 1, status: "ready", duration_ms: 40000,
+    audio_url: `/api/gists/${gistId}/revisions/1/narration/audio`, updating: false,
+    added_at: "2026-11-13T12:00:00Z"
+  }));
+  let items = [...entries];
+  await page.route("**/api/me/listen-queue", async route => {
+    if (route.request().method() === "PUT") {
+      items = route.request().postDataJSON().gist_ids.map((gistId: string) => entries.find(item => item.gist_id === gistId));
+    }
+    await route.fulfill({ json: { items } });
+  });
+  let nextDownloads = 0;
+  let nextStreams = 0;
+  await page.route(`**/api/gists/${nextId}/revisions/1/narration/audio`, async route => {
+    if (route.request().resourceType() === "fetch") nextDownloads++;
+    else nextStreams++;
+    await fulfillAudio(route);
+  });
+  let prepared = false;
+  await page.exposeFunction("nextRecordingPrepared", () => { prepared = true; });
+  await page.addInitScript(nextId => {
+    const original = Response.prototype.blob;
+    Response.prototype.blob = async function() {
+      const result = await original.call(this);
+      if (this.url.includes(nextId)) {
+        void (window as unknown as { nextRecordingPrepared(): void }).nextRecordingPrepared();
+      }
+      return result;
+    };
+  }, nextId);
+  await start(page);
+  await expect.poll(() => prepared).toBe(true);
+  expect(nextDownloads).toBe(1);
+  const element = page.locator("audio");
+  const firstSource = await element.evaluate((node: HTMLAudioElement) => node.currentSrc);
+  // All later audio requests fail: auto-advance must use the already prepared body.
+  await page.route("**/narration/audio", route => route.abort("internetdisconnected"));
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await action(page, "seekto", { seekTime: 39.5 });
+  await expect.poll(() => page.evaluate(() => navigator.mediaSession.metadata?.title)).toBe("Next recording");
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentSrc)).not.toBe(firstSource);
+  expect(await element.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
+  await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThan(0);
+  expect(await element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+  expect(nextStreams).toBe(0);
+});
+
+test("a dropped stream retries at the same position, and pause cancels recovery", async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**${endpoint}/audio`, async route => {
+    if (route.request().resourceType() === "fetch") await gate;
+    await fulfillAudio(route);
+  });
+  try {
+    await start(page);
+    await action(page, "seekto", { seekTime: 12 });
+    await page.clock.install();
+    // Inject the native error event sequence while retaining real media loading,
+    // position restoration and play promises for the retry itself.
+    await page.evaluate(() => {
+      const audio = document.querySelector("audio")!;
+      const originalLoad = audio.load.bind(audio);
+      let failed = false;
+      Object.defineProperty(audio, "error", { get: () => failed ? { code: 2 } : null });
+      audio.load = () => { failed = false; originalLoad(); };
+      Object.assign(window, { dropAudio: () => {
+        failed = true;
+        audio.pause();
+        audio.dispatchEvent(new Event("error"));
+      } });
+    });
+    const drop = () => page.evaluate(() => (window as unknown as { dropAudio(): void }).dropAudio());
+    await drop();
+    await expect(page.getByText("Connection lost. Reconnecting…", { exact: true })).toBeVisible();
+    await page.clock.runFor(2100);
+    const element = page.locator("audio");
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThanOrEqual(12);
+    await expect(page.getByRole("button", { name: "Pause article audio" })).toHaveAttribute("aria-busy", "false");
+    await drop();
+    await page.getByRole("button", { name: "Pause article audio" }).click();
+    await page.clock.runFor(5000);
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    expect(await element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true);
+    expect(await page.evaluate(() => navigator.mediaSession.playbackState)).toBe("paused");
+  } finally { release(); }
+});

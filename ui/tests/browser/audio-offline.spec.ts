@@ -1,13 +1,24 @@
 import { test, expect } from "@playwright/test";
 import http from "node:http";
 
-type CacheDiagnostics = typeof window & { audioCacheChecks: number; audioCacheBodyReads: number };
+type CacheDiagnostics = typeof window & {
+  audioCacheChecks: number;
+  audioCacheBodyReads: number;
+  mediaActions: Partial<Record<MediaSessionAction, MediaSessionActionHandler | null>>;
+};
 
 test("saved audio plays through scrolling and seeking online and offline", async ({ page, context, browserName }) => {
   await page.addInitScript(() => {
     const diagnostics = window as CacheDiagnostics;
     diagnostics.audioCacheChecks = 0;
     diagnostics.audioCacheBodyReads = 0;
+    diagnostics.mediaActions = {};
+    const mediaPrototype = Object.getPrototypeOf(navigator.mediaSession);
+    const setActionHandler = mediaPrototype.setActionHandler;
+    mediaPrototype.setActionHandler = function(action: MediaSessionAction, handler: MediaSessionActionHandler | null) {
+      diagnostics.mediaActions[action] = handler;
+      setActionHandler.call(this, action, handler);
+    };
     const match = Cache.prototype.match;
     const keys = Cache.prototype.keys;
     Cache.prototype.match = function (request, options) {
@@ -70,6 +81,20 @@ test("saved audio plays through scrolling and seeking online and offline", async
       await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThan(0);
       // Lock-screen playback must not depend on the service worker or network.
       await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
+      expect(await page.evaluate(() => navigator.mediaSession.playbackState)).toBe("playing");
+      await page.evaluate(() => (window as CacheDiagnostics).mediaActions.pause!({ action: "pause" }));
+      await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true);
+      await page.evaluate(() => (window as CacheDiagnostics).mediaActions.seekbackward!({ action: "seekbackward" }));
+      await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime)).toBe(0);
+      await page.evaluate(() => (window as CacheDiagnostics).mediaActions.seekforward!({ action: "seekforward" }));
+      await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.currentTime >= node.duration - 0.1)).toBe(true);
+      expect(await page.evaluate(() => {
+        const { nexttrack, previoustrack } = (window as CacheDiagnostics).mediaActions;
+        return [nexttrack, previoustrack];
+      })).toEqual([null, null]);
+      await page.evaluate(() => (window as CacheDiagnostics).mediaActions.seekbackward!({ action: "seekbackward" }));
+      await player.getByRole("button", { name: "Play article audio", exact: true }).click();
+      await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
       if (!offline) {
         const checks = await page.evaluate(() => (window as CacheDiagnostics).audioCacheChecks);
         await page.evaluate(() => {
@@ -96,6 +121,7 @@ test("saved audio plays through scrolling and seeking online and offline", async
       await expect(player).toBeHidden();
       await expect(button).toHaveClass(/article-audio-button-ready/);
       await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true);
+      expect(await page.evaluate(() => navigator.mediaSession.playbackState)).toBe("none");
     }
   } finally {
     await context.setOffline(false);

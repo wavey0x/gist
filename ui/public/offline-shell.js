@@ -765,7 +765,7 @@
     await putEntry({ ...entry, lastPlayedAt: new Date().toISOString() });
   }
 
-  function setupMediaSession(audio, payload) {
+  function setupMediaSession(audio, payload, play, pause, seek) {
     if (!("mediaSession" in navigator)) {
       return;
     }
@@ -783,13 +783,16 @@
       // Metadata support varies by browser.
     }
     const actions = {
-      play: () => audio.play(),
-      pause: () => audio.pause(),
-      seekbackward: () => { audio.currentTime = Math.max(0, audio.currentTime - 10); },
-      seekforward: () => { audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + 10); },
+      play,
+      pause,
+      stop: pause,
+      nexttrack: null,
+      previoustrack: null,
+      seekbackward: () => seek(audio.currentTime - 10),
+      seekforward: () => seek(audio.currentTime + 10),
       seekto: (details) => {
         if (typeof details.seekTime === "number") {
-          audio.currentTime = details.seekTime;
+          seek(details.seekTime);
         }
       }
     };
@@ -958,6 +961,7 @@
     let audioButton = null;
     let overlay = null;
     let updateDocked = () => undefined;
+    let stopPlayback = () => undefined;
 
     if (audioEntry && narrationEligible) {
       audioButton = element("button", {
@@ -1135,19 +1139,20 @@
       }
 
       function savePosition(force = false) {
-        if (!force && Math.abs(audio.currentTime - lastSaved) < 5) {
+        const position = sourceSwap?.position ?? audio.currentTime;
+        if (!force && Math.abs(position - lastSaved) < 5) {
           return;
         }
         try {
           const total = finiteDuration();
-          if (audio.currentTime <= 0.5 || (total > 0 && total - audio.currentTime <= 10)) {
+          if (position <= 0.5 || (total > 0 && total - position <= 10)) {
             localStorage.removeItem(storageKey);
           } else {
             localStorage.setItem(
               storageKey,
-              JSON.stringify({ position: Math.round(audio.currentTime * 10) / 10 })
+              JSON.stringify({ position: Math.round(position * 10) / 10 })
             );
-            lastSaved = audio.currentTime;
+            lastSaved = position;
           }
         } catch {
           // Playback position is best effort.
@@ -1168,50 +1173,121 @@
         }
       }
 
+      let playbackWanted = false;
+      let playAttempt = 0;
+
+      function syncMediaPosition() {
+        const total = finiteDuration();
+        if (!("mediaSession" in navigator) || total <= 0 || overlay.hidden) return;
+        try {
+          navigator.mediaSession.setPositionState({
+            duration: total,
+            playbackRate: audio.playbackRate,
+            position: Math.min(total, Math.max(0, audio.currentTime))
+          });
+        } catch { /* Optional API. */ }
+      }
+
+      function paintPlayback(loading = false, message = "") {
+        replaceIcon(play, playbackWanted ? "pause" : "play", 16, 2);
+        play.setAttribute("aria-label", playbackWanted ? "Pause article audio" : "Play article audio");
+        play.setAttribute("aria-busy", String(loading));
+        playbackError.textContent = message || (loading ? "Loading audio…" : "");
+        playbackError.hidden = !playbackError.textContent;
+        if ("mediaSession" in navigator) {
+          navigator.mediaSession.playbackState = overlay.hidden ? "none" : playbackWanted ? "playing" : "paused";
+          if (overlay.hidden) navigator.mediaSession.metadata = null;
+        }
+        syncMediaPosition();
+      }
+
+      function pauseAudio() {
+        playbackWanted = false;
+        ++playAttempt;
+        audio.pause();
+        savePosition(true);
+        paintPlayback();
+      }
+      stopPlayback = pauseAudio;
+
+      function seekAudio(value) {
+        if (!Number.isFinite(value)) return;
+        const position = Math.min(finiteDuration() || Infinity, Math.max(0, value));
+        if (sourceSwap) sourceSwap.position = position;
+        audio.currentTime = position;
+        paintTimeline();
+        savePosition(true);
+        syncMediaPosition();
+      }
+
       async function playAudio() {
+        if (overlay.hidden) return;
+        playbackWanted = true;
+        const attempt = ++playAttempt;
+        if (navigator.audioSession) {
+          try { navigator.audioSession.type = "playback"; } catch { /* Optional API. */ }
+        }
+        if (audio.error) {
+          sourceSwap = { position: sourceSwap?.position ?? audio.currentTime };
+          audio.load();
+        }
+        setupMediaSession(audio, payload, playAudio, pauseAudio, seekAudio);
+        paintPlayback(audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
         try {
           await audio.play();
-          playbackError.hidden = true;
-          playbackError.textContent = "";
+          if (attempt === playAttempt && playbackWanted) paintPlayback();
         } catch (error) {
           // Swapping the source aborts this attempt and resumes on the new one.
-          if (error?.name !== "AbortError") {
-            playbackError.textContent = "Audio could not be played.";
-            playbackError.hidden = false;
+          if (attempt === playAttempt && playbackWanted && error?.name !== "AbortError") {
+            if (audio.error) {
+              handleAudioError();
+              return;
+            }
+            playbackWanted = false;
+            paintPlayback(false, "Audio could not be played. Tap play to retry.");
           }
         }
       }
 
       let localAudioUrl = null;
+      let pendingLocalAudioUrl = null;
+      let localCopyLoading = null;
       let localCopyFailed = false;
       let sourceSwap = null;
 
       // iOS can suspend the service worker while locked, so playback must not
       // need it once the recording is in memory.
-      async function playFromLocalCopy() {
-        if (localAudioUrl || localCopyFailed) {
-          await playAudio();
-          return;
-        }
+      function adoptLocalAudio() {
+        if (!pendingLocalAudioUrl) return;
+        if (document.visibilityState !== "visible" && (audio.paused || audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA)) return;
         sourceSwap = {
           position: audio.readyState >= HTMLMediaElement.HAVE_METADATA ? audio.currentTime : null
         };
-        // The cached body loads after this tap, so bless the element for a later play.
-        void audio.play().catch(() => undefined);
-        audio.pause();
+        localAudioUrl = pendingLocalAudioUrl;
+        pendingLocalAudioUrl = null;
+        audio.src = localAudioUrl;
+        if (playbackWanted) void playAudio();
+      }
+
+      async function prepareLocalAudio() {
         try {
           const cache = await caches.open(AUDIO_CACHE);
           const blob = await (await cache.match(audioEntry.cacheKey)).blob();
-          localAudioUrl = URL.createObjectURL(
+          pendingLocalAudioUrl = URL.createObjectURL(
             blob.type ? blob : new Blob([blob], { type: "audio/mpeg" })
           );
-          audio.src = localAudioUrl;
+          adoptLocalAudio();
         } catch {
           localCopyFailed = true;
-          sourceSwap = null;
+        } finally {
+          localCopyLoading = null;
         }
-        if (!overlay.hidden) {
-          await playAudio();
+      }
+
+      function playFromLocalCopy() {
+        void playAudio();
+        if (!localAudioUrl && !pendingLocalAudioUrl && !localCopyFailed && !localCopyLoading) {
+          localCopyLoading = prepareLocalAudio();
         }
       }
 
@@ -1228,30 +1304,24 @@
         if (open) {
           void playFromLocalCopy();
         } else {
-          audio.pause();
+          pauseAudio();
           closeSpeedMenu(false);
           savePosition(true);
         }
         updateDocked();
       });
       play.addEventListener("click", () => {
-        if (audio.paused) {
-          void playAudio();
-        } else {
-          audio.pause();
-        }
+        if (playbackWanted || !audio.paused) pauseAudio();
+        else playFromLocalCopy();
       });
       back.addEventListener("click", () => {
-        audio.currentTime = Math.max(0, audio.currentTime - 10);
-        paintTimeline();
+        seekAudio(audio.currentTime - 10);
       });
       forward.addEventListener("click", () => {
-        audio.currentTime = Math.min(finiteDuration() || Infinity, audio.currentTime + 10);
-        paintTimeline();
+        seekAudio(audio.currentTime + 10);
       });
       seek.addEventListener("input", () => {
-        audio.currentTime = Number(seek.value);
-        paintTimeline();
+        seekAudio(Number(seek.value));
       });
       seek.addEventListener("change", () => savePosition(true));
       seek.addEventListener("pointerup", () => savePosition(true));
@@ -1265,11 +1335,22 @@
           audio.currentTime = position;
         }
         paintTimeline();
-        setupMediaSession(audio, payload);
+        syncMediaPosition();
       });
       audio.addEventListener("durationchange", paintTimeline);
-      audio.addEventListener("error", () => {
+      audio.addEventListener("ratechange", syncMediaPosition);
+      audio.addEventListener("seeked", syncMediaPosition);
+      audio.addEventListener("waiting", () => {
+        if (playbackWanted) paintPlayback(true);
+        adoptLocalAudio();
+      });
+      audio.addEventListener("stalled", adoptLocalAudio);
+      audio.addEventListener("playing", () => paintPlayback());
+      function handleAudioError() {
+        if (!audio.error) return;
         if (!localAudioUrl) {
+          playbackWanted = false;
+          paintPlayback(false, "Audio could not be played. Tap play to retry.");
           return;
         }
         // Fall back to the worker-served recording, including when an old
@@ -1277,11 +1358,13 @@
         URL.revokeObjectURL(localAudioUrl);
         localAudioUrl = null;
         localCopyFailed = true;
+        sourceSwap = { position: sourceSwap?.position ?? audio.currentTime };
         audio.src = audioEntry.cacheKey;
-        if (!overlay.hidden) {
+        if (playbackWanted) {
           void playAudio();
         }
-      });
+      }
+      audio.addEventListener("error", handleAudioError);
       audio.addEventListener("timeupdate", () => {
         if (sourceSwap) {
           return;
@@ -1290,28 +1373,34 @@
         savePosition(false);
       });
       audio.addEventListener("play", () => {
-        activeAudio = audio;
-        replaceIcon(play, "pause", 16, 2);
-        play.setAttribute("aria-label", "Pause article audio");
-        const audioSession = navigator.audioSession;
-        if (audioSession) {
-          try { audioSession.type = "playback"; } catch { /* Optional API. */ }
+        if (!playbackWanted) {
+          audio.pause();
+          return;
         }
+        activeAudio = audio;
         void updatePlayedAt(audioEntry);
       });
       audio.addEventListener("pause", () => {
-        replaceIcon(play, "play", 16, 2);
-        play.setAttribute("aria-label", "Play article audio");
-        if (!sourceSwap) {
-          savePosition(true);
-        }
+        if (sourceSwap || !audio.paused) return;
+        playbackWanted = false;
+        ++playAttempt;
+        paintPlayback();
+        savePosition(true);
       });
       audio.addEventListener("ended", () => {
-        replaceIcon(play, "play", 16, 2);
-        play.setAttribute("aria-label", "Play article audio");
+        playbackWanted = false;
+        paintPlayback();
         try { localStorage.removeItem(storageKey); } catch { /* Best effort. */ }
       });
       window.addEventListener("pagehide", () => savePosition(true), { once: true });
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          adoptLocalAudio();
+          syncMediaPosition();
+        } else {
+          savePosition(true);
+        }
+      });
 
       toolbar.append(audioButton);
     } else if (narrationEligible && readOfflineIdentity()?.canGenerateAudio === true) {
@@ -1386,8 +1475,8 @@
         audioButton.hidden = visible;
       }
       if (visible && audio && overlay) {
-        audio.pause();
         overlay.hidden = true;
+        stopPlayback();
         overlay.classList.remove("article-audio-overlay-docked");
         audioButton?.setAttribute("aria-expanded", "false");
         audioButton?.setAttribute("aria-pressed", "false");

@@ -17,7 +17,7 @@ import {
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import {
-  audioIsLoadedFor,
+  audioIsAvailableFor,
   closePlayer,
   hydratePlaybackRate,
   isTrack,
@@ -296,8 +296,8 @@ export function ArticleAudio({
   async function syncNarration(method: "GET" | "POST" = "GET") {
     if (!active || controllerRef.current) return;
     // A revision's recording is immutable, and a wake-up status failure must
-    // never take down audio that is already loaded.
-    if (method === "GET" && audioIsLoadedFor(gistId, revisionNumber)) {
+    // never take down the open player, including during a source swap.
+    if (method === "GET" && audioIsAvailableFor(gistId, revisionNumber)) {
       setAudioUrl(`${endpoint}/audio`);
       setViewState("ready");
       return;
@@ -328,6 +328,11 @@ export function ArticleAudio({
           });
           const payload = await readPayload(response);
           controller.signal.throwIfAborted();
+          if (method === "GET" && audioIsAvailableFor(gistId, revisionNumber)) {
+            setAudioUrl(`${endpoint}/audio`);
+            setViewState("ready");
+            return;
+          }
           if (method === "POST" && response.ok) {
             // Requesting audio queues the gist on the server.
             void refreshListenQueue();
@@ -550,6 +555,7 @@ export function ArticleAudio({
                 aria-label={
                   playing ? "Pause article audio" : "Play article audio"
                 }
+                aria-busy={engine.buffering}
                 onClick={togglePlayback}
               >
                 {playing ? (
@@ -654,9 +660,9 @@ export function ArticleAudio({
                 </span>
               ) : null}
             </div>
-            {engine.message ? (
+            {engine.message || engine.buffering ? (
               <span className="article-audio-playback-error" role="status">
-                {engine.message}
+                {engine.message || "Loading audio…"}
               </span>
             ) : null}
           </div>

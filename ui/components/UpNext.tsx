@@ -3,7 +3,7 @@
 import type { PointerEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, GripVertical, Pause, Play, X } from "lucide-react";
+import { GripVertical, Pause, Play, X } from "lucide-react";
 import {
   POSITION_KEY_PREFIX,
   openTrack,
@@ -118,14 +118,6 @@ function remainingFor(
   return { seconds: duration, fraction: 0 };
 }
 
-function formatTotal(seconds: number) {
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest ? `${hours} h ${rest} min` : `${hours} h`;
-}
-
 export function UpNext() {
   const queue = useListenQueue();
   const engine = useAudioEngine();
@@ -193,7 +185,6 @@ export function UpNext() {
     return null;
   }
 
-  const totalSeconds = rows.reduce((sum, row) => sum + (row.remaining.seconds ?? 0), 0);
   const visible = expanded ? rows : rows.slice(0, COLLAPSED_COUNT);
   const hiddenCount = rows.length - visible.length;
 
@@ -262,12 +253,6 @@ export function UpNext() {
         <h2 id="up-next-heading" className="home-section-title">
           Playlist
         </h2>
-        {rows.length ? (
-          <span className="home-section-meta">
-            {rows.length}
-            {totalSeconds > 0 ? ` · ${formatTotal(totalSeconds)}` : ""}
-          </span>
-        ) : null}
       </header>
       {rows.length ? (
         <ol className={`up-next-list${drag ? " up-next-list-dragging" : ""}`}>
@@ -306,49 +291,6 @@ export function UpNext() {
               >
                 <SwipeRow actionLabel="Remove" onAction={() => remove(item)}>
                   <div className="up-next-row">
-                    <button
-                      type="button"
-                      className="up-next-play"
-                      onClick={() => play(item)}
-                      disabled={item.status !== "ready"}
-                      aria-label={`${isPlaying ? "Pause" : "Play"} ${item.title}`}
-                    >
-                      <span className="up-next-play-icon" aria-hidden="true">
-                        {isPlaying ? (
-                          <Pause size={14} strokeWidth={2.2} />
-                        ) : (
-                          <Play size={14} strokeWidth={2.2} />
-                        )}
-                      </span>
-                      <span className="up-next-text">
-                        <span className="up-next-title">{item.title}</span>
-                        <span className="up-next-detail">
-                          {detail}
-                          {updated ? <span className="up-next-tag">New version</span> : null}
-                          {item.updating ? (
-                            <span className="up-next-tag up-next-tag-muted">Update generating</span>
-                          ) : null}
-                        </span>
-                      </span>
-                    </button>
-                    <Link
-                      className="up-next-open"
-                      href={`/${item.gist_id}`}
-                      prefetch={false}
-                      aria-label={`Open ${item.title}`}
-                      data-no-swipe
-                    >
-                      <ChevronRight aria-hidden="true" size={16} strokeWidth={1.8} />
-                    </Link>
-                    <button
-                      type="button"
-                      className="up-next-remove"
-                      aria-label={`Remove ${item.title} from Playlist`}
-                      onClick={() => remove(item)}
-                      data-no-swipe
-                    >
-                      <X aria-hidden="true" size={15} strokeWidth={1.8} />
-                    </button>
                     {rows.length > 1 ? (
                       <button
                         type="button"
@@ -372,6 +314,40 @@ export function UpNext() {
                         <GripVertical aria-hidden="true" size={16} strokeWidth={1.8} />
                       </button>
                     ) : null}
+                    <button
+                      type="button"
+                      className="up-next-play"
+                      onClick={() => play(item)}
+                      disabled={item.status !== "ready"}
+                      aria-label={`${isPlaying ? "Pause" : "Play"} ${item.title}`}
+                    >
+                      <span className="up-next-play-icon" aria-hidden="true">
+                        {isPlaying ? (
+                          <Pause size={14} strokeWidth={2.2} />
+                        ) : (
+                          <Play size={14} strokeWidth={2.2} />
+                        )}
+                      </span>
+                    </button>
+                    <Link className="up-next-text" href={`/${item.gist_id}`} prefetch={false}>
+                      <span className="up-next-title">{item.title}</span>
+                      <span className="up-next-detail">
+                        {detail}
+                        {updated ? <span className="up-next-tag">New version</span> : null}
+                        {item.updating ? (
+                          <span className="up-next-tag up-next-tag-muted">Update generating</span>
+                        ) : null}
+                      </span>
+                    </Link>
+                    <button
+                      type="button"
+                      className="up-next-remove"
+                      aria-label={`Remove ${item.title} from Playlist`}
+                      onClick={() => remove(item)}
+                      data-no-swipe
+                    >
+                      <X aria-hidden="true" size={15} strokeWidth={1.8} />
+                    </button>
                   </div>
                   {remaining.fraction > 0 ? (
                     <span

@@ -28,6 +28,7 @@ export type AudioEngineState = {
   track: AudioTrack | null;
   opened: boolean;
   playing: boolean;
+  buffering: boolean;
   currentTime: number;
   duration: number;
   playbackRate: number;
@@ -38,7 +39,6 @@ export type AudioEngineState = {
 
 type SourceSwap = {
   position: number | null;
-  resume: boolean;
 };
 
 type NavigatorWithAudioSession = Navigator & {
@@ -59,6 +59,7 @@ const INITIAL_STATE: AudioEngineState = {
   track: null,
   opened: false,
   playing: false,
+  buffering: false,
   currentTime: 0,
   duration: 0,
   playbackRate: 1,
@@ -74,7 +75,11 @@ const listeners = new Set<() => void>();
 let lastSavedTime = 0;
 let positionRestored = false;
 let sourceSwap: SourceSwap | null = null;
-let resumeOnLocalCopy = false;
+let playbackWanted = false;
+let playAttempt = 0;
+let networkInterrupted = false;
+let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+let recoveryAttempts = 0;
 let localCopy: {
   generation: number;
   loading: Promise<void> | null;
@@ -111,9 +116,10 @@ export function positionStorageKey(gistId: string, revisionNumber: number) {
   return `${POSITION_KEY_PREFIX}${gistId}:${revisionNumber}`;
 }
 
-export function audioIsLoadedFor(gistId: string, revisionNumber: number) {
+export function audioIsAvailableFor(gistId: string, revisionNumber: number) {
   return (
-    isTrack(state.track, gistId, revisionNumber) && (audio?.readyState ?? 0) > 0
+    isTrack(state.track, gistId, revisionNumber) &&
+    (state.opened || (audio?.readyState ?? 0) > 0)
   );
 }
 
@@ -157,10 +163,13 @@ function clearStoredPosition(track: AudioTrack | null = state.track) {
 
 export function persistPosition(force = false) {
   const { track } = state;
-  if (!audio || !track || !Number.isFinite(audio.currentTime) || sourceSwap) {
+  if (!audio || !track || (!force && sourceSwap)) {
     return;
   }
-  if (audio.currentTime <= 0.5) {
+  const position = sourceSwap?.position ?? audio.currentTime;
+  const duration = sourceSwap ? state.duration : audio.duration;
+  if (!Number.isFinite(position)) return;
+  if (position <= 0.5) {
     if (positionRestored) {
       clearStoredPosition();
     }
@@ -168,15 +177,15 @@ export function persistPosition(force = false) {
     return;
   }
   if (
-    Number.isFinite(audio.duration) &&
-    audio.duration - audio.currentTime <= POSITION_END_THRESHOLD_SECONDS
+    Number.isFinite(duration) && duration > 0 &&
+    duration - position <= POSITION_END_THRESHOLD_SECONDS
   ) {
     clearStoredPosition();
     return;
   }
   if (
     !force &&
-    Math.abs(audio.currentTime - lastSavedTime) < POSITION_SAVE_INTERVAL_SECONDS
+    Math.abs(position - lastSavedTime) < POSITION_SAVE_INTERVAL_SECONDS
   ) {
     return;
   }
@@ -184,14 +193,14 @@ export function persistPosition(force = false) {
     window.localStorage.setItem(
       positionStorageKey(track.gistId, track.revisionNumber),
       JSON.stringify({
-        position: Math.round(audio.currentTime * 10) / 10,
-        duration: Number.isFinite(audio.duration)
-          ? Math.round(audio.duration)
+        position: Math.round(position * 10) / 10,
+        duration: Number.isFinite(duration)
+          ? Math.round(duration)
           : undefined,
         saved_at: new Date().toISOString()
       })
     );
-    lastSavedTime = audio.currentTime;
+    lastSavedTime = position;
   } catch {
     // Playback bookmarks are best effort.
   }
@@ -250,7 +259,7 @@ function syncMediaMetadata() {
   }
   const session = navigator.mediaSession;
   const { track } = state;
-  if (!track) {
+  if (!track || !state.opened) {
     session.metadata = null;
     session.playbackState = "none";
   } else if ("MediaMetadata" in window) {
@@ -272,14 +281,13 @@ function syncMediaMetadata() {
       ]
     });
   }
-  try {
-    // iOS swaps the lock screen's 10-second skip buttons for track buttons
-    // whenever a track handler exists, so leave them unset. The playlist
-    // still advances on its own when a recording ends.
-    session.setActionHandler("nexttrack", null);
-    session.setActionHandler("previoustrack", null);
-  } catch {
-    // Media Session actions vary by Safari release.
+  // Prefer time seeking in system controls; the queue still advances on ended.
+  for (const action of ["nexttrack", "previoustrack"] as const) {
+    try {
+      session.setActionHandler(action, null);
+    } catch {
+      // Media Session actions vary by Safari release.
+    }
   }
 }
 
@@ -292,12 +300,12 @@ function installMediaSessionActions() {
     [
       "pause",
       () => {
-        audio?.pause();
-        persistPosition(true);
+        pausePlayback();
       }
     ],
-    ["seekbackward", (details) => skip(-(details.seekOffset ?? 10))],
-    ["seekforward", (details) => skip(details.seekOffset ?? 10)],
+    ["seekbackward", () => skip(-10)],
+    ["seekforward", () => skip(10)],
+    ["stop", closePlayer],
     [
       "seekto",
       (details) => {
@@ -328,6 +336,7 @@ function element() {
   created.setAttribute("aria-hidden", "true");
   created.addEventListener("loadedmetadata", handleLoadedMetadata);
   created.addEventListener("durationchange", () => {
+    if (sourceSwap && !Number.isFinite(created.duration)) return;
     update({
       duration: Number.isFinite(created.duration) ? created.duration : 0
     });
@@ -336,20 +345,40 @@ function element() {
   created.addEventListener("timeupdate", handleTimeUpdate);
   created.addEventListener("seeked", syncMediaPosition);
   created.addEventListener("error", handleAudioError);
-  created.addEventListener("waiting", adoptLocalCopy);
+  created.addEventListener("waiting", () => {
+    if (playbackWanted) update({ buffering: true });
+    adoptLocalCopy();
+  });
   created.addEventListener("stalled", adoptLocalCopy);
   created.addEventListener("play", () => {
+    if (!playbackWanted) {
+      created.pause();
+      return;
+    }
     update({ playing: true });
     syncMediaState();
     if (state.track) {
       void markNarrationPlayed(state.track.gistId, state.track.revisionNumber);
     }
   });
+  created.addEventListener("playing", () => {
+    networkInterrupted = false;
+    clearNetworkRecovery();
+    recoveryAttempts = 0;
+    update({ buffering: false, message: "" });
+    syncMediaState();
+    void prepareNextRecording();
+  });
   created.addEventListener("pause", () => {
-    if (sourceSwap) {
+    if (
+      sourceSwap || !created.paused || networkInterrupted ||
+      (playbackWanted && created.error?.code === MediaError.MEDIA_ERR_NETWORK)
+    ) {
       return;
     }
-    update({ playing: false });
+    playbackWanted = false;
+    update({ playing: false, buffering: false });
+    persistPosition(true);
     syncMediaState();
     adoptLocalCopy();
   });
@@ -358,14 +387,17 @@ function element() {
   audio = created;
   installMediaSessionActions();
   subscribeListenQueue(() => {
-    syncMediaMetadata();
     refreshCachedQueueTracks();
+    void prepareNextRecording();
   });
   refreshCachedQueueTracks();
   window.addEventListener("pagehide", () => persistPosition(true));
+  window.addEventListener("online", recoverNetworkPlayback);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       adoptLocalCopy();
+      recoverNetworkPlayback();
+      syncMediaState();
     } else {
       persistPosition(true);
     }
@@ -374,7 +406,7 @@ function element() {
 }
 
 function syncMediaState() {
-  if ("mediaSession" in navigator && state.track) {
+  if ("mediaSession" in navigator && state.track && state.opened) {
     navigator.mediaSession.playbackState = state.playing ? "playing" : "paused";
   }
   syncMediaPosition();
@@ -394,9 +426,6 @@ function handleLoadedMetadata() {
   } else {
     restorePosition(audio);
   }
-  if (swap?.resume) {
-    void playAudio();
-  }
   syncMediaPosition();
 }
 
@@ -408,13 +437,15 @@ function handleTimeUpdate() {
   persistPosition();
   if (state.sleepEndsAt !== null && Date.now() >= state.sleepEndsAt) {
     update({ sleepEndsAt: null, sleepMinutes: null });
-    audio.pause();
-    persistPosition(true);
+    pausePlayback();
   }
 }
 
 function handleEnded() {
-  update({ playing: false });
+  if (!state.opened || !audio?.ended) return;
+  playbackWanted = false;
+  update({ playing: false, buffering: false });
+  syncMediaState();
   clearStoredPosition();
   const finished = state.track;
   if (finished) {
@@ -435,11 +466,10 @@ function releaseLocalCopy() {
     failed: false
   };
   sourceSwap = null;
-  resumeOnLocalCopy = false;
 }
 
-async function downloadNarrationBlob(url: string) {
-  const response = await fetch(url, { headers: { Accept: "audio/mpeg" } });
+async function downloadNarrationBlob(url: string, signal?: AbortSignal) {
+  const response = await fetch(url, { headers: { Accept: "audio/mpeg" }, signal });
   if (!response.ok) {
     return null;
   }
@@ -476,6 +506,7 @@ function ensureLocalCopy(download: boolean) {
         blob.type ? blob : new Blob([blob], { type: "audio/mpeg" })
       );
       adoptLocalCopy();
+      void prepareNextRecording();
     }
   })();
   copy.loading = loading;
@@ -487,85 +518,144 @@ function adoptLocalCopy() {
   if (!copy.pendingUrl || !audio) {
     return;
   }
-  const interrupted = !audio.paused;
-  // A hidden page may not be allowed to restart, so keep a healthy stream
-  // running until it stalls, pauses, or the page returns.
+  // A hidden page may not be allowed to restart. Preserve healthy playback
+  // and native pause/resume until the stream stalls or the page returns.
   if (
-    interrupted &&
     document.visibilityState !== "visible" &&
-    audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
+    (audio.paused || audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA)
   ) {
     return;
   }
   sourceSwap = {
     position:
-      audio.readyState >= HTMLMediaElement.HAVE_METADATA ? audio.currentTime : null,
-    resume: interrupted || resumeOnLocalCopy
+      audio.readyState >= HTMLMediaElement.HAVE_METADATA ? audio.currentTime : null
   };
-  resumeOnLocalCopy = false;
   copy.url = copy.pendingUrl;
   copy.pendingUrl = null;
   audio.src = copy.url;
+  // Keep the play request in this turn. Waiting for loadedmetadata can lose
+  // iOS's playback permission when the display locks during the source swap.
+  if (playbackWanted) void playAudio();
 }
 
 function handleAudioError() {
   const copy = localCopy;
-  if (!audio || !copy.url || !state.track) {
+  if (!audio?.error || !state.track) {
+    return;
+  }
+  if (!copy.url) {
+    networkInterrupted = playbackWanted && audio.error?.code === MediaError.MEDIA_ERR_NETWORK;
+    update({
+      playing: networkInterrupted,
+      buffering: networkInterrupted,
+      message: networkInterrupted
+        ? "Connection lost. Reconnecting…"
+        : "Audio could not be played. Tap play to retry."
+    });
+    if (!networkInterrupted) playbackWanted = false;
+    else scheduleNetworkRecovery();
+    syncMediaState();
     return;
   }
   URL.revokeObjectURL(copy.url);
   copy.url = null;
   copy.failed = true;
   sourceSwap = {
-    position: audio.currentTime > 0 ? audio.currentTime : null,
-    resume: state.playing || (sourceSwap?.resume ?? false)
+    position: sourceSwap?.position ?? (audio.currentTime > 0 ? audio.currentTime : state.currentTime)
   };
   audio.src = state.track.url;
+  if (playbackWanted) void playAudio();
 }
 
 function setSource(track: AudioTrack) {
   const target = element();
   persistPosition(true);
+  playbackWanted = false;
+  networkInterrupted = false;
+  clearNetworkRecovery();
+  recoveryAttempts = 0;
+  ++playAttempt;
   releaseLocalCopy();
   lastSavedTime = 0;
   positionRestored = false;
-  update({ track, currentTime: 0, duration: 0, message: "" });
-  target.src = track.url;
+  update({ track, currentTime: 0, duration: 0, playing: false, buffering: false, message: "" });
+  const prepared = takePreparedRecording(track);
+  if (prepared) localCopy.url = URL.createObjectURL(prepared);
+  target.src = localCopy.url ?? track.url;
   syncMediaMetadata();
 }
 
 async function playAudio(failureMessage = "Audio could not be played.") {
-  if (!audio) {
+  if (!audio || !state.opened) {
     return;
   }
   requestPlaybackAudioSession();
+  clearNetworkRecovery();
+  playbackWanted = true;
+  networkInterrupted = false;
+  const attempt = ++playAttempt;
+  update({ playing: true, buffering: audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA, message: "" });
+  if (audio.error) {
+    sourceSwap = { position: state.currentTime };
+    audio.load();
+  }
   audio.playbackRate = state.playbackRate;
+  syncMediaMetadata();
+  syncMediaState();
   try {
     await audio.play();
-    update({ message: "" });
+    if (attempt === playAttempt && playbackWanted) {
+      update({ buffering: false, message: "" });
+    }
   } catch (error) {
     // Swapping the source aborts this attempt and resumes on the new one.
-    if (!(error instanceof DOMException && error.name === "AbortError")) {
-      update({ message: failureMessage });
+    if (
+      attempt === playAttempt && playbackWanted &&
+      !(error instanceof DOMException && error.name === "AbortError")
+    ) {
+      // WebKit can reject play() before dispatching error. Let the same
+      // source-recovery path handle both without discarding the play intent.
+      if (audio.error) {
+        handleAudioError();
+        return;
+      }
+      playbackWanted = false;
+      update({ playing: false, buffering: false, message: failureMessage });
+      syncMediaState();
     }
   }
 }
 
-async function startFromCachedCopy() {
-  if (!audio) {
-    return;
+function pausePlayback() {
+  playbackWanted = false;
+  networkInterrupted = false;
+  clearNetworkRecovery();
+  ++playAttempt;
+  audio?.pause();
+  update({ playing: false, buffering: false, message: "" });
+  persistPosition(true);
+  syncMediaState();
+}
+
+function recoverNetworkPlayback() {
+  if (networkInterrupted && playbackWanted) {
+    void playAudio();
+    void ensureLocalCopy(true);
   }
-  // The cached body loads after this tap, so bless the element for a later
-  // play instead of restarting the stream a moment after it begins.
-  requestPlaybackAudioSession();
-  resumeOnLocalCopy = true;
-  void audio.play().catch(() => undefined);
-  audio.pause();
-  await ensureLocalCopy(true);
-  if (resumeOnLocalCopy) {
-    resumeOnLocalCopy = false;
-    await playAudio();
-  }
+}
+
+function clearNetworkRecovery() {
+  if (recoveryTimer !== null) clearTimeout(recoveryTimer);
+  recoveryTimer = null;
+}
+
+function scheduleNetworkRecovery() {
+  clearNetworkRecovery();
+  // Retain the user's play intent through a dropped connection, with bounded
+  // backoff. Pause/close/track changes cancel recovery, including stale timers.
+  if (!navigator.onLine) return;
+  const delay = Math.min(30_000, 2_000 * 2 ** Math.min(recoveryAttempts++, 4));
+  recoveryTimer = setTimeout(recoverNetworkPlayback, delay);
 }
 
 // Load a track's metadata for its page unless the listener has something open.
@@ -585,11 +675,11 @@ export function releaseTrack(gistId: string, revisionNumber: number) {
     return;
   }
   persistPosition(true);
-  audio?.pause();
+  pausePlayback();
   audio?.removeAttribute("src");
   audio?.load();
   releaseLocalCopy();
-  update({ track: null, currentTime: 0, duration: 0, playing: false, message: "" });
+  update({ track: null, currentTime: 0, duration: 0, playing: false, buffering: false, message: "" });
   syncMediaMetadata();
 }
 
@@ -607,19 +697,13 @@ export function openTrack(track: AudioTrack) {
     audio_url: track.url
   });
   syncMediaMetadata();
-  if (localCopy.url) {
-    void playAudio();
-  } else if (track.cached) {
-    void startFromCachedCopy();
-  } else {
-    void playAudio();
-    void ensureLocalCopy(true);
-  }
+  void playAudio();
+  void ensureLocalCopy(true);
 }
 
 export function closePlayer() {
-  audio?.pause();
-  persistPosition(true);
+  pausePlayback();
+  releasePreparedRecording();
   if (audio) {
     audio.preload = "metadata";
   }
@@ -640,9 +724,8 @@ export function togglePlayback() {
   if (!audio) {
     return;
   }
-  if (!audio.paused) {
-    audio.pause();
-    persistPosition(true);
+  if (playbackWanted || !audio.paused) {
+    pausePlayback();
     return;
   }
   void playAudio();
@@ -652,8 +735,14 @@ export function seek(value: number) {
   if (!audio || !Number.isFinite(value)) {
     return;
   }
-  audio.currentTime = value;
-  update({ currentTime: value });
+  const maximum = sourceSwap && state.duration > 0
+    ? state.duration
+    : Number.isFinite(audio.duration) ? audio.duration : Infinity;
+  const position = Math.min(maximum, Math.max(0, value));
+  if (sourceSwap) sourceSwap.position = position;
+  audio.currentTime = position;
+  update({ currentTime: position });
+  syncMediaPosition();
 }
 
 export function seekToFraction(fraction: number) {
@@ -668,7 +757,7 @@ export function skip(seconds: number) {
     return;
   }
   const maximum = Number.isFinite(audio.duration) ? audio.duration : Infinity;
-  seek(Math.min(maximum, Math.max(0, audio.currentTime + seconds)));
+  seek(Math.min(maximum, Math.max(0, (sourceSwap?.position ?? audio.currentTime) + seconds)));
   persistPosition(true);
 }
 
@@ -706,6 +795,56 @@ export function trackForQueueItem(item: QueueItem): AudioTrack | null {
 // Offline availability of queued recordings, resolved ahead of time so that
 // auto-advance can start the next track synchronously from the ended event.
 const cachedQueueTracks = new Set<string>();
+
+// Prepare only the next recording. Starting it must not wait for JavaScript
+// fetch/Cache Storage after iOS backgrounds the page at the end of a track.
+let preparedRecording: {
+  key: string;
+  blob: Blob | null;
+  controller: AbortController;
+  loading: Promise<void> | null;
+} | null = null;
+
+function releasePreparedRecording() {
+  preparedRecording?.controller.abort();
+  preparedRecording = null;
+}
+
+function takePreparedRecording(track: AudioTrack) {
+  const blob = preparedRecording?.key === trackKey(track.gistId, track.revisionNumber)
+    ? preparedRecording.blob : null;
+  releasePreparedRecording();
+  return blob;
+}
+
+async function prepareNextRecording() {
+  if (!state.opened || !state.track || (!localCopy.url && !localCopy.pendingUrl)) return;
+  const item = nextQueueItem(state.track.gistId);
+  const next = item ? trackForQueueItem(item) : null;
+  if (!next) {
+    releasePreparedRecording();
+    return;
+  }
+  const key = trackKey(next.gistId, next.revisionNumber);
+  if (preparedRecording?.key === key) return preparedRecording.loading;
+  releasePreparedRecording();
+  const prepared = {
+    key,
+    blob: null as Blob | null,
+    controller: new AbortController(),
+    loading: null as Promise<void> | null
+  };
+  preparedRecording = prepared;
+  prepared.loading = (async () => {
+    let blob = await cachedNarrationBlob(next.gistId, next.revisionNumber).catch(() => null);
+    if (prepared.controller.signal.aborted) return;
+    if (!blob) blob = await downloadNarrationBlob(next.url, prepared.controller.signal).catch(() => null);
+    if (preparedRecording !== prepared) return;
+    prepared.blob = blob?.type ? blob : blob ? new Blob([blob], { type: "audio/mpeg" }) : null;
+    prepared.loading = null;
+  })();
+  return prepared.loading;
+}
 
 function refreshCachedQueueTracks() {
   for (const item of getListenQueue().items) {
