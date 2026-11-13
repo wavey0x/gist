@@ -20,8 +20,29 @@ const longCodeLine = `const value = "${longCodeValue}";`;
 const highlightedCode = `<div class="highlight highlight-source-js" dir="auto"><pre><span class="pl-k">const</span> value = "${longCodeValue}";\n\n\t&lt;tag&gt; &amp; \`literal\` $(text)\n</pre></div>`;
 const longPatchLine = `+MIN_A: constant(uint256) = ${"N_CONS*N_CONS*".repeat(24)}`;
 const highlightedPatch = `<div class="highlight highlight-source-diff" dir="auto"><pre>diff --git a/example.vy b/example.vy\n<span class="pl-mi1">${longPatchLine}</span></pre></div>`;
+const longParagraph = (figure) =>
+  `The lender market holds ${figure} of available cash against outstanding debt, ${"and the remaining allocation stays idle until governance acts on it, ".repeat(6)}which is why the plan starts here.`;
+const diffTable = (debt) =>
+  ["| Market | Debt | Cash |", "| --- | ---: | ---: |", `| cbBTC mint | ${debt} | 48.08m |`, "| sfrxUSD | 4.16m | 1.35m |"].join("\n");
+const unchangedLines = Array.from({ length: 12 }, (_, index) => `Unchanged line ${index + 1}.`).join("\n\n");
+// One gist whose content differs per revision, to exercise the diff view.
+const diffContent = (filename, revision) =>
+  filename === "calc.py"
+    ? `def total(values):\n    result = 0\n    for value in values:\n        result += ${revision === 1 ? "value" : "value * 2"}\n    return result\n\nLIMIT = "${"x".repeat(revision === 1 ? 200 : 220)}"\n`
+    : [
+        revision === 1 ? "# Oracle markets: prioritized remediation" : "# Oracle markets: containment and migration",
+        longParagraph(revision === 1 ? "1.93m" : "1.88m"),
+        revision === 1 ? "Start with the lender exit." : "A freeze stops new principal; it does not repair the oracle at all.",
+        unchangedLines,
+        diffTable(revision === 1 ? "1.93m" : "1.88m"),
+        ...(revision === 3 ? ["Added in the third revision."] : [])
+      ].join("\n\n") + "\n";
 const filesFor = (id) =>
-  id === "GalleryRawFiles01"
+  id === "GalleryDiff00001"
+    ? { "README.md": "<h1>Oracle markets</h1><p>Diff fixture.</p>", "calc.py": "<pre>def total(values): ...</pre>" }
+    : id === "GalleryDiffProse1"
+    ? { "README.md": "<h1>Oracle markets</h1><p>Diff fixture.</p>" }
+    : id === "GalleryRawFiles01"
     ? {
         "README.md": '<h1>Raw files</h1><p><a href="/GalleryRawFiles01/revisions/1/raw/data%20sample.json">JSON source</a></p>',
         "data sample.json": '<pre>{"message":"Raw stays raw"}</pre>'
@@ -61,9 +82,10 @@ export function fixture(id, revision = 1) {
       filename,
       {
         filename,
-        kind: /\.(patch|json)$/.test(filename) ? "source" : "markdown",
+        kind: /\.(patch|json|py)$/.test(filename) ? "source" : "markdown",
         language: filename.endsWith(".patch") ? "diff" : filename.endsWith(".json") ? "json" : "markdown",
-        content: filename.endsWith(".json") ? '{"message":"Raw stays raw"}\n' :
+        content: id.startsWith("GalleryDiff") ? diffContent(filename, revision) :
+          filename.endsWith(".json") ? '{"message":"Raw stays raw"}\n' :
           filename.endsWith(".patch") ? `diff --git a/example.vy b/example.vy\n${longPatchLine}\n` :
           id === "GalleryCodeWrap01" ? `# Code wrapping\n\n\`\`\`js\n${longCodeLine}\n\`\`\`` :
           `# Gallery\n\n[Photo](${image(1)}#wg-gallery=album)`,
@@ -85,17 +107,17 @@ export function fixture(id, revision = 1) {
     primary_file: Object.keys(files)[0],
     snapshot_sha256: "a".repeat(64),
     revision_number: revision,
-    latest_revision_number: 2,
+    latest_revision_number: id.startsWith("GalleryDiff") ? 3 : 2,
     created_at: "2026-09-01T12:00:00Z",
     updated_at: "2026-09-02T12:00:00Z",
     files,
-    history: [2, 1].map((revision_number) => ({
+    history: (id.startsWith("GalleryDiff") ? [3, 2, 1] : [2, 1]).map((revision_number) => ({
       revision_number,
       created_at: "2026-09-01T12:00:00Z",
       author_name: "Field Notes",
       snapshot_sha256: "a".repeat(64),
       file_count: Object.keys(files).length,
-      is_latest: revision_number === 2,
+      is_latest: revision_number === (id.startsWith("GalleryDiff") ? 3 : 2),
       url: `/${id}/revisions/${revision_number}`
     }))
   };

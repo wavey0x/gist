@@ -54,10 +54,10 @@
       '<polyline points="14 2 14 8 20 8" />',
       '<path d="m10 13-2 2 2 2M14 17l2-2-2-2" />'
     ],
-    fileDiff: [
-      '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />',
-      '<polyline points="14 2 14 8 20 8" />',
-      '<path d="M10 13H8M16 13h-2M12 11v4M12 17v1" />'
+    diff: [
+      '<path d="M12 3v14"/>',
+      '<path d="M5 10h14"/>',
+      '<path d="M5 21h14"/>'
     ],
     history: [
       '<path d="M3 12a9 9 0 1 0 3-6.7L3 8" />',
@@ -890,6 +890,10 @@
       }
     }
 
+    const label = element("div", { className: "history-menu-label", text: "History" });
+    label.setAttribute("aria-hidden", "true");
+    menu.append(label);
+
     for (const item of payload.history) {
       const row = element("div", { className: "history-item-row" });
       row.setAttribute("role", "none");
@@ -908,10 +912,17 @@
         revision.setAttribute("aria-disabled", "true");
         revision.title = "This revision isn’t saved offline";
       }
-      revision.append(element("span", {
+      const title = element("span", {
         className: "history-item-title",
         text: `Revision ${item.revision_number}`
-      }));
+      });
+      if (item.is_latest) {
+        title.append(element("span", {
+          className: "history-item-latest",
+          text: "Latest"
+        }));
+      }
+      revision.append(title);
       const metadata = element("span", { className: "history-item-meta" });
       metadata.append(document.createTextNode(item.author_name));
       const date = element("span", { className: "history-item-date" });
@@ -920,12 +931,6 @@
       time.dataset.createdAt = item.created_at;
       date.append(document.createTextNode(" · "), time);
       metadata.append(date);
-      if (item.is_latest) {
-        metadata.append(element("span", {
-          className: "history-item-latest",
-          text: " · latest"
-        }));
-      }
       if (!revisionIsCached) {
         metadata.append(element("span", {
           className: "history-item-availability",
@@ -944,7 +949,7 @@
           `Compare revision ${item.revision_number} with previous revision (requires a connection)`
         );
         diff.title = "Diff requires a connection";
-        diff.append(icon("fileDiff", 16));
+        diff.append(icon("diff", 16));
         row.append(diff);
       }
       menu.append(row);

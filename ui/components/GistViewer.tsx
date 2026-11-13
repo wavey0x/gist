@@ -2,7 +2,7 @@
 
 import {
   FileCode,
-  FileDiff,
+  Diff,
   History,
   TextSearch
 } from "lucide-react";
@@ -352,7 +352,7 @@ export function GistViewer({
               {viewMode === "custom" ? (
                 <FileCode aria-hidden="true" size={18} strokeWidth={1.8} />
               ) : (
-                <FileDiff aria-hidden="true" size={18} strokeWidth={1.8} />
+                <Diff aria-hidden="true" size={18} strokeWidth={1.8} />
               )}
             </button>
           ) : singleFile ? (
@@ -389,6 +389,9 @@ export function GistViewer({
                 role="menu"
                 aria-label="Revision history"
               >
+                <div className="history-menu-label" aria-hidden="true">
+                  History
+                </div>
                 {gist.history.map((item) => {
                   const revisionIsCurrent =
                     !customDiffIsCurrent &&
@@ -412,6 +415,9 @@ export function GistViewer({
                       >
                         <span className="history-item-title">
                           Revision {item.revision_number}
+                          {item.is_latest ? (
+                            <span className="history-item-latest">Latest</span>
+                          ) : null}
                         </span>
                         <span className="history-item-meta">
                           {item.author_name}
@@ -421,25 +427,18 @@ export function GistViewer({
                               {formatRelativeDate(item.created_at, relativeDateNow)}
                             </time>
                           </span>
-                          {item.is_latest ? (
-                            <span className="history-item-latest"> · latest</span>
-                          ) : null}
                         </span>
                       </a>
                       {item.revision_number > 1 ? (
                         <a
                           className="history-diff-link"
                           href={historyDiffUrl(item)}
-                          aria-label={`Compare revision ${item.revision_number} with previous revision`}
+                          aria-label={`View changes in revision ${item.revision_number}`}
                           aria-current={diffIsCurrent ? "page" : undefined}
-                          title="Diff"
+                          title="View changes"
                           role="menuitem"
                         >
-                          <FileDiff
-                            aria-hidden="true"
-                            size={16}
-                            strokeWidth={1.8}
-                          />
+                          <Diff aria-hidden="true" size={16} strokeWidth={1.8} />
                         </a>
                       ) : null}
                     </div>

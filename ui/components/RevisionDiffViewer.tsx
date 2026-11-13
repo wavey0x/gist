@@ -1,37 +1,41 @@
 "use client";
 
-import { diffLines, diffWordsWithSpace } from "diff";
+import { diffArrays, diffLines, diffWordsWithSpace } from "diff";
 import type { Change } from "diff";
-import { useMemo } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { PublicGistPayload } from "../lib/gists";
 
 type DiffRevision = Pick<
   PublicGistPayload,
   "revision_number" | "title" | "primary_file" | "files"
->;
+> &
+  Partial<Pick<PublicGistPayload, "history" | "latest_revision_number">>;
 
 export type RevisionDiffViewerProps = {
   fromRevision: DiffRevision;
   toRevision: DiffRevision;
 };
 
-type DiffLineKind = "context" | "removed" | "added";
+type DiffLineKind = "context" | "removed" | "added" | "edited";
+
+type WordPart = { value: string; change: "same" | "added" | "removed" };
 
 type DiffLine = {
   key: string;
   kind: DiffLineKind;
   oldNumber: number | null;
   newNumber: number | null;
-  marker: " " | "-" | "+";
   content: string;
   compareContent?: string;
+  parts?: WordPart[];
 };
 
 type CollapsedContext = {
   key: string;
   kind: "hunk";
-  hiddenCount: number;
+  hidden: DiffLine[];
 };
 
 type DiffDisplayRow = DiffLine | CollapsedContext;
@@ -42,13 +46,22 @@ type BuiltDiff = {
   rows: DiffDisplayRow[];
 };
 
+// Prose (Markdown and plain text) wraps and folds small edits into one line.
+// Code keeps one row per source line, old and new line numbers, and scrolls
+// sideways, because line structure and indentation carry meaning there.
+type DiffMode = "prose" | "code";
+
 type FileDiff = {
   filename: string;
   status: "added" | "deleted" | "modified";
+  mode: DiffMode;
   diff: BuiltDiff;
 };
 
-const CONTEXT_LINES = 4;
+const CONTEXT_LINES = 3;
+// An edited line is shown once, with inline marks, only when at least this
+// share of it is unchanged. Below that it reads better as old then new.
+const MERGE_SIMILARITY = 0.5;
 
 function normalizeMarkdown(value: string) {
   return value.replace(/\r\n/g, "\n");
@@ -73,22 +86,50 @@ function createLine(
   content: string,
   compareContent?: string
 ): DiffLine {
-  return {
-    key,
-    kind,
-    oldNumber,
-    newNumber,
-    marker: kind === "removed" ? "-" : kind === "added" ? "+" : " ",
-    content,
-    compareContent
-  };
+  return { key, kind, oldNumber, newNumber, content, compareContent };
+}
+
+// Prose compares whole whitespace-separated tokens, so a figure such as 1.93m
+// changes as one unit instead of splitting at its decimal point.
+function wordParts(oldLine: string, newLine: string, mode: DiffMode = "code"): WordPart[] {
+  const changes =
+    mode === "prose"
+      ? diffArrays(oldLine.split(/(\s+)/), newLine.split(/(\s+)/)).map((part) => ({
+          ...part,
+          value: part.value.join("")
+        }))
+      : diffWordsWithSpace(oldLine, newLine);
+  const parts: WordPart[] = [];
+  for (const part of changes) {
+    if (!part.value) continue;
+    const change = part.added ? "added" : part.removed ? "removed" : "same";
+    const last = parts.at(-1);
+    if (last && last.change === change) {
+      last.value += part.value;
+    } else {
+      parts.push({ value: part.value, change });
+    }
+  }
+  return parts;
+}
+
+function similarity(parts: WordPart[], oldLine: string, newLine: string) {
+  const longest = Math.max(oldLine.trim().length, newLine.trim().length);
+  if (!longest) {
+    return 0;
+  }
+  const same = parts.reduce(
+    (total, part) => total + (part.change === "same" ? part.value.trim().length : 0),
+    0
+  );
+  return same / longest;
 }
 
 function lineGroups(change: Change) {
   return splitDiffLines(change.value);
 }
 
-function buildRawLines(oldMarkdown: string, newMarkdown: string) {
+function buildRawLines(oldMarkdown: string, newMarkdown: string, mode: DiffMode) {
   const changes = diffLines(
     normalizeMarkdown(oldMarkdown),
     normalizeMarkdown(newMarkdown),
@@ -108,6 +149,42 @@ function buildRawLines(oldMarkdown: string, newMarkdown: string) {
     if (change.removed && nextChange?.added) {
       const removedLines = lineGroups(change);
       const addedLines = lineGroups(nextChange);
+
+      if (mode === "prose") {
+        // Walk the two sides together so each rewritten paragraph sits next
+        // to the one it replaced.
+        const shared = Math.min(removedLines.length, addedLines.length);
+        for (let lineIndex = 0; lineIndex < shared; lineIndex += 1) {
+          const before = removedLines[lineIndex];
+          const after = addedLines[lineIndex];
+          const parts = wordParts(before, after, "prose");
+          if (similarity(parts, before, after) >= MERGE_SIMILARITY) {
+            rows.push({
+              ...createLine(`line-${rowIndex}`, "edited", oldNumber, newNumber, after, before),
+              parts
+            });
+            rowIndex += 1;
+          } else {
+            rows.push(createLine(`line-${rowIndex}`, "removed", oldNumber, null, before));
+            rows.push(createLine(`line-${rowIndex + 1}`, "added", null, newNumber, after));
+            rowIndex += 2;
+          }
+          oldNumber += 1;
+          newNumber += 1;
+        }
+        removedLines.slice(shared).forEach((line) => {
+          rows.push(createLine(`line-${rowIndex}`, "removed", oldNumber, null, line));
+          oldNumber += 1;
+          rowIndex += 1;
+        });
+        addedLines.slice(shared).forEach((line) => {
+          rows.push(createLine(`line-${rowIndex}`, "added", null, newNumber, line));
+          newNumber += 1;
+          rowIndex += 1;
+        });
+        index += 1;
+        continue;
+      }
 
       removedLines.forEach((line, lineIndex) => {
         rows.push(
@@ -218,7 +295,7 @@ function collapseContext(rows: DiffLine[]) {
       displayRows.push({
         key: `hunk-${hiddenStart}`,
         kind: "hunk",
-        hiddenCount: hiddenRows.length
+        hidden: hiddenRows
       });
     }
   }
@@ -226,10 +303,12 @@ function collapseContext(rows: DiffLine[]) {
   return displayRows;
 }
 
-function buildDiff(oldMarkdown: string, newMarkdown: string): BuiltDiff {
-  const lines = buildRawLines(oldMarkdown, newMarkdown);
-  const addedCount = lines.filter((line) => line.kind === "added").length;
-  const removedCount = lines.filter((line) => line.kind === "removed").length;
+function buildDiff(oldMarkdown: string, newMarkdown: string, mode: DiffMode): BuiltDiff {
+  const lines = buildRawLines(oldMarkdown, newMarkdown, mode);
+  const count = (kind: DiffLineKind) =>
+    lines.filter((line) => line.kind === kind || line.kind === "edited").length;
+  const addedCount = count("added");
+  const removedCount = count("removed");
   return {
     addedCount,
     removedCount,
@@ -237,42 +316,144 @@ function buildDiff(oldMarkdown: string, newMarkdown: string): BuiltDiff {
   };
 }
 
-function renderWordDiff(line: DiffLine): ReactNode {
+function renderContent(line: DiffLine): ReactNode {
+  if (line.kind === "edited" && line.parts) {
+    return line.parts.map((part, index) =>
+      part.change === "added" ? (
+        <ins key={index}>{part.value}</ins>
+      ) : part.change === "removed" ? (
+        <del key={index}>{part.value}</del>
+      ) : (
+        <span key={index}>{part.value}</span>
+      )
+    );
+  }
   if (
-    !line.compareContent ||
+    line.compareContent === undefined ||
     line.kind === "context" ||
     line.content === line.compareContent
   ) {
     return line.content;
   }
-
-  const wordDiff =
+  const parts =
     line.kind === "removed"
-      ? diffWordsWithSpace(line.content, line.compareContent)
-      : diffWordsWithSpace(line.compareContent, line.content);
-  return wordDiff
-    .filter((part) => {
-      if (line.kind === "removed") {
-        return !part.added;
-      }
-      return !part.removed;
-    })
-    .map((part, index) => {
-      const highlighted =
-        line.kind === "removed" ? part.removed : part.added;
-      return (
-        <span
-          className={highlighted ? `diff-word diff-word-${line.kind}` : undefined}
-          key={index}
-        >
-          {part.value}
-        </span>
-      );
-    });
+      ? wordParts(line.content, line.compareContent)
+      : wordParts(line.compareContent, line.content);
+  const hide = line.kind === "removed" ? "added" : "removed";
+  return parts
+    .filter((part) => part.change !== hide)
+    .map((part, index) => (
+      <span
+        className={part.change === "same" ? undefined : `diff-word diff-word-${line.kind}`}
+        key={index}
+      >
+        {part.value}
+      </span>
+    ));
 }
 
-function lineNumber(value: number | null) {
-  return value === null ? "" : value;
+const KIND_LABEL: Record<DiffLineKind, string> = {
+  context: "",
+  removed: "Removed: ",
+  added: "Added: ",
+  edited: "Edited: "
+};
+
+function DiffRows({ fileDiff }: { fileDiff: FileDiff }) {
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const code = fileDiff.mode === "code";
+  const columns = code ? 3 : 2;
+
+  function renderLine(row: DiffLine) {
+    return (
+      <tr className={`diff-row diff-row-${row.kind}`} key={row.key}>
+        {code ? (
+          <td className="diff-line-number diff-line-number-old">{row.oldNumber ?? ""}</td>
+        ) : null}
+        <td className="diff-line-number">
+          {row.newNumber ?? (code ? "" : <span aria-hidden="true">−</span>)}
+        </td>
+        <td className="diff-code">
+          {row.kind === "context" ? null : (
+            <span className="sr-only">{KIND_LABEL[row.kind]}</span>
+          )}
+          {renderContent(row)}
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <div className="diff-table-scroll">
+      <table
+        className={`diff-table diff-table-${fileDiff.mode}`}
+        aria-label={`${fileDiff.filename} changes`}
+      >
+        <colgroup>
+          {code ? <col className="diff-col-number" /> : null}
+          <col className="diff-col-number" />
+          <col />
+        </colgroup>
+        <tbody>
+          {fileDiff.diff.rows.map((row) =>
+            row.kind !== "hunk" ? (
+              renderLine(row)
+            ) : expanded.has(row.key) ? (
+              row.hidden.map(renderLine)
+            ) : (
+              <tr className="diff-hunk-row" key={row.key}>
+                <td className="diff-hunk" colSpan={columns}>
+                  <button
+                    type="button"
+                    className="diff-expand"
+                    onClick={() => setExpanded((current) => new Set(current).add(row.key))}
+                  >
+                    Show {row.hidden.length} unchanged lines
+                  </button>
+                </td>
+              </tr>
+            )
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function stepUrls(fromRevision: DiffRevision, toRevision: DiffRevision) {
+  const from = fromRevision.revision_number;
+  const to = toRevision.revision_number;
+  const sample = toRevision.history?.[0]?.url;
+  if (!sample || to !== from + 1) {
+    return null;
+  }
+  const base = sample.replace(/\/revisions\/[1-9][0-9]*\/?$/, "").replace(/\/$/, "");
+  const latest = toRevision.latest_revision_number ?? to;
+  return {
+    older: from > 1 ? `${base}/diff/${from - 1}..${from}` : null,
+    newer: to < latest ? `${base}/diff/${to}..${to + 1}` : null
+  };
+}
+
+function StepLink({ href, label, children }: { href: string | null; label: string; children: ReactNode }) {
+  return href ? (
+    <a className="diff-step" href={href} aria-label={label} title={label}>
+      {children}
+    </a>
+  ) : (
+    <span className="diff-step" aria-disabled="true" aria-label={label} role="link">
+      {children}
+    </span>
+  );
+}
+
+function Stats({ added, removed }: { added: number; removed: number }) {
+  return (
+    <div className="diff-viewer-stats" aria-label={`${added} additions and ${removed} deletions`}>
+      <span className="diff-stat diff-stat-added">+{added}</span>
+      <span className="diff-stat diff-stat-removed">−{removed}</span>
+    </div>
+  );
 }
 
 export function RevisionDiffViewer({
@@ -299,11 +480,14 @@ export function RevisionDiffViewer({
       if (oldFile?.content === newFile?.content) {
         return [];
       }
+      const mode: DiffMode =
+        (newFile ?? oldFile)?.kind === "source" ? "code" : "prose";
       return [
         {
           filename,
           status: oldFile ? (newFile ? "modified" : "deleted") : "added",
-          diff: buildDiff(oldFile?.content ?? "", newFile?.content ?? "")
+          mode,
+          diff: buildDiff(oldFile?.content ?? "", newFile?.content ?? "", mode)
         }
       ];
     });
@@ -318,81 +502,55 @@ export function RevisionDiffViewer({
   );
   const noChanges = !titleChanged && fileDiffs.length === 0;
 
+  const steps = stepUrls(fromRevision, toRevision);
+  const soleFile = fileDiffs.length === 1 ? fileDiffs[0] : null;
+
   return (
     <section className="diff-viewer" aria-label={`${summary} diff`}>
       <div className="diff-viewer-header">
-        <h2 className="diff-viewer-title">{summary}</h2>
-        <div
-          className="diff-viewer-stats"
-          aria-label={`${addedCount} additions and ${removedCount} deletions`}
-        >
-          <span className="diff-stat diff-stat-added">+{addedCount}</span>
-          <span className="diff-stat diff-stat-removed">
-            -{removedCount}
-          </span>
+        {soleFile ? <span className="diff-filename">{soleFile.filename}</span> : null}
+        <div className="diff-range">
+          {steps ? (
+            <StepLink href={steps.older} label="Older changes">
+              <ChevronLeft aria-hidden="true" size={15} strokeWidth={1.8} />
+            </StepLink>
+          ) : null}
+          <h2 className="diff-viewer-title" aria-label={summary}>
+            Revision {fromRevision.revision_number} → {toRevision.revision_number}
+          </h2>
+          {steps ? (
+            <StepLink href={steps.newer} label="Newer changes">
+              <ChevronRight aria-hidden="true" size={15} strokeWidth={1.8} />
+            </StepLink>
+          ) : null}
         </div>
+        {soleFile && soleFile.status !== "modified" ? (
+          <span className="diff-file-status">{soleFile.status}</span>
+        ) : null}
+        <Stats added={addedCount} removed={removedCount} />
       </div>
       {titleChanged ? (
         <div className="diff-metadata-change" aria-label="Title changed">
           <span className="diff-metadata-label">Title</span>
-          <del>{fromRevision.title || "Untitled"}</del>
-          <ins>{toRevision.title || "Untitled"}</ins>
+          <span>
+            <del>{fromRevision.title || "Untitled"}</del>{" "}
+            <ins>{toRevision.title || "Untitled"}</ins>
+          </span>
         </div>
       ) : null}
       {noChanges ? <div className="diff-empty">No changes</div> : null}
       {fileDiffs.map((fileDiff) => (
         <section className="diff-file" key={fileDiff.filename}>
-          <header className="diff-file-header">
-            <h3>{fileDiff.filename}</h3>
-            <div className="diff-file-summary">
-              <span>{fileDiff.status}</span>
-              <span className="diff-stat diff-stat-added">
-                +{fileDiff.diff.addedCount}
-              </span>
-              <span className="diff-stat diff-stat-removed">
-                -{fileDiff.diff.removedCount}
-              </span>
-            </div>
-          </header>
-          <div className="diff-table-scroll">
-            <table
-              className="diff-table"
-              aria-label={`${fileDiff.filename} changes`}
-            >
-              <thead className="sr-only">
-                <tr>
-                  <th scope="col">Old line</th>
-                  <th scope="col">New line</th>
-                  <th scope="col">Change</th>
-                  <th scope="col">Content</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fileDiff.diff.rows.map((row) =>
-                  row.kind === "hunk" ? (
-                    <tr className="diff-hunk-row" key={row.key}>
-                      <td className="diff-hunk" colSpan={4}>
-                        {row.hiddenCount} unchanged lines
-                      </td>
-                    </tr>
-                  ) : (
-                    <tr className={`diff-row diff-row-${row.kind}`} key={row.key}>
-                      <td className="diff-line-number">
-                        {lineNumber(row.oldNumber)}
-                      </td>
-                      <td className="diff-line-number">
-                        {lineNumber(row.newNumber)}
-                      </td>
-                      <td className="diff-marker" aria-hidden="true">
-                        {row.marker}
-                      </td>
-                      <td className="diff-code">{renderWordDiff(row)}</td>
-                    </tr>
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
+          {soleFile ? null : (
+            <header className="diff-file-header">
+              <h3>{fileDiff.filename}</h3>
+              <div className="diff-file-summary">
+                {fileDiff.status !== "modified" ? <span>{fileDiff.status}</span> : null}
+                <Stats added={fileDiff.diff.addedCount} removed={fileDiff.diff.removedCount} />
+              </div>
+            </header>
+          )}
+          <DiffRows fileDiff={fileDiff} />
         </section>
       ))}
     </section>
