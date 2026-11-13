@@ -183,7 +183,13 @@ function openDatabase() {
     request.onblocked = () =>
       reject(new Error("Offline storage upgrade is blocked"));
   }).then(async (database) => {
-    await migrateSavedTables(database, OFFLINE_CONTENT_CACHE);
+    // A failed repair must not take offline storage down with it; the marker
+    // is only written on success, so it runs again on the next open.
+    try {
+      await migrateSavedTables(database, OFFLINE_CONTENT_CACHE);
+    } catch {
+      // Saved copies stay as they were.
+    }
     return database;
   });
   return databasePromise;

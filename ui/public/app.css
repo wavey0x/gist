@@ -51,7 +51,6 @@
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
     monospace;
-  --reading-width: 800px;
   --header-h: 48px;
   color-scheme: light;
 }
@@ -2006,12 +2005,6 @@ input:disabled {
   word-break: break-word;
 }
 
-/* Rendered articles share one edge for prose, lists, tables and code.
-   Source files keep the full page width. */
-.markdown-body:not(.gist-code-content) {
-  max-width: var(--reading-width);
-}
-
 .markdown-body :is(h1, h2, h3) {
   border-bottom: 0;
   padding-bottom: 0;
@@ -3940,15 +3933,15 @@ body:has(.mini-player) {
   min-height: 56px;
 }
 
+/* Sits inside the title so no row or swipe container can clip it. */
 .library-dot {
-  position: absolute;
-  top: 50%;
-  left: -12px;
+  display: inline-block;
   width: 6px;
   height: 6px;
+  margin-right: 7px;
   border-radius: 50%;
   background: var(--link);
-  margin-top: -3px;
+  vertical-align: 2px;
 }
 
 .library-title {

@@ -132,8 +132,14 @@
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     }).then(async (database) => {
-      const { migrateSavedTables } = await import("/offline-table-migration.mjs");
-      await migrateSavedTables(database, CONTENT_CACHE);
+      // A failed repair must not take offline storage down with it; the marker
+      // is only written on success, so it runs again on the next open.
+      try {
+        const { migrateSavedTables } = await import("/offline-table-migration.mjs");
+        await migrateSavedTables(database, CONTENT_CACHE);
+      } catch {
+        // Saved copies stay as they were.
+      }
       return database;
     });
     return databasePromise;

@@ -109,15 +109,17 @@ function LibraryRow({ row, time, timestamp }: { row: RowData; time: string; time
       <SwipeRow actionLabel={row.actionLabel} onAction={row.onAction}>
         <div className="library-row">
           <Link className="library-link" href={row.href} prefetch={false}>
-            {row.updated ? (
-              <span
-                className="library-dot"
-                role="img"
-                aria-label="Updated since you read it"
-                title="Updated since you read it"
-              />
-            ) : null}
-            <span className="library-title">{row.title}</span>
+            <span className="library-title">
+              {row.updated ? (
+                <span
+                  className="library-dot"
+                  role="img"
+                  aria-label="Updated since you read it"
+                  title="Updated since you read it"
+                />
+              ) : null}
+              {row.title}
+            </span>
             <span className="library-aside">
               <time dateTime={row.date} title={timestamp}>
                 {time}
