@@ -1315,10 +1315,10 @@
         else playFromLocalCopy();
       });
       back.addEventListener("click", () => {
-        seekAudio(audio.currentTime - 10);
+        seekAudio((sourceSwap?.position ?? audio.currentTime) - 10);
       });
       forward.addEventListener("click", () => {
-        seekAudio(audio.currentTime + 10);
+        seekAudio((sourceSwap?.position ?? audio.currentTime) + 10);
       });
       seek.addEventListener("input", () => {
         seekAudio(Number(seek.value));

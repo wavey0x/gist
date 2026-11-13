@@ -375,3 +375,41 @@ test("mini-player speed stays in sync with the article player and survives reope
   await expect(speed).toHaveValue("1.75");
   await expect.poll(() => audio.evaluate((node: HTMLAudioElement) => node.playbackRate)).toBe(1.75);
 });
+
+test("a stream that drops while hidden switches to the downloaded copy instead of waiting", async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let downloaded = false;
+  await page.route(`**${endpoint}/audio`, async route => {
+    if (route.request().resourceType() === "fetch") { await gate; downloaded = true; }
+    await fulfillAudio(route);
+  });
+  try {
+    await start(page);
+    await action(page, "seekto", { seekTime: 12 });
+    const element = page.locator("audio");
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+      document.dispatchEvent(new Event("visibilitychange"));
+      const audio = document.querySelector("audio")!;
+      let failed = false;
+      Object.defineProperty(audio, "error", { get: () => failed ? { code: 2 } : null });
+      const originalLoad = audio.load.bind(audio);
+      audio.load = () => { failed = false; originalLoad(); };
+      Object.assign(window, { dropAudio: () => {
+        failed = true;
+        audio.pause();
+        audio.dispatchEvent(new Event("error"));
+      } });
+    });
+    release();
+    await expect.poll(() => downloaded).toBe(true);
+    // The healthy hidden stream keeps its source until it fails.
+    expect(await element.evaluate((node: HTMLAudioElement) => node.currentSrc)).not.toMatch(/^blob:/);
+    await page.evaluate(() => (window as unknown as { dropAudio(): void }).dropAudio());
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.currentSrc)).toMatch(/^blob:/);
+    await expect.poll(() => element.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false);
+    expect(await element.evaluate((node: HTMLAudioElement) => node.currentTime)).toBeGreaterThanOrEqual(12);
+    await expect(page.getByText("Connection lost. Reconnecting…", { exact: true })).toHaveCount(0);
+  } finally { release(); }
+});

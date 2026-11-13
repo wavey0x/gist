@@ -349,7 +349,7 @@ function element() {
     if (playbackWanted) update({ buffering: true });
     adoptLocalCopy();
   });
-  created.addEventListener("stalled", adoptLocalCopy);
+  created.addEventListener("stalled", () => adoptLocalCopy());
   created.addEventListener("play", () => {
     if (!playbackWanted) {
       created.pause();
@@ -505,7 +505,7 @@ function ensureLocalCopy(download: boolean) {
       localCopy.pendingUrl = URL.createObjectURL(
         blob.type ? blob : new Blob([blob], { type: "audio/mpeg" })
       );
-      adoptLocalCopy();
+      adoptLocalCopy(networkInterrupted && playbackWanted);
       void prepareNextRecording();
     }
   })();
@@ -513,7 +513,9 @@ function ensureLocalCopy(download: boolean) {
   return loading;
 }
 
-function adoptLocalCopy() {
+// force: the stream has failed, so the in-memory copy is the only way to keep
+// playing, even from a hidden page.
+function adoptLocalCopy(force = false) {
   const copy = localCopy;
   if (!copy.pendingUrl || !audio) {
     return;
@@ -521,14 +523,16 @@ function adoptLocalCopy() {
   // A hidden page may not be allowed to restart. Preserve healthy playback
   // and native pause/resume until the stream stalls or the page returns.
   if (
+    !force &&
     document.visibilityState !== "visible" &&
     (audio.paused || audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA)
   ) {
     return;
   }
+  const known =
+    audio.readyState >= HTMLMediaElement.HAVE_METADATA ? audio.currentTime : null;
   sourceSwap = {
-    position:
-      audio.readyState >= HTMLMediaElement.HAVE_METADATA ? audio.currentTime : null
+    position: force && !known ? state.currentTime || null : known
   };
   copy.url = copy.pendingUrl;
   copy.pendingUrl = null;
@@ -544,6 +548,13 @@ function handleAudioError() {
     return;
   }
   if (!copy.url) {
+    // A finished download beats waiting for the network to come back.
+    if (copy.pendingUrl) {
+      networkInterrupted = false;
+      clearNetworkRecovery();
+      adoptLocalCopy(true);
+      return;
+    }
     networkInterrupted = playbackWanted && audio.error?.code === MediaError.MEDIA_ERR_NETWORK;
     update({
       playing: networkInterrupted,
