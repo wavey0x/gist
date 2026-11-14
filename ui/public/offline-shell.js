@@ -1520,14 +1520,6 @@
     return group;
   }
 
-  function sourceLineNumbers(content) {
-    if (!content) {
-      return "1";
-    }
-    const lines = content.split("\n").length - (content.endsWith("\n") ? 1 : 0);
-    return Array.from({ length: Math.max(1, lines) }, (_, index) => index + 1).join("\n");
-  }
-
   // Mirrors tightenTableCells in lib/table-cells.ts: every table column gets
   // a floor so a long prose column cannot squeeze its neighbours.
   function tightenTableCells(html) {
@@ -1550,7 +1542,9 @@
     });
   }
 
-  function fileContent(file, panel = false) {
+  let codeLinesModule = null;
+
+  function fileContent(file, panel = false, slug = "") {
     if (file.kind === "markdown") {
       const article = element("article", {
         className: panel ? "markdown-body gist-file-markdown" : "markdown-body"
@@ -1559,16 +1553,14 @@
       return article;
     }
     const codeView = element("div", { className: "gist-code-view" });
-    const lineNumbers = element("pre", {
-      className: "gist-line-numbers",
-      text: sourceLineNumbers(file.content || "")
-    });
-    lineNumbers.setAttribute("aria-hidden", "true");
     const content = element("div", {
       className: "markdown-body gist-code-content"
     });
-    content.innerHTML = file.rendered_html;
-    codeView.append(lineNumbers, content);
+    // Same numbered lines as the app (components/CodeLines.tsx).
+    const lines = codeLinesModule?.codeLinesHtml(file.rendered_html, slug) ?? null;
+    content.dataset.codeLines = lines ? "true" : "false";
+    content.innerHTML = lines ?? file.rendered_html;
+    codeView.append(content);
     return codeView;
   }
 
@@ -1637,8 +1629,9 @@
     return viewer;
   }
 
-  function filePanel(file, rawUrl) {
+  function filePanel(file, rawUrl, slug = "") {
     const panel = element("section", { className: "gist-file-panel" });
+    if (slug) panel.id = `file-${slug}`;
     const safeId = file.content_sha256?.slice(0, 12) || Math.random().toString(36).slice(2);
     const headingId = `offline-file-heading-${safeId}`;
     const bodyId = `offline-file-body-${safeId}`;
@@ -1683,7 +1676,7 @@
     header.append(disclosure, actions);
     const body = element("div", { className: "gist-file-body" });
     body.id = bodyId;
-    body.append(fileContent(file, true));
+    body.append(fileContent(file, true, slug));
     body.firstElementChild.dataset.codeWrap = String(wrapped);
 
     disclosure.addEventListener("click", () => {
@@ -1870,6 +1863,9 @@
     let currentContent = null;
     let rawVisible = false;
     const singleWrap = { value: false };
+    codeLinesModule = await import("/code-lines.mjs").catch(() => null);
+    const slugs = codeLinesModule?.fileSlugs(files.map((file) => file.filename)) ?? {};
+    let stopLineLinks = null;
 
     function paintContent() {
       let nextContent;
@@ -1897,7 +1893,8 @@
       } else {
         nextContent = element("div", { className: "gist-files" });
         nextContent.append(...files.map((file) => filePanel(file,
-          `/${payload.id}/revisions/${payload.revision_number}/raw/${encodeURIComponent(file.filename)}`
+          `/${payload.id}/revisions/${payload.revision_number}/raw/${encodeURIComponent(file.filename)}`,
+          slugs[file.filename]
         )));
       }
       if (currentContent) {
@@ -1906,6 +1903,8 @@
         app.append(nextContent);
       }
       currentContent = nextContent;
+      stopLineLinks?.();
+      stopLineLinks = rawVisible ? null : codeLinesModule?.mountLineLinks(nextContent) ?? null;
       addMarkdownWrapControls(nextContent);
       if (!rawVisible) {
         setupEntityGroupHover(nextContent);

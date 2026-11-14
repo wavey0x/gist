@@ -6,7 +6,9 @@ import { addMarkdownWrapControls } from "../lib/code-wrap";
 import { orderedGistFiles, type PublicGistPayload } from "../lib/gists";
 import { readSavedGist } from "../lib/offline-library";
 import type { SiteChromeConfig } from "../lib/site-config";
-import { GistFilePanel, sourceLineNumbers } from "./GistFilePanel";
+import { fileSlugs } from "../public/code-lines.mjs";
+import { CodeLines } from "./CodeLines";
+import { GistFilePanel } from "./GistFilePanel";
 import { GistHeading } from "./GistHeading";
 
 const GIST_ROUTE_RE = /^\/([A-Za-z0-9]{16,64})(?:\/revisions\/([1-9][0-9]*))?\/?$/;
@@ -41,6 +43,7 @@ export function SavedGistPreview({ chrome }: { chrome: SiteChromeConfig }) {
 
   const files = gist ? orderedGistFiles(gist) : [];
   const file = files.length === 1 ? files[0] : null;
+  const slugs = fileSlugs(files.map((item) => item.filename));
   return (
     <main ref={contentRef} className={files.length > 1 ? "page-shell page-shell-gist" : "page-shell"}
       aria-busy="true" aria-label="Loading" inert>
@@ -69,14 +72,14 @@ export function SavedGistPreview({ chrome }: { chrome: SiteChromeConfig }) {
           </div> : file ? (
             <div className="gist-single-file gist-code-container">
               <div className="gist-code-view" data-code-wrap="false">
-                <pre className="gist-line-numbers" aria-hidden="true">{sourceLineNumbers(file.content)}</pre>
-                <div className="markdown-body gist-code-content"
-                  dangerouslySetInnerHTML={{ __html: file.rendered_html }} />
+                <CodeLines html={file.rendered_html} />
               </div>
             </div>
           ) : (
             <div className="gist-files">
-              {files.map((file) => <GistFilePanel key={file.filename} file={file} collapsed={false} />)}
+              {files.map((file) => (
+                <GistFilePanel key={file.filename} file={file} slug={slugs[file.filename]} collapsed={false} />
+              ))}
             </div>
           )}
         </>

@@ -218,6 +218,7 @@ test("install precaches the complete canonical shell", async () => {
     "/app.css",
     "/syntax.css",
     "/gallery-model.mjs",
+    "/code-lines.mjs",
     "/offline-table-migration.mjs",
     "/gallery-viewer.mjs",
     "/gallery-viewer.css",

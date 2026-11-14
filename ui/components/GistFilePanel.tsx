@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react";
 import { useId, useState } from "react";
 import type { PublicGistFile } from "../lib/gists";
 import { CodeCopyButton } from "./CodeCopyButton";
+import { CodeLines } from "./CodeLines";
 import { CodeWrapToggle } from "./CodeWrapToggle";
 
 function formatByteSize(byteSize: number) {
@@ -13,27 +14,14 @@ function formatByteSize(byteSize: number) {
   return `${(byteSize / 1024).toFixed(byteSize < 10 * 1024 ? 1 : 0)} KB`;
 }
 
-function sourceLineCount(content: string) {
-  if (!content) {
-    return 1;
-  }
-  const count = content.split("\n").length;
-  return content.endsWith("\n") ? Math.max(1, count - 1) : count;
-}
-
-export function sourceLineNumbers(content: string) {
-  return Array.from(
-    { length: sourceLineCount(content) },
-    (_, index) => index + 1
-  ).join("\n");
-}
-
 export function GistFilePanel({
   file,
+  slug,
   collapsed,
   onCollapseToggle
 }: {
   file: PublicGistFile;
+  slug?: string;
   collapsed: boolean;
   onCollapseToggle?: () => void;
 }) {
@@ -47,6 +35,7 @@ export function GistFilePanel({
   return (
     <section
       className="gist-file-panel"
+      id={slug ? `file-${slug}` : undefined}
       data-gist-filename={file.filename}
       data-collapsed={collapsed ? "true" : "false"}
       aria-labelledby={headingId}
@@ -98,13 +87,7 @@ export function GistFilePanel({
         ) : null}
         {!collapsed && file.kind !== "markdown" ? (
           <div className="gist-code-view" data-code-wrap={wrapped}>
-            <pre className="gist-line-numbers" aria-hidden="true">
-              {sourceLineNumbers(file.content)}
-            </pre>
-            <div
-              className="markdown-body gist-code-content"
-              dangerouslySetInnerHTML={{ __html: file.rendered_html }}
-            />
+            <CodeLines html={file.rendered_html} slug={slug} />
           </div>
         ) : null}
       </div>

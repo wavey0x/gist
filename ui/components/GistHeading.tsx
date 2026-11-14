@@ -90,7 +90,16 @@ export function GistHeading({ gist, children }: { gist: PublicGistPayload; child
             by <span className="gist-author-name">{gist.author_name}</span>
           </span>
           {gist.revision_number < gist.latest_revision_number ? (
-            <span>Revision {gist.revision_number}</span>
+            <a
+              className="gist-revision-notice"
+              href={`/${gist.id}`}
+              onClick={(event) => {
+                // Keep a line link's lines when moving to the latest revision.
+                event.currentTarget.href = `/${gist.id}${window.location.hash}`;
+              }}
+            >
+              Revision {gist.revision_number} · view latest
+            </a>
           ) : null}
         </div>
       </div>

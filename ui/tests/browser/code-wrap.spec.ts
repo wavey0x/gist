@@ -109,7 +109,6 @@ test("shares one file's wrap choice between source and raw views", async ({ page
   expect(await codeOverflows(page, ".gist-code-view")).toBe(true);
   await toggle.click();
   await expect(page.locator(".gist-code-view")).toHaveAttribute("data-code-wrap", "true");
-  await expect(page.locator(".gist-line-numbers")).toBeHidden();
   expect(await codeOverflows(page, ".gist-code-view")).toBe(false);
 
   await page.getByRole("button", { name: "View raw file" }).click();
@@ -122,7 +121,7 @@ test("shares one file's wrap choice between source and raw views", async ({ page
   await page.getByRole("button", { name: "View rendered file" }).click();
   await page.setViewportSize({ width: 720, height: 800 });
   await expect(page.locator(".gist-code-view")).toHaveAttribute("data-code-wrap", "false");
-  await expect(page.locator(".gist-line-numbers")).toBeVisible();
+  await expect(page.locator(".code-line-number").first()).toBeVisible();
 });
 
 test("keeps the source file control in its file header", async ({ page }) => {
@@ -221,6 +220,12 @@ test.describe("offline reader", () => {
       expect(await page.evaluate(() => localStorage.getItem("test-copied-code"))).toContain("\n+MIN_A:");
       await expect(markdown.locator(".code-wrap-block pre")).toHaveCSS("white-space", "pre-wrap");
       await expect(page.locator('.gist-file-panel[data-gist-filename="twocrypto-math.patch"] .gist-code-view')).toHaveAttribute("data-code-wrap", "false");
+      // Line links work in the saved copy too.
+      await page.evaluate(() => { location.hash = "#file-twocrypto-math-patch-L2"; });
+      await expect(page.locator(".code-line[data-selected]")).toHaveAttribute("id", "file-twocrypto-math-patch-L2");
+      await expect(page.locator('[id="file-twocrypto-math-patch-L2"] > .code-line-number')).toBeVisible();
+      await page.locator('[id="file-twocrypto-math-patch-L1"] > .code-line-number').click();
+      await expect(page).toHaveURL(/#file-twocrypto-math-patch-L1$/);
       await toggle.click();
       expect(await codeOverflows(page, ".gist-code-view")).toBe(false);
       await context.setOffline(false);

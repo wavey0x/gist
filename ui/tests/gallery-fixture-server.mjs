@@ -37,6 +37,26 @@ const diffContent = (filename, revision) =>
         diffTable(revision === 1 ? "1.93m" : "1.88m"),
         ...(revision === 3 ? ["Added in the third revision."] : [])
       ].join("\n\n") + "\n";
+// A code file for line links: 80 lines with an empty line (5), a docstring
+// whose colour span crosses three lines (10 to 12) and one long line (20).
+const lineSource = Array.from({ length: 80 }, (_, index) => {
+  const n = index + 1;
+  if (n === 5) return "";
+  if (n === 10) return '"""Docstring opens';
+  if (n === 11) return "and continues";
+  if (n === 12) return 'then closes."""';
+  if (n === 20) return `long_${n} = "${"wide value ".repeat(40)}"`;
+  return `value_${n} = ${n} < ${n + 1}`;
+});
+const lineHtml = lineSource.map((line, index) => {
+  const n = index + 1;
+  const safe = line.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  if (n === 10) return `<span class="pl-s">${safe}`;
+  if (n === 12) return `${safe}</span>`;
+  if (n >= 10 && n <= 12) return safe;
+  return safe.replace(/^(\w+)/, '<span class="pl-v">$1</span>');
+}).join("\n");
+const highlightedLines = `<div class="highlight highlight-source-python" dir="auto"><pre>${lineHtml}\n</pre></div>`;
 const filesFor = (id) =>
   id === "GalleryDiff00001"
     ? { "README.md": "<h1>Oracle markets</h1><p>Diff fixture.</p>", "calc.py": "<pre>def total(values): ...</pre>" }
@@ -47,6 +67,14 @@ const filesFor = (id) =>
         "README.md": '<h1>Priority actions</h1><div class="table-scroll"><table><thead><tr><th>Priority</th><th>Market</th><th>Metrics</th><th>Recommended steps, in order</th></tr></thead><tbody>' +
           [1, 2, 3].map((n) => `<tr><td>${n}</td><td><a href="#m${n}">sUSDe-long-v2 — protocol LLv1</a></td><td><strong>Debt:</strong> 1.93m<br><strong>Liq:</strong> $48.07m<br><strong>Oracle:</strong> $1.32m</td><td><strong>1. eDAO:</strong> Set the mint ceiling to zero, burning unused allocation.<br><strong>2. DAO governance, with engineering:</strong> Approve a reviewed replacement addressing pricing, after rechecking feed health and the peg, and monitor independent prices and feed freshness because the bound can mask a depeg.</td></tr>`).join("") +
           "</tbody></table></div>"
+      }
+    : id === "GalleryLines00001"
+    ? { "vault.py": highlightedLines }
+    : id === "GalleryLinesMulti1"
+    ? {
+        "README.md": '<h1>Line links</h1><p><a href="#file-vault-py-L3-L4">The check</a></p>' + "<p>Filler paragraph.</p>".repeat(40),
+        "notes.py": "<pre><code class=\"language-text\">first note\nsecond note\nthird note\n</code></pre>",
+        "vault.py": highlightedLines
       }
     : id === "GalleryRawFiles01"
     ? {
@@ -92,6 +120,8 @@ export function fixture(id, revision = 1) {
         language: filename.endsWith(".patch") ? "diff" : filename.endsWith(".json") ? "json" : "markdown",
         content: id.startsWith("GalleryDiff") ? diffContent(filename, revision) :
           filename.endsWith(".json") ? '{"message":"Raw stays raw"}\n' :
+          filename === "vault.py" ? lineSource.join("\n") + "\n" :
+          filename === "notes.py" ? "first note\nsecond note\nthird note\n" :
           filename.endsWith(".patch") ? `diff --git a/example.vy b/example.vy\n${longPatchLine}\n` :
           id === "GalleryCodeWrap01" ? `# Code wrapping\n\n\`\`\`js\n${longCodeLine}\n\`\`\`` :
           `# Gallery\n\n[Photo](${image(1)}#wg-gallery=album)`,

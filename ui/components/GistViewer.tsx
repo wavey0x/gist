@@ -22,7 +22,9 @@ import { CodeCopyButton } from "./CodeCopyButton";
 import { CodeWrapToggle } from "./CodeWrapToggle";
 import { LocalTimestamp } from "./LocalTimestamp";
 import { GistHeading } from "./GistHeading";
-import { GistFilePanel, sourceLineNumbers } from "./GistFilePanel";
+import { fileSlugs, mountLineLinks } from "../public/code-lines.mjs";
+import { CodeLines } from "./CodeLines";
+import { GistFilePanel } from "./GistFilePanel";
 import { ReadingProgress } from "./ReadingProgress";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
 import { refreshJson, usePageRefresh, useRefreshRoute } from "../lib/page-refresh";
@@ -96,6 +98,7 @@ export function GistViewer({
   const historyControlRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const files = orderedGistFiles(gist);
+  const fileSlugMap = fileSlugs(files.map((file) => file.filename));
   const singleFile = files.length === 1 ? files[0] : null;
   const primaryFile = gist.files[gist.primary_file];
   const refreshRoute = useRefreshRoute();
@@ -122,6 +125,25 @@ export function GistViewer({
   }, [gist.id, gist.revision_number, gist.snapshot_sha256, viewMode, collapsedFilenames]);
 
   useEffect(() => mountCodeActionReveal(), []);
+
+  // Line links: #L24, #L24-L31, and #file-<slug>-L24 in a multi-file gist.
+  const filenamesKey = files.map((file) => file.filename).join("\n");
+  useEffect(() => {
+    if (viewMode !== "files" || !contentRef.current) return;
+    const slugs = fileSlugs(filenamesKey.split("\n"));
+    return mountLineLinks(contentRef.current, {
+      expandFile: (slug) => {
+        const filename = Object.keys(slugs).find((name) => slugs[name] === slug);
+        if (!filename) return;
+        setCollapsedFilenames((current) => {
+          if (!current.has(filename)) return current;
+          const next = new Set(current);
+          next.delete(filename);
+          return next;
+        });
+      }
+    });
+  }, [gist.id, gist.revision_number, gist.snapshot_sha256, viewMode, collapsedFilenames, filenamesKey]);
 
   useEffect(() => {
     setSingleFileWrapped(false);
@@ -488,13 +510,7 @@ export function GistViewer({
               label={`Copy ${singleFile.filename}`} />
           </div>
           <div className="gist-code-view" data-code-wrap={singleFileWrapped}>
-            <pre className="gist-line-numbers" aria-hidden="true">
-              {sourceLineNumbers(singleFile.content)}
-            </pre>
-            <div
-              className="markdown-body gist-code-content"
-              dangerouslySetInnerHTML={{ __html: singleFile.rendered_html }}
-            />
+            <CodeLines html={singleFile.rendered_html} />
           </div>
         </div>
       ) : (
@@ -503,6 +519,7 @@ export function GistViewer({
             <GistFilePanel
               key={`${gist.id}:${gist.revision_number}:${file.filename}`}
               file={file}
+              slug={fileSlugMap[file.filename]}
               collapsed={collapsedFilenames.has(file.filename)}
               onCollapseToggle={() => toggleFile(file.filename)}
             />
