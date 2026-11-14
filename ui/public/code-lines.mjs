@@ -150,8 +150,6 @@ function linesHtml(lines, wrapperClass, slug) {
 
 const LINK_ICON =
   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
-const COPY_ICON =
-  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 const CHECK_ICON =
   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 
@@ -199,7 +197,7 @@ export function mountLineLinks(root, options = {}) {
     button = null;
   }
 
-  // `button` is the small group of two: copy the link, copy the lines.
+  // `button` is the holder of the copy-link button.
   function placeButton() {
     if (!button || !selection) {
       return;
@@ -214,32 +212,22 @@ export function mountLineLinks(root, options = {}) {
     const firstBox = first.getBoundingClientRect();
     const row = Math.min(firstBox.height, parseFloat(getComputedStyle(first).lineHeight) || firstBox.height);
     // With a page margin beside the code (a single file on a wide screen) the
-    // pair sits in it, stacked, level with the first line and covering nothing.
+    // button sits in it, level with the first line and covering nothing.
     if (host.classList.contains("gist-code-container") && hostBox.left >= 26 + 8) {
-      button.dataset.stacked = "true";
-      button.style.top = `${Math.round(firstBox.top - hostBox.top + (row - 26) / 2)}px`;
+        button.style.top = `${Math.round(firstBox.top - hostBox.top + (row - 26) / 2)}px`;
       button.style.left = `${-(26 + 4)}px`;
       return;
     }
     // Otherwise it sits at the right end of the first line, clear of the
     // numbers, or under the block when the file's own buttons are there.
-    delete button.dataset.stacked;
     const height = button.offsetHeight || 26;
-    const width = button.offsetWidth || 56;
+    const width = button.offsetWidth || 26;
     let top = firstBox.top - hostBox.top + (row - height) / 2;
     if (top < 34 && host.classList.contains("gist-code-container")) {
       top = last.getBoundingClientRect().bottom - hostBox.top + 2;
     }
     button.style.top = `${Math.round(top)}px`;
     button.style.left = `${Math.round(hostBox.width - width - 8)}px`;
-  }
-
-  function selectedText() {
-    let text = "";
-    for (let number = selection.start; number <= selection.end; number += 1) {
-      text += lineOf(selection.pre, number)?.textContent ?? "";
-    }
-    return text.replace(/\n$/, "");
   }
 
   function actionButton(className, icon, read) {
@@ -278,21 +266,15 @@ export function mountLineLinks(root, options = {}) {
       removeButton();
       button = document.createElement("div");
       button.className = "code-line-actions";
-      button.append(
-        actionButton("code-line-link", LINK_ICON, () => window.location.href),
-        actionButton("code-line-copy", COPY_ICON, selectedText)
-      );
+      button.append(actionButton("code-line-link", LINK_ICON, () => window.location.href));
       host.append(button);
     }
-    const range =
+    const label =
       selection.start === selection.end
-        ? `line ${selection.start}`
-        : `lines ${selection.start} to ${selection.end}`;
-    const labels = [`Copy link to ${range}`, `Copy ${range}`];
-    [...button.children].forEach((action, index) => {
-      action.setAttribute("aria-label", labels[index]);
-      action.title = labels[index];
-    });
+        ? `Copy link to line ${selection.start}`
+        : `Copy link to lines ${selection.start} to ${selection.end}`;
+    button.firstElementChild.setAttribute("aria-label", label);
+    button.firstElementChild.title = label;
     placeButton();
   }
 

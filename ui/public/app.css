@@ -2721,20 +2721,14 @@ button.gist-file-action {
   color: var(--ink);
 }
 
-/* Two small buttons for the selected lines: copy their link, copy their text. */
+/* Copies the address of the selected lines. */
 .code-line-actions {
   position: absolute;
   z-index: 3;
   display: flex;
-  gap: 4px;
 }
 
-.code-line-actions[data-stacked="true"] {
-  flex-direction: column;
-}
-
-.code-line-link,
-.code-line-copy {
+.code-line-link {
   width: 26px;
   height: 26px;
   display: inline-grid;
@@ -2747,8 +2741,8 @@ button.gist-file-action {
   cursor: pointer;
 }
 
-:is(.code-line-link, .code-line-copy):hover,
-:is(.code-line-link, .code-line-copy)[data-copied="true"] {
+.code-line-link:hover,
+.code-line-link[data-copied="true"] {
   color: var(--ink);
 }
 

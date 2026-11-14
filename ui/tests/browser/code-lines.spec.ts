@@ -176,24 +176,6 @@ test("each number is a real link to its own line", async ({ page }) => {
   await expect(number(page, 2, "file-vault-py-")).toHaveAttribute("href", "#file-vault-py-L2");
 });
 
-test("the selected lines can be copied as text", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.goto(`${single}#L4-L6`);
-  const copy = page.getByRole("button", { name: "Copy lines 4 to 6", exact: true });
-  await copy.click();
-  await expect(copy).toHaveAttribute("data-copied", "true");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("value_4 = 4 < 5\n\nvalue_6 = 6 < 7");
-  // The two buttons never overlap each other.
-  const [link, lines] = await Promise.all([
-    page.getByRole("button", { name: "Copy link to lines 4 to 6" }).boundingBox(),
-    copy.boundingBox()
-  ]);
-  expect(Math.abs(link!.x - lines!.x) >= 26 || Math.abs(link!.y - lines!.y) >= 26).toBe(true);
-  await number(page, 9).click();
-  await page.getByRole("button", { name: "Copy line 9", exact: true }).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("value_9 = 9 < 10");
-});
-
 test("a line link on a Markdown gist opens its source at those lines", async ({ page }) => {
   const markdown = "/GalleryMdLines001";
   await page.goto(markdown);
