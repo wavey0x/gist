@@ -113,11 +113,11 @@ test("shares one file's wrap choice between source and raw views", async ({ page
 
   await page.getByRole("button", { name: "View raw file" }).click();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".raw-markdown")).toHaveCSS("white-space", "pre-wrap");
-  expect(await codeOverflows(page, ".raw-markdown")).toBe(false);
+  await expect(page.locator(".raw-viewer pre.code-lines")).toHaveCSS("white-space", "pre-wrap");
+  expect(await codeOverflows(page, ".raw-viewer .gist-code-view")).toBe(false);
 
   await toggle.click();
-  await expect(page.locator(".raw-markdown")).toHaveCSS("white-space", "pre");
+  await expect(page.locator(".raw-viewer pre.code-lines")).toHaveCSS("white-space", "pre");
   await page.getByRole("button", { name: "View rendered file" }).click();
   await page.setViewportSize({ width: 720, height: 800 });
   await expect(page.locator(".gist-code-view")).toHaveAttribute("data-code-wrap", "false");

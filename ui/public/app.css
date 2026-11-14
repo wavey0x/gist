@@ -2647,6 +2647,14 @@ button.gist-file-action {
   margin: 0;
 }
 
+/* Lines with no colouring wrapper (plain text, the raw view) sit the same. */
+.markdown-body.gist-code-content > pre.code-lines {
+  max-width: none;
+  margin: 0;
+  overflow: visible;
+  padding: 0;
+}
+
 .markdown-body.gist-code-content .highlight pre {
   margin: 0;
   padding: 0;
@@ -2700,10 +2708,33 @@ button.gist-file-action {
   color: var(--ink);
 }
 
-/* Copies the address of the selected lines. Sits just above the first one. */
-.code-line-link {
+.markdown-body a.code-line-number {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.markdown-body a.code-line-number:hover {
+  color: var(--text);
+}
+
+.markdown-body .code-line[data-selected] > a.code-line-number {
+  color: var(--ink);
+}
+
+/* Two small buttons for the selected lines: copy their link, copy their text. */
+.code-line-actions {
   position: absolute;
   z-index: 3;
+  display: flex;
+  gap: 4px;
+}
+
+.code-line-actions[data-stacked="true"] {
+  flex-direction: column;
+}
+
+.code-line-link,
+.code-line-copy {
   width: 26px;
   height: 26px;
   display: inline-grid;
@@ -2716,8 +2747,8 @@ button.gist-file-action {
   cursor: pointer;
 }
 
-.code-line-link:hover,
-.code-line-link[data-copied="true"] {
+:is(.code-line-link, .code-line-copy):hover,
+:is(.code-line-link, .code-line-copy)[data-copied="true"] {
   color: var(--ink);
 }
 

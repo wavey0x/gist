@@ -164,7 +164,7 @@ export const LLMS_TXT =
     "",
     "## Linking To Lines Of Code",
     "",
-    "Code files (not Markdown) can be linked by line, in GitHub's format:",
+    "Code files can be linked by line, in GitHub's format. A gist that is a single Markdown file accepts the same links: they open its source text with those source lines marked.",
     "",
     "- One line: https://gist.wavey.info/{gist_id}#L24",
     "- A block: https://gist.wavey.info/{gist_id}#L24-L31",

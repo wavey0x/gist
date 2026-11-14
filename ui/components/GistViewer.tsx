@@ -22,8 +22,8 @@ import { CodeCopyButton } from "./CodeCopyButton";
 import { CodeWrapToggle } from "./CodeWrapToggle";
 import { LocalTimestamp } from "./LocalTimestamp";
 import { GistHeading } from "./GistHeading";
-import { fileSlugs, mountLineLinks } from "../public/code-lines.mjs";
-import { CodeLines } from "./CodeLines";
+import { fileSlugs, mountLineLinks, parseLineFragment } from "../public/code-lines.mjs";
+import { CodeLines, PlainLines } from "./CodeLines";
 import { GistFilePanel } from "./GistFilePanel";
 import { ReadingProgress } from "./ReadingProgress";
 import { RecentlyViewedRecorder } from "./RecentlyViewedRecorder";
@@ -129,7 +129,7 @@ export function GistViewer({
   // Line links: #L24, #L24-L31, and #file-<slug>-L24 in a multi-file gist.
   const filenamesKey = files.map((file) => file.filename).join("\n");
   useEffect(() => {
-    if (viewMode !== "files" || !contentRef.current) return;
+    if (viewMode === "custom" || !contentRef.current) return;
     const slugs = fileSlugs(filenamesKey.split("\n"));
     return mountLineLinks(contentRef.current, {
       expandFile: (slug) => {
@@ -189,6 +189,20 @@ export function GistViewer({
       document.removeEventListener("keydown", handleDocumentKeyDown);
     };
   }, [historyOpen]);
+
+  // A Markdown file has lines only in its source, so a line link opens that.
+  const singleFileIsMarkdown = singleFile?.kind === "markdown";
+  useEffect(() => {
+    if (!singleFileIsMarkdown) return undefined;
+    const openSource = () => {
+      if (parseLineFragment(window.location.hash)?.start) {
+        setViewMode("raw");
+      }
+    };
+    openSource();
+    window.addEventListener("hashchange", openSource);
+    return () => window.removeEventListener("hashchange", openSource);
+  }, [gist.id, gist.revision_number, singleFileIsMarkdown]);
 
   useEffect(() => {
     if (viewMode === "custom" && !customContent) {
@@ -305,6 +319,14 @@ export function GistViewer({
   }, [gist.snapshot_sha256, viewMode]);
 
   function toggleRawMode() {
+    if (viewMode === "raw" && singleFileIsMarkdown && parseLineFragment(window.location.hash)) {
+      // The rendered page has no lines to point at; drop the line address.
+      window.history.replaceState(
+        window.history.state,
+        "",
+        window.location.pathname + window.location.search
+      );
+    }
     setViewMode((current) => (current === "raw" ? "files" : "raw"));
   }
 
@@ -481,7 +503,11 @@ export function GistViewer({
       {viewMode === "custom" && customContent ? (
         customContent
       ) : rawIsVisible && singleFile ? (
-        <div className="raw-viewer gist-single-file" data-code-wrap={singleFileWrapped}>
+        <div
+          ref={contentRef}
+          className="raw-viewer gist-single-file gist-code-container"
+          data-code-wrap={singleFileWrapped}
+        >
           <div className="code-block-actions">
             <CodeWrapToggle wrapped={singleFileWrapped}
               onToggle={() => setSingleFileWrapped((current) => !current)}
@@ -489,9 +515,9 @@ export function GistViewer({
             <CodeCopyButton key={`${gist.snapshot_sha256}:raw`} content={singleFile.content}
               label={`Copy ${singleFile.filename}`} />
           </div>
-          <pre className="raw-markdown" aria-label="Raw file">
-            <code>{singleFile.content}</code>
-          </pre>
+          <div className="gist-code-view" data-code-wrap={singleFileWrapped}>
+            <PlainLines text={singleFile.content} />
+          </div>
         </div>
       ) : singleFile?.kind === "markdown" ? (
         <div ref={contentRef} className="gist-single-file">

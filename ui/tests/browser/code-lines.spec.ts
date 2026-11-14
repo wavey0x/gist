@@ -166,3 +166,55 @@ test("an old revision offers the latest and keeps the lines", async ({ page }) =
   await notice.click();
   await expect(page).toHaveURL(`${single}#L8`);
 });
+
+test("each number is a real link to its own line", async ({ page }) => {
+  await page.goto(single);
+  await expect(number(page, 24)).toHaveAttribute("href", "#L24");
+  expect(await number(page, 24).evaluate((node) => node.tagName)).toBe("A");
+  expect(await number(page, 24).evaluate((node) => getComputedStyle(node).textDecorationLine)).toBe("none");
+  await page.goto(multi);
+  await expect(number(page, 2, "file-vault-py-")).toHaveAttribute("href", "#file-vault-py-L2");
+});
+
+test("the selected lines can be copied as text", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto(`${single}#L4-L6`);
+  const copy = page.getByRole("button", { name: "Copy lines 4 to 6", exact: true });
+  await copy.click();
+  await expect(copy).toHaveAttribute("data-copied", "true");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("value_4 = 4 < 5\n\nvalue_6 = 6 < 7");
+  // The two buttons never overlap each other.
+  const [link, lines] = await Promise.all([
+    page.getByRole("button", { name: "Copy link to lines 4 to 6" }).boundingBox(),
+    copy.boundingBox()
+  ]);
+  expect(Math.abs(link!.x - lines!.x) >= 26 || Math.abs(link!.y - lines!.y) >= 26).toBe(true);
+  await number(page, 9).click();
+  await page.getByRole("button", { name: "Copy line 9", exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("value_9 = 9 < 10");
+});
+
+test("a line link on a Markdown gist opens its source at those lines", async ({ page }) => {
+  const markdown = "/GalleryMdLines001";
+  await page.goto(markdown);
+  await expect(page.locator("article.markdown-body h1")).toHaveText("Markdown lines");
+  await expect(page.locator(".code-line")).toHaveCount(0);
+
+  await page.goto(`${markdown}#L40-L42`);
+  await expect(page.locator(".raw-viewer .code-line")).toHaveCount(60);
+  expect(await selected(page)).toEqual(["L40", "L41", "L42"]);
+  await expect(page.locator('[id="L40"]')).toHaveText("Row 40 has <b>markup</b> & an ampersand.\n");
+  await expect(page.locator('[id="L40"]')).toBeInViewport();
+  await expect(page.getByRole("button", { name: "View rendered file" })).toBeVisible();
+
+  // Lines can be picked in the source like in any code file.
+  await number(page, 1).click();
+  await expect(page).toHaveURL(`${markdown}#L1`);
+
+  // Going back to the rendered page drops the line address.
+  await page.getByRole("button", { name: "View rendered file" }).click();
+  await expect(page).toHaveURL(markdown);
+  await expect(page.locator("article.markdown-body h1")).toBeVisible();
+  await page.reload();
+  await expect(page.locator("article.markdown-body h1")).toBeVisible();
+});

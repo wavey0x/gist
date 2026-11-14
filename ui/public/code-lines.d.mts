@@ -11,6 +11,7 @@ export function formatLineFragment(target: {
   end?: number | null;
 }): string;
 export function codeLinesHtml(html: string, slug?: string): string | null;
+export function plainLinesHtml(text: string, slug?: string): string;
 export function mountLineLinks(
   root: Element | null,
   options?: { expandFile?: (slug: string) => void }

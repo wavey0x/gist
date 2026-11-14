@@ -110,26 +110,48 @@ export function formatLineFragment({ slug, start, end }) {
  */
 export function codeLinesHtml(html, slug = "") {
   const split = splitHighlightedLines(html);
-  if (!split) {
-    return null;
+  return split ? linesHtml(split.lines, split.wrapperClass, slug) : null;
+}
+
+/**
+ * Plain text (the source of a Markdown file) as the same numbered lines,
+ * with no colouring.
+ */
+export function plainLinesHtml(text, slug = "") {
+  const lines = String(text ?? "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"));
+  // A trailing line break ends the last line; it does not start another.
+  if (lines.length > 1 && lines[lines.length - 1] === "") {
+    lines.pop();
   }
+  return linesHtml(lines, "", slug);
+}
+
+// Each number is a real link to its own line, so the browser's "copy link"
+// and "open in new tab" work on it; a plain click is handled in the page.
+function linesHtml(lines, wrapperClass, slug) {
   const prefix = slug ? `file-${slug}-` : "";
-  const digits = String(split.lines.length).length;
-  const body = split.lines
+  const digits = String(lines.length).length;
+  const body = lines
     .map(
       (line, index) =>
         `<span class="code-line" id="${prefix}L${index + 1}">` +
-        `<span class="code-line-number" data-line="${index + 1}"></span>${line}\n</span>`
+        `<a class="code-line-number" href="#${prefix}L${index + 1}" data-line="${index + 1}" ` +
+        `aria-label="Line ${index + 1}" tabindex="-1" draggable="false"></a>${line}\n</span>`
     )
     .join("");
   const pre =
     `<pre class="code-lines" data-line-prefix="${prefix}" data-line-slug="${slug}" ` +
     `style="--line-digits:${digits}">${body}</pre>`;
-  return split.wrapperClass ? `<div class="${split.wrapperClass}" dir="auto">${pre}</div>` : pre;
+  return wrapperClass ? `<div class="${wrapperClass}" dir="auto">${pre}</div>` : pre;
 }
 
 const LINK_ICON =
   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+const COPY_ICON =
+  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 const CHECK_ICON =
   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 
@@ -148,7 +170,7 @@ export function mountLineLinks(root, options = {}) {
     return () => {};
   }
   let button = null;
-  let feedbackTimer = null;
+  const feedbackTimers = new Set();
   let lastPointerType = "mouse";
   let selection = null;
 
@@ -169,11 +191,15 @@ export function mountLineLinks(root, options = {}) {
   }
 
   function removeButton() {
-    window.clearTimeout(feedbackTimer);
+    for (const timer of feedbackTimers) {
+      window.clearTimeout(timer);
+    }
+    feedbackTimers.clear();
     button?.remove();
     button = null;
   }
 
+  // `button` is the small group of two: copy the link, copy the lines.
   function placeButton() {
     if (!button || !selection) {
       return;
@@ -186,24 +212,59 @@ export function mountLineLinks(root, options = {}) {
     }
     const hostBox = host.getBoundingClientRect();
     const firstBox = first.getBoundingClientRect();
-    const height = button.offsetHeight || 26;
-    const width = button.offsetWidth || 26;
+    const row = Math.min(firstBox.height, parseFloat(getComputedStyle(first).lineHeight) || firstBox.height);
     // With a page margin beside the code (a single file on a wide screen) the
-    // button sits in it, level with the first line and covering nothing.
-    if (host.classList.contains("gist-code-container") && hostBox.left >= width + 8) {
-      button.style.top = `${Math.round(firstBox.top - hostBox.top + (Math.min(firstBox.height, parseFloat(getComputedStyle(first).lineHeight) || firstBox.height) - height) / 2)}px`;
-      button.style.left = `${-(width + 4)}px`;
+    // pair sits in it, stacked, level with the first line and covering nothing.
+    if (host.classList.contains("gist-code-container") && hostBox.left >= 26 + 8) {
+      button.dataset.stacked = "true";
+      button.style.top = `${Math.round(firstBox.top - hostBox.top + (row - 26) / 2)}px`;
+      button.style.left = `${-(26 + 4)}px`;
       return;
     }
     // Otherwise it sits at the right end of the first line, clear of the
     // numbers, or under the block when the file's own buttons are there.
-    const row = Math.min(firstBox.height, parseFloat(getComputedStyle(first).lineHeight) || firstBox.height);
+    delete button.dataset.stacked;
+    const height = button.offsetHeight || 26;
+    const width = button.offsetWidth || 56;
     let top = firstBox.top - hostBox.top + (row - height) / 2;
     if (top < 34 && host.classList.contains("gist-code-container")) {
       top = last.getBoundingClientRect().bottom - hostBox.top + 2;
     }
     button.style.top = `${Math.round(top)}px`;
     button.style.left = `${Math.round(hostBox.width - width - 8)}px`;
+  }
+
+  function selectedText() {
+    let text = "";
+    for (let number = selection.start; number <= selection.end; number += 1) {
+      text += lineOf(selection.pre, number)?.textContent ?? "";
+    }
+    return text.replace(/\n$/, "");
+  }
+
+  function actionButton(className, icon, read) {
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = className;
+    action.innerHTML = icon;
+    let timer = null;
+    action.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(read());
+        action.innerHTML = CHECK_ICON;
+        action.dataset.copied = "true";
+      } catch {
+        action.dataset.copied = "false";
+      }
+      window.clearTimeout(timer);
+      feedbackTimers.delete(timer);
+      timer = window.setTimeout(() => {
+        action.innerHTML = icon;
+        delete action.dataset.copied;
+      }, 1400);
+      feedbackTimers.add(timer);
+    });
+    return action;
   }
 
   function showButton() {
@@ -215,34 +276,23 @@ export function mountLineLinks(root, options = {}) {
     }
     if (!button || button.parentElement !== host) {
       removeButton();
-      button = document.createElement("button");
-      button.type = "button";
-      button.className = "code-line-link";
-      button.innerHTML = LINK_ICON;
-      button.addEventListener("click", async () => {
-        try {
-          await navigator.clipboard.writeText(window.location.href);
-          button.innerHTML = CHECK_ICON;
-          button.dataset.copied = "true";
-        } catch {
-          button.dataset.copied = "false";
-        }
-        window.clearTimeout(feedbackTimer);
-        feedbackTimer = window.setTimeout(() => {
-          if (button) {
-            button.innerHTML = LINK_ICON;
-            delete button.dataset.copied;
-          }
-        }, 1400);
-      });
+      button = document.createElement("div");
+      button.className = "code-line-actions";
+      button.append(
+        actionButton("code-line-link", LINK_ICON, () => window.location.href),
+        actionButton("code-line-copy", COPY_ICON, selectedText)
+      );
       host.append(button);
     }
-    const label =
+    const range =
       selection.start === selection.end
-        ? `Copy link to line ${selection.start}`
-        : `Copy link to lines ${selection.start} to ${selection.end}`;
-    button.setAttribute("aria-label", label);
-    button.title = label;
+        ? `line ${selection.start}`
+        : `lines ${selection.start} to ${selection.end}`;
+    const labels = [`Copy link to ${range}`, `Copy ${range}`];
+    [...button.children].forEach((action, index) => {
+      action.setAttribute("aria-label", labels[index]);
+      action.title = labels[index];
+    });
     placeButton();
   }
 

@@ -468,7 +468,7 @@ test("a stream that drops while hidden switches to the downloaded copy instead o
 test("the raw view keeps the audio control and leaves playback running", async ({ page }) => {
   await start(page);
   await page.getByRole("button", { name: "View raw file" }).click();
-  await expect(page.locator(".raw-markdown")).toBeVisible();
+  await expect(page.locator(".raw-viewer pre.code-lines")).toBeVisible();
   await expect(page.getByRole("button", { name: "Hide article audio player" })).toBeVisible();
   await expect(page.getByRole("button", { name: "View revision history" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Table of contents" })).toHaveCount(0);

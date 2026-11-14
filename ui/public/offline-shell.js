@@ -1564,13 +1564,22 @@
     return codeView;
   }
 
-  function rawFileContent(file, panel = false) {
-    const pre = element("pre", {
-      className: panel ? "raw-markdown gist-file-raw" : "raw-markdown"
-    });
-    pre.setAttribute("aria-label", "Raw file");
-    pre.append(element("code", { text: file.content || "" }));
-    return pre;
+  // The source as numbered lines (components/CodeLines.tsx, PlainLines).
+  function rawFileContent(file) {
+    const codeView = element("div", { className: "gist-code-view" });
+    const content = element("div", { className: "markdown-body gist-code-content" });
+    content.setAttribute("aria-label", "Raw file");
+    if (codeLinesModule) {
+      content.dataset.codeLines = "true";
+      content.innerHTML = codeLinesModule.plainLinesHtml(file.content || "");
+    } else {
+      content.dataset.codeLines = "false";
+      const pre = element("pre");
+      pre.append(element("code", { text: file.content || "" }));
+      content.append(pre);
+    }
+    codeView.append(content);
+    return codeView;
   }
 
   function codeCopyControl(content, label, compact = false) {
@@ -1616,16 +1625,17 @@
   }
 
   function singleRawViewer(file, wrapState) {
-    const viewer = element("div", { className: "raw-viewer gist-single-file" });
-    viewer.dataset.codeWrap = String(wrapState.value);
+    const viewer = element("div", { className: "raw-viewer gist-single-file gist-code-container" });
+    const content = rawFileContent(file);
+    viewer.dataset.codeWrap = content.dataset.codeWrap = String(wrapState.value);
     const wrap = wrapButton(`Wrap lines in ${file.filename}`, wrapState.value, () => {
       wrapState.value = !wrapState.value;
-      viewer.dataset.codeWrap = String(wrapState.value);
+      viewer.dataset.codeWrap = content.dataset.codeWrap = String(wrapState.value);
       paintWrapButton(wrap, wrapState.value);
     });
     const actions = element("div", { className: "code-block-actions" });
     actions.append(wrap, codeCopyControl(file.content || "", `Copy ${file.filename}`));
-    viewer.append(actions, rawFileContent(file));
+    viewer.append(actions, content);
     return viewer;
   }
 
@@ -1904,7 +1914,7 @@
       }
       currentContent = nextContent;
       stopLineLinks?.();
-      stopLineLinks = rawVisible ? null : codeLinesModule?.mountLineLinks(nextContent) ?? null;
+      stopLineLinks = codeLinesModule?.mountLineLinks(nextContent) ?? null;
       addMarkdownWrapControls(nextContent);
       if (!rawVisible) {
         setupEntityGroupHover(nextContent);
@@ -1912,12 +1922,35 @@
       refreshGalleries();
     }
 
+    // A Markdown file has lines only in its source: a line link opens that,
+    // and going back to the rendered page drops the line address.
+    const markdownSource = singleFile?.kind === "markdown" && Boolean(codeLinesModule);
+    const hasLineTarget = () =>
+      Boolean(codeLinesModule?.parseLineFragment(window.location.hash)?.start);
     const toolbar = await articleToolbar(payload, singleFile, (visible) => {
+      if (!visible && markdownSource && hasLineTarget()) {
+        window.history.replaceState(
+          window.history.state,
+          "",
+          window.location.pathname + window.location.search
+        );
+      }
       rawVisible = visible;
       paintContent();
     });
     app.append(gistHeading(payload, toolbar));
     paintContent();
+    if (markdownSource) {
+      const openSource = () => {
+        if (!toolbar.isConnected) {
+          window.removeEventListener("hashchange", openSource);
+        } else if (!rawVisible && hasLineTarget()) {
+          toolbar.querySelector('[aria-label="View raw file"]')?.click();
+        }
+      };
+      window.addEventListener("hashchange", openSource);
+      openSource();
+    }
   }
 
   function renderUnavailable(message) {

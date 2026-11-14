@@ -70,6 +70,8 @@ const filesFor = (id) =>
       }
     : id === "GalleryLines00001"
     ? { "vault.py": highlightedLines }
+    : id === "GalleryMdLines001"
+    ? { "README.md": "<h1>Markdown lines</h1>" + "<p>Rendered paragraph.</p>".repeat(30) }
     : id === "GalleryLinesMulti1"
     ? {
         "README.md": '<h1>Line links</h1><p><a href="#file-vault-py-L3-L4">The check</a></p>' + "<p>Filler paragraph.</p>".repeat(40),
@@ -110,6 +112,11 @@ const filesFor = (id) =>
             "README.md": album,
             "appendix.md": `<h1>Separate file</h1><p>${mark(5, "wg-gallery=album", "Separate photo")}</p>`
           };
+const markdownLineSource =
+  "# Markdown lines\n\n" +
+  Array.from({ length: 58 }, (_, index) => `Row ${index + 3} has <b>markup</b> & an ampersand.`).join("\n") +
+  "\n";
+
 export function fixture(id, revision = 1) {
   const files = Object.fromEntries(
     Object.entries(filesFor(id)).map(([filename, rendered_html]) => [
@@ -120,6 +127,7 @@ export function fixture(id, revision = 1) {
         language: filename.endsWith(".patch") ? "diff" : filename.endsWith(".json") ? "json" : "markdown",
         content: id.startsWith("GalleryDiff") ? diffContent(filename, revision) :
           filename.endsWith(".json") ? '{"message":"Raw stays raw"}\n' :
+          id === "GalleryMdLines001" ? markdownLineSource :
           filename === "vault.py" ? lineSource.join("\n") + "\n" :
           filename === "notes.py" ? "first note\nsecond note\nthird note\n" :
           filename.endsWith(".patch") ? `diff --git a/example.vy b/example.vy\n${longPatchLine}\n` :

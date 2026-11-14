@@ -5,6 +5,7 @@ import {
   fileSlugs,
   formatLineFragment,
   parseLineFragment,
+  plainLinesHtml,
   splitHighlightedLines
 } from "../public/code-lines.mjs";
 
@@ -59,7 +60,7 @@ test("anything unexpected is refused", () => {
 test("line HTML carries ids, numbers and the digit count", () => {
   const html = codeLinesHtml(highlighted("a\nb"), "calc-py");
   assert.match(html, /<pre class="code-lines" data-line-prefix="file-calc-py-" data-line-slug="calc-py" style="--line-digits:1">/);
-  assert.match(html, /<span class="code-line" id="file-calc-py-L2"><span class="code-line-number" data-line="2"><\/span>b\n<\/span>/);
+  assert.match(html, /<span class="code-line" id="file-calc-py-L2"><a class="code-line-number" href="#file-calc-py-L2" data-line="2" aria-label="Line 2" tabindex="-1" draggable="false"><\/a>b\n<\/span>/);
   assert.match(codeLinesHtml(highlighted("a"), ""), /id="L1"/);
   assert.equal(codeLinesHtml("<p>prose</p>"), null);
 });
@@ -87,4 +88,15 @@ test("file slugs follow GitHub Gist and stay unique", () => {
     "a-b.py": "a-b-py-1",
     "...": "file"
   });
+});
+
+test("plain text becomes the same numbered lines, escaped", () => {
+  const html = plainLinesHtml("# Title\r\n\n<b>bold</b> & more\n");
+  assert.equal((html.match(/class="code-line"/g) ?? []).length, 3);
+  assert.match(html, /^<pre class="code-lines" data-line-prefix="" data-line-slug="" style="--line-digits:1">/);
+  assert.match(html, /href="#L3" data-line="3"[^>]*><\/a>&lt;b&gt;bold&lt;\/b&gt; &amp; more\n<\/span><\/pre>$/);
+  assert.match(html, /id="L2"><a [^>]*><\/a>\n<\/span>/);
+  // No final line break still gives a last line; empty text gives one line.
+  assert.equal((plainLinesHtml("a\nb").match(/class="code-line"/g) ?? []).length, 2);
+  assert.equal((plainLinesHtml("").match(/class="code-line"/g) ?? []).length, 1);
 });
