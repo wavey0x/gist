@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
-import { mermaidConfig } from "../lib/mermaid-config";
+import {
+  mermaidConfig,
+  mermaidDepthTones,
+  mermaidPalette
+} from "../lib/mermaid-config";
 
 const MARKDOWN_BODY_SELECTOR = "article.markdown-body";
 const MERMAID_RENDER_SELECTOR = ".js-mermaid-render";
@@ -14,6 +18,7 @@ const MERMAID_MAX_SOURCE_CHARS = 50000;
 const FLOWCHART_RE = /^\s*(?:flowchart|graph)\b/i;
 const UNQUOTED_EDGE_LABEL_WITH_PUNCTUATION_RE =
   /([-<>=.ox]+)\|([^|"\n]*[()[\],;][^|"\n]*)\|/g;
+const NODE_CORNER_RADIUS = "10";
 const PANZOOM_MIN_SCALE = 0.5;
 const PANZOOM_MAX_SCALE = 4;
 const PANZOOM_STEP = 1.2;
@@ -37,9 +42,17 @@ const COMPACT_DIAGRAM_ICON =
 
 const mermaidPanZoomCleanups = new WeakMap<HTMLElement, () => void>();
 
+type MermaidFlowDb = {
+  getEdges?: () => { start: string; end: string }[];
+  getVertices?: () => Map<string, { classes?: string[]; styles?: string[] }>;
+};
+
 type MermaidApi = {
   initialize: (options: Record<string, unknown>) => void;
   render: (id: string, text: string) => Promise<{ svg: string }>;
+  mermaidAPI: {
+    getDiagramFromText: (text: string) => Promise<{ db: unknown }>;
+  };
 };
 
 type MermaidRendererProps = {
@@ -128,7 +141,59 @@ function normalizeMermaidSource(source: string) {
   );
 }
 
-function addNonceToMermaidSvg(svg: string, nonce: string | null) {
+async function flowchartTones(mermaid: MermaidApi, source: string) {
+  if (!FLOWCHART_RE.test(source)) {
+    return null;
+  }
+  try {
+    const { db } = await mermaid.mermaidAPI.getDiagramFromText(
+      normalizeMermaidSource(source)
+    );
+    const flowDb = db as MermaidFlowDb;
+    if (!flowDb.getVertices || !flowDb.getEdges) {
+      return null;
+    }
+    return mermaidDepthTones(flowDb.getVertices(), flowDb.getEdges());
+  } catch {
+    return null;
+  }
+}
+
+// Rounds plain boxes and tints flowchart nodes by their place in the flow.
+function polishMermaidSvg(
+  svgElement: SVGSVGElement,
+  renderId: string,
+  tones: Map<string, number> | null
+) {
+  svgElement
+    .querySelectorAll("g.node > rect.label-container:not([rx])")
+    .forEach((rect) => {
+      rect.setAttribute("rx", NODE_CORNER_RADIUS);
+      rect.setAttribute("ry", NODE_CORNER_RADIUS);
+    });
+
+  if (!tones?.size) {
+    return;
+  }
+  const prefix = `${renderId}-flowchart-`;
+  svgElement.querySelectorAll<SVGGElement>("g.node").forEach((node) => {
+    if (!node.id.startsWith(prefix)) {
+      return;
+    }
+    const vertexId = node.id.slice(prefix.length).replace(/-\d+$/, "");
+    const tone = tones.get(vertexId);
+    if (tone) {
+      node.classList.add(`tone-${tone}`);
+    }
+  });
+}
+
+function addNonceToMermaidSvg(
+  svg: string,
+  nonce: string | null,
+  renderId: string,
+  tones: Map<string, number> | null
+) {
   const template = document.createElement("template");
   template.innerHTML = svg.trim();
 
@@ -138,6 +203,7 @@ function addNonceToMermaidSvg(svg: string, nonce: string | null) {
     if (!svgElement.getAttribute("role")) {
       svgElement.setAttribute("role", "img");
     }
+    polishMermaidSvg(svgElement, renderId, tones);
   }
 
   if (nonce) {
@@ -311,7 +377,11 @@ function updatePanZoomLayout(
   viewport: HTMLElement,
   layoutButton: HTMLButtonElement
 ) {
-  const availableWidth = panZoomAvailableWidth(viewport);
+  // Small diagrams keep their natural size instead of filling the page.
+  const availableWidth = Math.min(
+    panZoomAvailableWidth(viewport),
+    state.baseViewBox.width
+  );
   const compactHeight = compactViewportHeight();
   const naturalHeight =
     availableWidth > 0
@@ -443,6 +513,7 @@ function initializeMermaidPanZoom(output: HTMLElement) {
 
   const canvas = document.createElement("div");
   canvas.className = "mermaid-panzoom-canvas";
+  canvas.style.maxWidth = `${Math.ceil(baseViewBox.width)}px`;
   canvas.appendChild(svg);
 
   const controls = document.createElement("div");
@@ -812,11 +883,12 @@ async function renderMermaidContainer(
 
   try {
     const result = await renderMermaidWithStyleNonce(mermaid, id, source, nonce);
+    const tones = await flowchartTones(mermaid, source);
     if (shouldCancel() || !container.isConnected) {
       return;
     }
     destroyMermaidPanZoom(output);
-    output.innerHTML = addNonceToMermaidSvg(result.svg, nonce);
+    output.innerHTML = addNonceToMermaidSvg(result.svg, nonce, id, tones);
     initializeMermaidPanZoom(output);
     container.dataset.mermaidTheme = theme;
     container.setAttribute("data-mermaid-state", "rendered");
@@ -911,7 +983,12 @@ export function MermaidRenderer({
         return;
       }
 
-      mermaid.initialize(mermaidConfig(theme));
+      mermaid.initialize(
+        mermaidConfig(
+          theme,
+          mermaidPalette(theme === "dark", document.documentElement)
+        )
+      );
       const nonce = cspNonce();
       for (const { container, diagramIndex, filename } of renderableContainers) {
         if (cancelled) {

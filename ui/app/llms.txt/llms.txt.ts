@@ -188,6 +188,7 @@ export const LLMS_TXT =
     "- Preserve user content unless asked to edit it. Never print or publish API keys, secrets, or private identifiers.",
     "- For explanatory content, prefer a self-contained lead Markdown file beginning with a non-empty `# Title`. Keep code examples beside their explanation in fences with accurate language identifiers. Use separate files only for standalone artifacts.",
     "- Put Mermaid diagrams directly in the Markdown narrative using a bare `mermaid` fence. Do not publish a separate `.mmd` file unless standalone diagram source was requested.",
+    "- The reader styles Mermaid diagrams itself: theme settings (`theme`, `themeVariables`, `themeCSS`) in frontmatter or `init` directives are ignored. Flowchart nodes are tinted automatically down the flow. To give a node meaning instead, add one of `:::info`, `:::ok`, `:::accent`, `:::warn` or `:::danger`, e.g. `A[\"Attacker\"]:::danger`; marking any node turns the automatic tints off for that diagram.",
     "- Math uses GitHub-style dollar delimiters, dollar-backtick inline syntax, and fenced `math` blocks.",
     "",
   ].join("\n");
