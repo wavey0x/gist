@@ -57,6 +57,50 @@ const lineHtml = lineSource.map((line, index) => {
   return safe.replace(/^(\w+)/, '<span class="pl-v">$1</span>');
 }).join("\n");
 const highlightedLines = `<div class="highlight highlight-source-python" dir="auto"><pre>${lineHtml}\n</pre></div>`;
+// Mermaid diagrams as the backend wraps them: source in a fallback block,
+// rendered in the browser.
+const mermaidSources = [
+  `flowchart TD
+    K["Operator key"] -->|"batch under the role"| R["Roles module"]
+    R -->|"role check passes"| S["Safe"]
+    S -->|"1. redeem vault shares"| V["Gauntlet USDC Prime"]
+    S -->|"2, 3. swap, executor = attacker"| P["ParaSwap router"]
+    P -->|"input sent to executor"| A["Attacker's recipient"]
+    P -.->|"zero output"| S`,
+  `flowchart LR
+    S["Safe"]:::info --> P["Router"]:::warn --> A["Attacker"]:::danger
+    S --> O["Owners"]`,
+  `sequenceDiagram
+    participant U as User
+    participant R as Router
+    U->>R: swapExactAmountIn
+    R-->>U: 0 output`,
+  `flowchart LR
+  subgraph Safe
+    A[Owners] --> B[Roles module]
+  end
+  subgraph DEX
+    C[Router] --> D[(Pool)]
+  end
+  B -->|swap| C
+  C -->|output| A`,
+  `stateDiagram-v2
+    [*] --> Enabled
+    Enabled --> Revoked: remove member
+    Revoked --> [*]`,
+  `pie title Loss
+    "USDC" : 4.39
+    "syrupUSDC" : 2.05`
+];
+const mermaidHtml = mermaidSources
+  .map(
+    (source) =>
+      `<div class="mermaid-render js-mermaid-render" dir="auto"><div class="mermaid-render-fallback" dir="auto"><pre lang="mermaid">${source
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")}</pre></div><div class="mermaid-render-output js-mermaid-render-output"></div><div class="mermaid-render-error"></div></div>`
+  )
+  .join("");
 const filesFor = (id) =>
   id === "GalleryDiff00001"
     ? { "README.md": "<h1>Oracle markets</h1><p>Diff fixture.</p>", "calc.py": "<pre>def total(values): ...</pre>" }
@@ -76,6 +120,8 @@ const filesFor = (id) =>
           "<tr><td>Attacker proceeds</td><td>$6.44M at receipt; nothing borrowed or repaid</td></tr>" +
           "</tbody></table></div>"
       }
+    : id === "GalleryMermaid01"
+    ? { "README.md": `<h1>Diagrams</h1>${mermaidHtml}` }
     : id === "GalleryLines00001"
     ? { "vault.py": highlightedLines }
     : id === "GalleryMdLines001"

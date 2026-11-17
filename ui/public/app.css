@@ -38,6 +38,19 @@
   --diff-del-strong: #ffcecb;
   --backdrop: rgb(16 16 16 / 45%);
   --line-mark: #fff4c4;
+  /* Diagram tints, in flow order: blue, green, violet, amber, rose. */
+  --diagram-fill-1: #eef3fd;
+  --diagram-stroke-1: #a9c1ee;
+  --diagram-fill-2: #e9f6f2;
+  --diagram-stroke-2: #94cfbd;
+  --diagram-fill-3: #f2eefd;
+  --diagram-stroke-3: #bcaef0;
+  --diagram-fill-4: #fdf5e6;
+  --diagram-stroke-4: #e6c483;
+  --diagram-fill-5: #fdeef0;
+  --diagram-stroke-5: #eaa9b2;
+  --diagram-shadow: drop-shadow(0 1px 1px rgb(16 16 16 / 6%))
+    drop-shadow(0 4px 12px rgb(16 16 16 / 7%));
   --elev: 0 1px 2px rgb(16 16 16 / 5%), 0 10px 28px -8px rgb(16 16 16 / 16%);
   --gloss: inset 0 1px 0 rgb(255 255 255 / 80%);
   --r-sm: 4px;
@@ -87,6 +100,18 @@
   --diff-del-strong: #f8514980;
   --backdrop: rgb(0 0 0 / 60%);
   --line-mark: #3b3413;
+  --diagram-fill-1: #17233a;
+  --diagram-stroke-1: #3d64a6;
+  --diagram-fill-2: #122d28;
+  --diagram-stroke-2: #2f8a76;
+  --diagram-fill-3: #231d3b;
+  --diagram-stroke-3: #6a56b5;
+  --diagram-fill-4: #30260f;
+  --diagram-stroke-4: #9d7a2d;
+  --diagram-fill-5: #36191e;
+  --diagram-stroke-5: #a2505c;
+  --diagram-shadow: drop-shadow(0 1px 1px rgb(0 0 0 / 50%))
+    drop-shadow(0 4px 12px rgb(0 0 0 / 45%));
   --elev: 0 1px 2px rgb(0 0 0 / 40%), 0 14px 32px -10px rgb(0 0 0 / 70%);
   --gloss: inset 0 1px 0 rgb(255 255 255 / 5%);
   color-scheme: dark;
@@ -2269,6 +2294,7 @@ input:disabled {
 
 .markdown-body .mermaid-panzoom-canvas {
   width: 100%;
+  margin: 0 auto;
 }
 
 .markdown-body .mermaid-panzoom[data-panzoom-layout="compact"] .mermaid-panzoom-canvas {

@@ -10,9 +10,9 @@ const source = await readFile(
   "utf8"
 );
 const { outputText } = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.ESNext }
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
 });
-const { mermaidConfig } = await import(
+const { mermaidConfig, mermaidDepthTones } = await import(
   `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`
 );
 
@@ -20,7 +20,9 @@ const diagrams = {
   directive:
     '%%{init: {"theme":"base","themeVariables":{"lineColor":"#000000"}}}%%\nflowchart TD\nA --> B',
   frontmatter:
-    '---\nconfig:\n  theme: base\n  themeVariables:\n    lineColor: "#000000"\n---\nflowchart TD\nA --> B'
+    '---\nconfig:\n  theme: base\n  themeVariables:\n    lineColor: "#000000"\n---\nflowchart TD\nA --> B',
+  perDiagram:
+    '---\nconfig:\n  flowchart:\n    theme: redux-dark-color\n---\nflowchart TD\nA --> B'
 };
 
 for (const [syntax, diagram] of Object.entries(diagrams)) {
@@ -29,9 +31,11 @@ for (const [syntax, diagram] of Object.entries(diagrams)) {
     for (const theme of ["dark", "default", "dark"]) {
       mermaid.initialize(mermaidConfig(theme));
       const expectedLineColor = mermaid.mermaidAPI.getConfig().themeVariables.lineColor;
+      assert.equal(expectedLineColor, theme === "dark" ? "#6e6e6e" : "#8f8f8f");
       await mermaid.parse(diagram);
       const actual = mermaid.mermaidAPI.getConfig();
-      assert.equal(actual.theme, theme);
+      assert.equal(actual.theme, "base");
+      assert.notEqual(actual.flowchart?.theme, "redux-dark-color");
       assert.equal(actual.themeVariables.lineColor, expectedLineColor);
       assert.equal(actual.securityLevel, "strict");
     }
@@ -59,4 +63,31 @@ test("explicit edge and node styles survive both page themes", async () => {
       "fill:#ede9fe", "stroke:#7c3aed", "color:#3b1764"
     ]);
   }
+});
+
+test("flowchart nodes are tinted by depth, and author colors switch tints off", async () => {
+  mermaid.initialize(mermaidConfig("dark"));
+  const plain = `flowchart TD
+    K --> R --> S
+    S --> V
+    S --> P --> A
+    P -.-> S`;
+  const { db } = await mermaid.mermaidAPI.getDiagramFromText(plain);
+  const tones = mermaidDepthTones(db.getVertices(), db.getEdges());
+  assert.deepEqual(Object.fromEntries(tones), { K: 1, R: 2, S: 3, V: 4, P: 4, A: 5 });
+
+  for (const colored of [
+    `${plain}\n    class A danger`,
+    `${plain}\n    style A fill:#f00`,
+    `${plain}\n    classDef mine fill:#0f0\n    class K mine`
+  ]) {
+    const parsed = await mermaid.mermaidAPI.getDiagramFromText(colored);
+    assert.equal(mermaidDepthTones(parsed.db.getVertices(), parsed.db.getEdges()).size, 0);
+  }
+
+  const cycle = await mermaid.mermaidAPI.getDiagramFromText("flowchart LR\n A --> B --> A");
+  assert.deepEqual(
+    Object.fromEntries(mermaidDepthTones(cycle.db.getVertices(), cycle.db.getEdges())),
+    { A: 1, B: 2 }
+  );
 });
