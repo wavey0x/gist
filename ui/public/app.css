@@ -2019,6 +2019,12 @@ input:disabled {
   text-align: left;
 }
 
+/* Markdown cannot write a table without a header row, so a key/value table
+   arrives with an empty one. Drop it rather than draw an empty tinted bar. */
+.markdown-body table thead:not(:has(th:not(:empty))) {
+  display: none;
+}
+
 .markdown-body table tr,
 .markdown-body table tr:nth-child(2n) {
   border: 0;
@@ -2380,6 +2386,12 @@ input:disabled {
   border-collapse: separate;
   border-spacing: 0;
   table-layout: auto;
+}
+
+/* Two columns never wrap to one word per line, so a two-column table stays
+   within the page and wraps its text instead of scrolling sideways. */
+.markdown-body .table-scroll > table:not(:has(tr > :nth-child(3))) {
+  max-width: 100%;
 }
 
 /* Cells draw only their right and bottom lines, and none against the frame. */

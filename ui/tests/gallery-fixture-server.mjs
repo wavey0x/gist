@@ -68,6 +68,14 @@ const filesFor = (id) =>
           [1, 2, 3].map((n) => `<tr><td>${n}</td><td><a href="#m${n}">sUSDe-long-v2 — protocol LLv1</a></td><td><strong>Debt:</strong> 1.93m<br><strong>Liq:</strong> $48.07m<br><strong>Oracle:</strong> $1.32m</td><td><strong>1. eDAO:</strong> Set the mint ceiling to zero, burning unused allocation.<br><strong>2. DAO governance, with engineering:</strong> Approve a reviewed replacement addressing pricing, after rechecking feed health and the peg, and monitor independent prices and feed freshness because the bound can mask a depeg.</td></tr>`).join("") +
           "</tbody></table></div>"
       }
+    : id === "GalleryKeyFacts01"
+    ? {
+        "README.md": '<h1>Key facts</h1><div class="table-scroll"><table><thead><tr><th></th><th></th></tr></thead><tbody>' +
+          "<tr><td>Verdict</td><td>Exploit · permission misconfiguration and likely key compromise</td></tr>" +
+          "<tr><td>Root cause</td><td>Role allowed swaps without constraining the executor, input token, input amount, or minimum output</td></tr>" +
+          "<tr><td>Attacker proceeds</td><td>$6.44M at receipt; nothing borrowed or repaid</td></tr>" +
+          "</tbody></table></div>"
+      }
     : id === "GalleryLines00001"
     ? { "vault.py": highlightedLines }
     : id === "GalleryMdLines001"

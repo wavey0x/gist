@@ -28,3 +28,34 @@ for (const width of [1280, 390]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 }
+
+// A key/value table has no column labels; Markdown still gives it a header row.
+test("an empty header row is not drawn", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/GalleryKeyFacts01");
+  const frame = page.locator(".markdown-body .table-scroll");
+  await expect(frame.locator("thead")).toBeHidden();
+  const gap = await frame.evaluate((node) =>
+    node.querySelector("tbody td")!.getBoundingClientRect().top - node.getBoundingClientRect().top
+  );
+  expect(gap).toBeLessThanOrEqual(1);
+  // A header that has text is still drawn.
+  await page.goto("/GalleryTable0001");
+  await expect(page.locator(".markdown-body thead")).toBeVisible();
+});
+
+test("a two-column table wraps on a phone instead of scrolling sideways", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/GalleryKeyFacts01");
+  const frame = page.locator(".markdown-body .table-scroll");
+  await expect(frame.locator("td").first()).toHaveClass(/cell-tight/);
+  expect(await frame.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  // The label column keeps each label on one line.
+  const label = frame.locator("tbody tr").nth(2).locator("td").first();
+  const lines = await label.evaluate((cell) => {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    return new Set([...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top / 4))).size;
+  });
+  expect(lines).toBe(1);
+});
