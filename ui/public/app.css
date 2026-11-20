@@ -2543,6 +2543,10 @@ input:disabled {
   overflow: hidden;
 }
 
+:root.map-expanded-open {
+  scrollbar-gutter: auto;
+}
+
 /* MapLibre chrome, restyled to match the app. */
 .markdown-body .map-block .maplibregl-map {
   font: inherit;
