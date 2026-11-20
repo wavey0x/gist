@@ -118,18 +118,23 @@
   place-self: center end;
   contain: size;
   z-index: -1;
-  height: 90%;
+  height: 88%;
   width: 74%;
+  border-radius: 5px;
   object-fit: cover;
-  transform-origin: top right;
-  transform: rotate(3deg);
+  filter: brightness(0.82);
 }
 .wg-gallery-layer + .wg-gallery-layer {
   grid-column-end: span 3;
   z-index: -2;
-  height: 80%;
+  height: 76%;
   width: 55%;
-  transform: rotate(6deg);
+  filter: brightness(0.64);
+}
+/* Until the cover has a size, the stack and count have nothing to anchor to. */
+.wg-gallery-cover-pending > .wg-gallery-layer,
+.wg-gallery-cover-pending > .wg-gallery-count {
+  visibility: hidden;
 }
 .wg-gallery-count {
   position: absolute;

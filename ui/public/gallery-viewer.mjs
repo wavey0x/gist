@@ -62,6 +62,10 @@ function addCover(trigger, image, { group, index }, displaySource) {
     frame.append(preview);
   }
   frame.append(badge);
+  if (!image.complete || !image.naturalWidth) {
+    frame.classList.add("wg-gallery-cover-pending");
+    image.addEventListener("load", () => frame.classList.remove("wg-gallery-cover-pending"), { once: true });
+  }
   return () => {
     frame.replaceWith(image);
     if (previousLabel === null) trigger.removeAttribute("aria-label");
