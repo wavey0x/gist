@@ -105,7 +105,7 @@ test("a cover opens from a section jump and restores its slide, focus, and secti
   const cover = page.locator("#cover-photos").getByRole("link");
   await expect(cover).toHaveCount(1);
   await expect(cover).toHaveAccessibleName("Courtyard. Open gallery of 3 photos");
-  await expect(cover.locator(".wg-gallery-count")).toHaveText("3 photos");
+  await expect(cover.locator(".wg-gallery-count")).toHaveText("3");
   const images = cover.locator("img");
   await expect(images).toHaveCount(3);
   await expect.poll(() => images.evaluateAll((nodes: HTMLImageElement[]) =>
@@ -196,7 +196,7 @@ test("saved text links and a stacked cover open offline without ever opening the
     await page.getByRole("link", { name: "See courtyard" }).click();
     const cover = page.locator("#cover-photos").getByRole("link");
     await expect(cover).toHaveCount(1);
-    await expect(cover.locator(".wg-gallery-count")).toHaveText("3 photos");
+    await expect(cover.locator(".wg-gallery-count")).toHaveText("3");
     const rear = cover.locator(".wg-gallery-layer").last();
     await expect.poll(() => rear.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
     await rear.click();

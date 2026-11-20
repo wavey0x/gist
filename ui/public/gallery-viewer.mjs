@@ -44,7 +44,9 @@ function addCover(trigger, image, { group, index }, displaySource) {
   const badge = document.createElement("span");
   badge.className = "wg-gallery-count";
   badge.setAttribute("aria-hidden", "true");
-  badge.textContent = `${count} photos`;
+  // Two offset frames read as "a stack of photos" without a text label.
+  badge.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.75" y="4.75" width="9.5" height="9.5" rx="1.5"/><path d="M4.75 2.25h7.5a1.5 1.5 0 0 1 1.5 1.5v7.5"/></svg>';
+  badge.append(String(count));
   const previousLabel = trigger.getAttribute("aria-label");
   const label = previousLabel || image.alt || trigger.textContent.trim() || trigger.title;
   trigger.setAttribute("aria-label", [label, `Open gallery of ${count} photos`].filter(Boolean).join(". "));
