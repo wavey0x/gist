@@ -2702,6 +2702,16 @@ input:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+.markdown-body .map-place-dot svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .markdown-body .map-place-base .map-place-dot {
   background: var(--ink);
   color: var(--bg);

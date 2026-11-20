@@ -300,8 +300,10 @@ function mountMap(
   const fitPadding = () => {
     // Room for names beside the outer pins, and for the controls on the
     // right and the legend at the bottom.
-    const pad = frame.clientWidth < 480 ? 30 : 56;
-    return { top: pad, bottom: pad + 18, left: pad + 12, right: pad + 48 };
+    if (frame.clientWidth < 480) {
+      return { top: 30, bottom: 52, left: 40, right: 96 };
+    }
+    return { top: 56, bottom: 74, left: 68, right: 120 };
   };
 
   const map = new maplibre.Map({
@@ -321,13 +323,9 @@ function mountMap(
   });
   map.touchZoomRotate.disableRotation();
   map.keyboard.disableRotation();
-  map.addControl(
-    new maplibre.AttributionControl({
-      compact: true,
-      customAttribution: '<a href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">OpenFreeMap</a>'
-    }),
-    "bottom-right"
-  );
+  // The OpenFreeMap styles carry their own attribution (OpenFreeMap,
+  // OpenMapTiles, OpenStreetMap).
+  map.addControl(new maplibre.AttributionControl({ compact: true }), "bottom-right");
 
   const timeout = window.setTimeout(() => {
     if (!settled) fail();
@@ -369,10 +367,7 @@ function mountMap(
 
   map.on("error", (event) => {
     // A missing tile is not fatal; a basemap that never loads is.
-    if (!settled && !map.isStyleLoaded()) {
-      const status = (event.error as { status?: number } | undefined)?.status;
-      if (status || !navigator.onLine) fail();
-    }
+    if (!settled && !map.isStyleLoaded()) fail();
   });
 
   function showPopup(index: number) {

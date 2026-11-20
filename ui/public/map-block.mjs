@@ -323,6 +323,8 @@ export function directionsUrl(place, apple = false) {
 
 const DIRECTIONS_ICON =
   '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>';
+const BED_ICON =
+  '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/></svg>';
 const PIN_ICON =
   '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>';
 
@@ -337,7 +339,7 @@ export function placesListHtml(model, { apple = false } = {}) {
       const detail = place.note || place.address;
       return (
         `<li class="map-place${place.base ? " map-place-base" : ""}" data-map-place="${index}">` +
-        `<span class="map-place-dot" style="--pin:${placeColor(place)}">${escapeHtml(place.label)}</span>` +
+        `<span class="map-place-dot" style="--pin:${placeColor(place)}">${place.base ? BED_ICON : escapeHtml(place.label)}</span>` +
         `<span class="map-place-text">${name}` +
         (detail ? `<span class="map-place-note">${escapeHtml(detail)}</span>` : "") +
         `</span>` +
