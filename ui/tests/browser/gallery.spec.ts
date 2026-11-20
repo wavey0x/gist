@@ -106,7 +106,16 @@ test("a cover opens from a section jump and restores its slide, focus, and secti
   await expect(cover).toHaveCount(1);
   await expect(cover).toHaveAccessibleName("Courtyard. Open gallery of 3 photos");
   await expect(cover.locator(".wg-gallery-count")).toHaveText("3 photos");
-  await expect.poll(() => cover.locator("img").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  const images = cover.locator("img");
+  await expect(images).toHaveCount(3);
+  await expect.poll(() => images.evaluateAll((nodes: HTMLImageElement[]) =>
+    nodes.filter(img => img.naturalWidth > 0).map(img => new URL(img.src).pathname)
+  )).toEqual([1, 4, 3].map(id => `/api/images/img_${String(id).padStart(16, "0")}`));
+  const rectangles = await images.evaluateAll(nodes => nodes.map(img => img.getBoundingClientRect().toJSON()));
+  for (let index = 1; index < rectangles.length; index++) {
+    expect(rectangles[index].left).toBeLessThan(rectangles[index - 1].right);
+    expect(rectangles[index].right - rectangles[index - 1].right).toBeGreaterThan(24);
+  }
   const metadata = page.locator("#courtyard small");
   await expect(metadata).toHaveCSS("vertical-align", "baseline");
   await expect(metadata).toHaveCSS("font-weight", "400");
@@ -188,7 +197,9 @@ test("saved text links and a stacked cover open offline without ever opening the
     const cover = page.locator("#cover-photos").getByRole("link");
     await expect(cover).toHaveCount(1);
     await expect(cover.locator(".wg-gallery-count")).toHaveText("3 photos");
-    await cover.click();
+    const rear = cover.locator(".wg-gallery-layer").last();
+    await expect.poll(() => rear.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    await rear.click();
     await loaded(page);
     await page.keyboard.press("ArrowRight");
     await loaded(page);

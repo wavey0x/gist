@@ -202,8 +202,8 @@ offline within storage limits; external images are not guaranteed offline.
 Opt in when image browsing helps the reader, rather than marking every image.
 
 For an album with a single visible cover, follow the cover image with empty
-links to the other photos in the same group. The reader adds a stack and photo
-count to the first thumbnail. [Copyable gallery and inline metadata examples](https://gist.wavey.info/llms.txt)
+links to the other photos in the same group. Up to two of those photos peek out
+behind the cover. Clicking any part of the stack opens the gallery. [Gallery examples](https://gist.wavey.info/llms.txt)
 
 ## List Your Gists
 

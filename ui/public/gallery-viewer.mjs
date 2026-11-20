@@ -36,7 +36,9 @@ function isEmptyLink(node) {
     !node.hasAttribute("aria-labelledby");
 }
 
-function addCover(trigger, image, count) {
+function addCover(trigger, image, { group, index }, displaySource) {
+  const { items } = group;
+  const count = items.length;
   const frame = document.createElement("span");
   frame.className = "wg-gallery-cover";
   const badge = document.createElement("span");
@@ -47,7 +49,19 @@ function addCover(trigger, image, count) {
   const label = previousLabel || image.alt || trigger.textContent.trim() || trigger.title;
   trigger.setAttribute("aria-label", [label, `Open gallery of ${count} photos`].filter(Boolean).join(". "));
   image.replaceWith(frame);
-  frame.append(image, badge);
+  frame.append(image);
+  for (let offset = 1; offset < Math.min(count, 3); offset++) {
+    const preview = document.createElement("img");
+    preview.className = "wg-gallery-layer";
+    preview.alt = "";
+    preview.loading = "lazy";
+    preview.decoding = "async";
+    preview.referrerPolicy = "no-referrer";
+    preview.addEventListener("error", () => preview.remove(), { once: true });
+    preview.src = displaySource(items[(index + offset) % count].src);
+    frame.append(preview);
+  }
+  frame.append(badge);
   return () => {
     frame.replaceWith(image);
     if (previousLabel === null) trigger.removeAttribute("aria-label");
@@ -441,7 +455,7 @@ export function mountGallery(roots, options = galleryOptions(document)) {
     const image = wrapped ? node : trigger.querySelector("img");
     if (image && group.items.length > 1 && !coveredGroups.has(group)) {
       coveredGroups.add(group);
-      cleanups.push(addCover(trigger, image, group.items.length));
+      cleanups.push(addCover(trigger, image, reference, displaySource));
     }
     const popup = trigger.getAttribute("aria-haspopup");
     trigger.setAttribute("aria-haspopup", "dialog");

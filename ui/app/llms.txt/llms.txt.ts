@@ -145,7 +145,7 @@ export const LLMS_TXT =
     "Opt in when image browsing helps the reader, rather than marking every image.",
     "",
     "For one visible cover, put the photos in one paragraph as shown below. The first",
-    "thumbnail in a multi-photo gallery shows a stack and the distinct photo count.",
+    "thumbnail shows up to two other gallery photos behind it and the total photo count.",
     "Empty links add slides. Their titles provide captions.",
     "",
     "```markdown",
