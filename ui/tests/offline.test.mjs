@@ -220,6 +220,7 @@ test("install precaches the complete canonical shell", async () => {
     "/syntax.css",
     "/gallery-model.mjs",
     "/code-lines.mjs",
+    "/map-block.mjs",
     "/offline-table-migration.mjs",
     "/gallery-viewer.css",
     "/vendor/photoswipe/photoswipe.esm.js",

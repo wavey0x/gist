@@ -2389,6 +2389,368 @@ input:disabled {
   display: block;
 }
 
+/* ```map blocks (public/map-block.mjs, components/MapRenderer.tsx). The
+   frame holds the live map; the places list is what shows offline, without
+   WebGL, or when the basemap cannot load. */
+.markdown-body .map-block {
+  margin: 16px 0;
+}
+
+.markdown-body .map-block-frame {
+  position: relative;
+  height: clamp(300px, 56vw, 440px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--inset);
+}
+
+.markdown-body .map-block-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.markdown-body .map-block[data-map-state="pending"] .map-block-canvas {
+  opacity: 0;
+}
+
+.markdown-body .map-block-canvas {
+  transition: opacity 200ms ease;
+}
+
+.markdown-body .map-block .map-places,
+:root[data-js="enabled"] .markdown-body .map-block[data-map-state="fallback"] .map-block-frame {
+  display: none;
+}
+
+:root:not([data-js="enabled"]) .markdown-body .map-block-frame {
+  display: none;
+}
+
+:root:not([data-js="enabled"]) .markdown-body .map-block .map-places,
+.markdown-body .map-block[data-map-state="fallback"] .map-places {
+  display: block;
+}
+
+.markdown-body .map-block-controls {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--elev);
+}
+
+.markdown-body .map-block-button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.markdown-body .map-block-button:hover {
+  background: var(--hover);
+}
+
+.markdown-body .map-block-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.markdown-body .map-block-button svg,
+.markdown-body .map-popup-go svg,
+.markdown-body .map-place-go svg,
+.markdown-body .map-places-head svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.markdown-body .map-block-legend {
+  position: absolute;
+  z-index: 2;
+  left: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  max-width: calc(100% - 64px);
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--elev);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 16px;
+  pointer-events: none;
+}
+
+.markdown-body .map-block-legend-item {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.markdown-body .map-block-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--r-full);
+  background: var(--pin);
+}
+
+/* Expanded: the map takes the whole window, gestures work normally. */
+.markdown-body .map-block[data-map-expanded] .map-block-frame {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+}
+
+.markdown-body .map-block[data-map-expanded] .map-block-controls {
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: calc(env(safe-area-inset-right, 0px) + 12px);
+}
+
+.markdown-body .map-block[data-map-expanded] .map-block-legend {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  left: calc(env(safe-area-inset-left, 0px) + 12px);
+}
+
+:root.map-expanded-open,
+:root.map-expanded-open body {
+  overflow: hidden;
+}
+
+:root.map-expanded-open {
+  scrollbar-gutter: auto;
+}
+
+/* MapLibre chrome, restyled to match the app. */
+.markdown-body .map-block .maplibregl-map {
+  font: inherit;
+  color: var(--text);
+}
+
+.markdown-body .map-block .maplibregl-ctrl-attrib {
+  margin: 0 8px 8px 0;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.markdown-body .map-block .maplibregl-ctrl-attrib a {
+  color: var(--muted);
+}
+
+.markdown-body .map-block .maplibregl-ctrl-attrib.maplibregl-compact {
+  min-height: 22px;
+}
+
+.markdown-body .map-block .maplibregl-ctrl-attrib-button {
+  width: 22px;
+  height: 22px;
+}
+
+:root[data-theme="dark"] .markdown-body .map-block .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+
+.markdown-body .map-block .maplibregl-cooperative-gesture-screen {
+  z-index: 3;
+  padding: 16px;
+  background: rgb(16 16 16 / 42%);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.markdown-body .map-block .maplibregl-popup-content {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--elev);
+  color: var(--text);
+}
+
+.markdown-body .map-block .maplibregl-popup-tip {
+  display: none;
+}
+
+.markdown-body .map-popup-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.markdown-body .map-popup-name {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.markdown-body a.map-popup-name {
+  color: var(--link);
+}
+
+.markdown-body .map-popup-go,
+.markdown-body .map-place-go {
+  display: inline-grid;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin: -4px -6px -4px 0;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  color: var(--text);
+}
+
+.markdown-body .map-popup-go:hover,
+.markdown-body .map-place-go:hover {
+  background: var(--hover);
+  text-decoration: none;
+}
+
+.markdown-body .map-popup-note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+/* Places list (fallback) */
+.markdown-body .map-places {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.markdown-body .map-places-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.markdown-body .map-places-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.markdown-body .map-places-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.markdown-body .map-places-list > li.map-place {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0;
+  padding: 8px 12px;
+}
+
+.markdown-body .map-places-list > li.map-place + li.map-place {
+  border-top: 1px solid var(--line-soft);
+}
+
+.markdown-body .map-place-dot {
+  display: inline-grid;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: var(--r-full);
+  background: var(--pin);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.markdown-body .map-place-dot svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.markdown-body .map-place-ink .map-place-dot {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.markdown-body .map-place-text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.markdown-body .map-place-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-body a.map-place-name {
+  color: var(--link);
+}
+
+.markdown-body .map-place-note {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-body .map-place-go {
+  margin: 0;
+}
+
 /* The scroll region is the table's frame: it hugs the table, rounds its
    corners and stays still while a wide table scrolls inside it. */
 .markdown-body .table-scroll {

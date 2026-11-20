@@ -18,6 +18,7 @@ dist
 *.sqlite3-*
 .local
 ui/public/vendor/photoswipe/
+ui/public/vendor/maplibre/
 ui/playwright-report/
 ui/test-results/
 publish-gist/

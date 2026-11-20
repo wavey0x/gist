@@ -22,7 +22,13 @@ export function SavedGistPreview({ chrome }: { chrome: SiteChromeConfig }) {
   const gist = saved?.pathname === pathname ? saved.gist : null;
 
   useLayoutEffect(() => {
-    if (gist && contentRef.current) addMarkdownWrapControls(contentRef.current);
+    if (!gist || !contentRef.current) return;
+    addMarkdownWrapControls(contentRef.current);
+    // Saved copies are read offline, where map tiles cannot load: show each
+    // map's list of places instead.
+    contentRef.current
+      .querySelectorAll<HTMLElement>(".map-block")
+      .forEach((block) => (block.dataset.mapState = "fallback"));
   }, [gist]);
 
   useEffect(() => {

@@ -3,7 +3,7 @@ export function addMarkdownWrapControls(root: Element) {
   let number = 0;
 
   for (const pre of blocks) {
-    if (pre.closest(".code-wrap-block, .mermaid-render, .math-display")) continue;
+    if (pre.closest(".code-wrap-block, .mermaid-render, .math-display, .map-block")) continue;
     const code = pre.parentElement?.classList.contains("highlight")
       ? pre.parentElement
       : pre;

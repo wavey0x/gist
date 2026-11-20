@@ -348,7 +348,7 @@
   function addMarkdownWrapControls(root) {
     let number = 0;
     for (const pre of root.querySelectorAll("article.markdown-body pre")) {
-      if (pre.closest(".code-wrap-block, .mermaid-render, .math-display")) continue;
+      if (pre.closest(".code-wrap-block, .mermaid-render, .math-display, .map-block")) continue;
       const code = pre.parentElement?.classList.contains("highlight")
         ? pre.parentElement
         : pre;
@@ -1543,13 +1543,28 @@
   }
 
   let codeLinesModule = null;
+  let mapBlockModule = null;
 
   function fileContent(file, panel = false, slug = "") {
     if (file.kind === "markdown") {
       const article = element("article", {
         className: panel ? "markdown-body gist-file-markdown" : "markdown-body"
       });
-      article.innerHTML = tightenTableCells(file.rendered_html);
+      // Maps need live tiles, so the offline shell shows each map's list of
+      // places (public/map-block.mjs).
+      article.innerHTML = mapBlockModule
+        ? mapBlockModule.enrichMapBlocks(tightenTableCells(file.rendered_html))
+        : tightenTableCells(file.rendered_html);
+      for (const block of article.querySelectorAll(".map-block")) {
+        block.dataset.mapState = "fallback";
+        const model = mapBlockModule?.mapBlockModel(block);
+        if (!model || !mapBlockModule.prefersAppleMaps()) continue;
+        for (const row of block.querySelectorAll(".map-place")) {
+          const place = model.places[Number(row.dataset.mapPlace)];
+          const link = row.querySelector(".map-place-go");
+          if (place && link) link.href = mapBlockModule.directionsUrl(place, true);
+        }
+      }
       return article;
     }
     const codeView = element("div", { className: "gist-code-view" });
@@ -1874,6 +1889,7 @@
     let rawVisible = false;
     const singleWrap = { value: false };
     codeLinesModule = await import("/code-lines.mjs").catch(() => null);
+    mapBlockModule = await import("/map-block.mjs").catch(() => null);
     const slugs = codeLinesModule?.fileSlugs(files.map((file) => file.filename)) ?? {};
     let stopLineLinks = null;
 

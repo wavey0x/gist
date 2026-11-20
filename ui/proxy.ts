@@ -8,7 +8,7 @@ export function proxy(request: NextRequest) {
     "base-uri 'none'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    "img-src 'self' https:",
+    "img-src 'self' https: data:",
     "font-src 'self' data:",
     "media-src 'self' blob:",
     "manifest-src 'self'",
@@ -17,7 +17,8 @@ export function proxy(request: NextRequest) {
     "style-src-elem 'self' 'unsafe-inline'",
     "style-src-attr 'unsafe-inline'",
     `script-src 'self' 'nonce-${nonce}'${isDevelopment ? " 'unsafe-eval'" : ""}`,
-    `connect-src 'self'${isDevelopment ? " ws:" : ""}`
+    // Map tiles, styles and fonts (components/MapRenderer.tsx).
+    `connect-src 'self' https://tiles.openfreemap.org${isDevelopment ? " ws:" : ""}`
   ].join("; ");
 
   const requestHeaders = new Headers(request.headers);

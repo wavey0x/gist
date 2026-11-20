@@ -12,6 +12,7 @@ const SHARED_SHELL_ASSETS = [
   "/syntax.css",
   "/gallery-model.mjs",
   "/code-lines.mjs",
+  "/map-block.mjs",
   "/offline-table-migration.mjs",
   "/gallery-viewer.css",
   "/vendor/photoswipe/photoswipe.esm.js",
