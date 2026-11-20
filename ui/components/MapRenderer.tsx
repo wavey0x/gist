@@ -10,8 +10,9 @@ import type {
 } from "maplibre-gl";
 import {
   directionsUrl,
+  MAP_ICONS,
   mapBlockModel,
-  placeColor,
+  mapColor,
   prefersAppleMaps,
   type MapModel,
   type MapPlace
@@ -37,16 +38,14 @@ const MAX_MAPS = 8;
 const LOAD_TIMEOUT_MS = 12000;
 const LABEL_FONT = ["Noto Sans Regular"];
 const PIN_SIZE = 22;
-const BASE_PIN_SIZE = 28;
+const LARGE_PIN_SIZE = 28;
 const ICON = {
   zoomIn: '<path d="M12 5v14"/><path d="M5 12h14"/>',
   zoomOut: '<path d="M5 12h14"/>',
   fit: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/>',
   expand: '<path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="M9 21H3v-6"/><path d="m3 21 7-7"/>',
   collapse: '<path d="m14 10 7-7"/><path d="M20 10h-6V4"/><path d="m3 21 7-7"/><path d="M4 14h6v6"/>',
-  directions: '<path d="M7 17 17 7"/><path d="M8 7h9v9"/>',
-  // lucide "bed"
-  bed: "M2 4v16 M2 8h18a2 2 0 0 1 2 2v10 M2 17h20 M6 8v9"
+  directions: '<path d="M7 17 17 7"/><path d="M8 7h9v9"/>'
 };
 
 let libraryPromise: Promise<MapLibre> | null = null;
@@ -94,23 +93,28 @@ function cssVar(name: string, fallback: string) {
   );
 }
 
+// Everything that changes how a pin looks is in its image id, so each
+// distinct pin is drawn once per theme.
 function iconId(theme: Theme, place: MapPlace) {
-  return place.base
-    ? `wg-pin:${theme}:base`
-    : `wg-pin:${theme}:${place.color}:${place.label}`;
+  return [
+    "wg-pin",
+    theme,
+    place.color,
+    place.emphasis ? "1" : "0",
+    place.icon,
+    encodeURIComponent(place.label)
+  ].join(":");
 }
 
-// Pins are drawn on a canvas, not with the basemap's glyph font, so numbers
-// and the hotel bed always render crisply in the app's own type.
-function drawPin(id: string, model: MapModel) {
-  const [, theme, colorOrBase, label = ""] = id.split(":");
-  const base = colorOrBase === "base";
-  const sample =
-    model.places.find((place) =>
-      base ? place.base : !place.base && String(place.color) === colorOrBase
-    ) ?? model.places[0];
+// Pins are drawn on a canvas, not with the basemap's glyph font, so labels
+// and icons always render crisply in the app's own type.
+function drawPin(id: string) {
+  const [, themeName, color, emphasis, icon, encodedLabel = ""] = id.split(":");
+  const theme: Theme = themeName === "dark" ? "dark" : "light";
+  const large = emphasis === "1";
+  const label = decodeURIComponent(encodedLabel);
   const ratio = Math.min(3, Math.max(2, window.devicePixelRatio || 2));
-  const size = base ? BASE_PIN_SIZE : PIN_SIZE;
+  const size = large ? LARGE_PIN_SIZE : PIN_SIZE;
   const pixels = Math.round(size * ratio);
   const canvas = document.createElement("canvas");
   canvas.width = pixels;
@@ -120,7 +124,7 @@ function drawPin(id: string, model: MapModel) {
   context.scale(ratio, ratio);
 
   const dark = theme === "dark";
-  const fill = placeColor(sample, theme);
+  const fill = mapColor(color, theme);
   const ring = dark ? "#111212" : "#ffffff";
   const center = size / 2;
   const radius = center - 1.5;
@@ -138,25 +142,27 @@ function drawPin(id: string, model: MapModel) {
   context.fillStyle = fill;
   context.fill();
 
-  const glyph = dark && base ? "#111212" : "#ffffff";
-  if (base) {
-    const scale = 14 / 24;
-    context.save();
-    context.translate(center - 7, center - 7.4);
-    context.scale(scale, scale);
-    context.strokeStyle = glyph;
-    context.lineWidth = 2.2;
-    context.lineCap = "round";
-    context.lineJoin = "round";
-    context.stroke(new Path2D(ICON.bed));
-    context.restore();
-  } else if (label) {
+  // Ink flips to light in dark mode, so its glyph flips to dark.
+  const glyph = dark && color === "ink" ? "#111212" : "#ffffff";
+  if (label) {
     context.fillStyle = glyph;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    const fontSize = label.length > 2 ? 8.5 : label.length > 1 ? 10 : 11;
+    const fontSize = (label.length > 2 ? 8.5 : label.length > 1 ? 10 : 11) * (large ? 1.15 : 1);
     context.font = `600 ${fontSize}px ${cssVar("--font-ui", "system-ui, sans-serif")}`;
     context.fillText(label, center, center + 0.5);
+  } else if (MAP_ICONS[icon as keyof typeof MAP_ICONS]) {
+    const glyphSize = large ? 14 : 11;
+    const scale = glyphSize / 24;
+    context.save();
+    context.translate(center - glyphSize / 2, center - glyphSize / 2);
+    context.scale(scale, scale);
+    context.strokeStyle = glyph;
+    context.lineWidth = 2.3;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.stroke(new Path2D(MAP_ICONS[icon as keyof typeof MAP_ICONS]));
+    context.restore();
   }
   return {
     width: pixels,
@@ -176,9 +182,9 @@ function placesGeoJson(model: MapModel, theme: Theme) {
         index,
         name: place.name,
         icon: iconId(theme, place),
-        base: place.base,
-        // Hotel first, then the order the author listed.
-        rank: place.base ? -1 : index
+        large: place.emphasis,
+        // Emphasised places first, then the order the author listed.
+        rank: place.emphasis ? -1 : index
       },
       geometry: { type: "Point" as const, coordinates: [place.lng, place.lat] }
     }))
@@ -209,7 +215,7 @@ function addPlacesLayer(map: MapLibreMap, model: MapModel, theme: Theme) {
       "text-max-width": 9,
       "text-variable-anchor": ["left", "right", "top", "bottom"],
       // Clear of the pin's own collision box (half its size plus padding).
-      "text-radial-offset": ["case", ["get", "base"], 1.75, 1.45],
+      "text-radial-offset": ["case", ["get", "large"], 1.75, 1.45],
       "text-justify": "auto",
       "text-padding": 2
     },
@@ -344,7 +350,7 @@ function mountMap(
 
   map.setMissingStyleImageResolver((id) => {
     if (!id.startsWith("wg-pin:") || map.hasImage(id)) return;
-    const image = drawPin(id, model);
+    const image = drawPin(id);
     if (image) map.addImage(id, image, { pixelRatio: image.pixelRatio });
   });
 
@@ -377,7 +383,7 @@ function mountMap(
     popup = new maplibre.Popup({
       closeButton: false,
       maxWidth: "260px",
-      offset: place.base ? 18 : 15,
+      offset: place.emphasis ? 18 : 15,
       className: "map-popup-shell"
     })
       .setLngLat([place.lng, place.lat])
@@ -428,8 +434,7 @@ function mountMap(
       item.className = "map-block-legend-item";
       const dot = document.createElement("span");
       dot.className = "map-block-legend-dot";
-      const sample = model.places.find((place) => place.group.toLowerCase() === group.key)!;
-      dot.style.setProperty("--pin", placeColor(sample, theme));
+      dot.style.setProperty("--pin", mapColor(group.color, theme));
       item.append(dot, document.createTextNode(group.name));
       legend.append(item);
     }
@@ -477,8 +482,7 @@ function mountMap(
       popup?.remove();
       container.querySelectorAll<HTMLElement>(".map-block-legend-dot").forEach((dot, index) => {
         const group = model.groups[index];
-        const sample = model.places.find((place) => place.group.toLowerCase() === group?.key);
-        if (sample) dot.style.setProperty("--pin", placeColor(sample, theme));
+        if (group) dot.style.setProperty("--pin", mapColor(group.color, theme));
       });
       map.setStyle(STYLE_URLS[theme], { transformStyle: quietStyle });
     },

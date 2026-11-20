@@ -8,12 +8,14 @@ import {
 } from "../public/map-block.mjs";
 
 const yaml = `title: Santa Fe
+groups:
+  Lodging: { color: gray, icon: bed, emphasis: true }
 places:
   # the base
   - name: Residence Inn
     lat: 35.65986
     lng: -105.95218
-    group: Hotel
+    group: Lodging
   - name: Meow Wolf
     at: 35.65465, -105.99651
     group: Activities
@@ -33,15 +35,65 @@ test("parses the YAML-style list with options, pairs and comments", () => {
   assert.equal(model.places.length, 3);
   assert.equal(model.skipped, 1);
   const [hotel, meow, shed] = model.places;
-  assert.deepEqual([hotel.lat, hotel.lng, hotel.base], [35.65986, -105.95218, true]);
+  assert.deepEqual([hotel.lat, hotel.lng], [35.65986, -105.95218]);
+  assert.deepEqual([hotel.color, hotel.icon, hotel.emphasis], ["gray", "bed", true]);
   assert.deepEqual([meow.lat, meow.lng, meow.label], [35.65465, -105.99651, "2"]);
   assert.equal(meow.note, "Immersive art: allow 2 hours.");
   assert.equal(meow.link, "#meow-wolf");
   assert.deepEqual([shed.lat, shed.lng], [35.68745, -105.93699]);
+  // Groups take palette colours in order, skipping a colour claimed by name.
   assert.deepEqual(
-    model.groups.map((group) => [group.name, group.base, group.color]),
-    [["Hotel", true, -1], ["Activities", false, 0], ["Food & drink", false, 1]]
+    model.groups.map((group) => [group.name, group.color]),
+    [["Lodging", "gray"], ["Activities", "blue"], ["Food & drink", "orange"]]
   );
+});
+
+test("colours come from group order, never from group names", () => {
+  const model = parseMapBlock(`places:
+  - name: A
+    at: 1, 1
+    group: Food
+  - name: B
+    at: 2, 2
+    group: Hotel
+  - name: C
+    at: 3, 3
+`);
+  assert.deepEqual(model.places.map((place) => [place.color, place.icon, place.emphasis]), [
+    ["blue", "", false],
+    ["orange", "", false],
+    ["green", "", false]
+  ]);
+  const plain = parseMapBlock("- name: A\n  at: 1, 1\n- name: B\n  at: 2, 2\n");
+  assert.deepEqual(plain.places.map((place) => place.color), ["blue", "blue"]);
+  assert.equal(plain.groups.length, 0);
+});
+
+test("block-style group styles and place overrides", () => {
+  const model = parseMapBlock(`groups:
+  "Food & drink":
+    color: teal
+    icon: food
+places:
+  - name: A
+    at: 1, 1
+    group: food & drink
+  - name: B
+    at: 2, 2
+    group: Food & drink
+    color: pink
+    icon: star
+  - name: C
+    at: 3, 3
+    emphasis: true
+    color: neon
+    icon: rocket
+`);
+  assert.deepEqual(model.places.map((place) => [place.color, place.icon, place.emphasis]), [
+    ["teal", "food", false],
+    ["pink", "star", false],
+    ["ink", "", true]
+  ]);
 });
 
 test("parses JSON arrays, place objects and GeoJSON", () => {

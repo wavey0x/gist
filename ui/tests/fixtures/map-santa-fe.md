@@ -1,5 +1,7 @@
 ```map
 title: Santa Fe
+groups:
+  Hotel: { icon: bed, emphasis: true }
 places:
   - name: "Residence Inn Santa Fe"
     at: 35.65986, -105.95218

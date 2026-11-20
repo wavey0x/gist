@@ -6,17 +6,25 @@
 // an object with `places`, or GeoJSON points):
 //
 //   title: Santa Fe
+//   groups:                      # optional: style a group
+//     Lodging: { color: gray, icon: bed, emphasis: true }
 //   places:
 //     - name: Residence Inn
-//       lat: 35.66843
-//       lng: -105.95932
-//       group: hotel
+//       at: 35.65986, -105.95218
+//       group: Lodging
 //     - name: Meow Wolf
-//       at: 35.65429, -105.99583
+//       lat: 35.65465
+//       lng: -105.99651
 //       group: Activities
 //       label: 2
 //       note: Immersive art · allow 2 hours.
-//       link: "#2-meow-wolf--house-of-eternal-return"
+//       link: "#2-meow-wolf"
+//
+// Styling is generic: places that share a `group` share a colour, and
+// groups take palette colours in the order they first appear. A group or a
+// single place may set `color` (a palette name), `icon` (a built-in icon)
+// and `emphasis` (a larger ink pin for the one place everything else is
+// relative to). Nothing is inferred from names.
 //
 // Coordinates are written by the author (or agent) up front, so rendering
 // never calls a geocoder.
@@ -24,29 +32,35 @@
 export const MAP_MAX_PLACES = 300;
 export const MAP_MAX_SOURCE_CHARS = 60000;
 
-// Fill colours for pins and legend dots, chosen to read on both the light
-// and the dark basemap. Index 0 is reserved for the hotel/base pin, which
-// is drawn in ink instead (see MAP_BASE_GROUP).
-export const MAP_GROUP_COLORS = [
-  "#2563eb",
-  "#e8590c",
-  "#2b8a3e",
-  "#7048e8",
-  "#d6336c",
-  "#0c8599",
-  "#c08a00",
-  "#5c677d"
-];
-export const MAP_BASE_COLOR = { light: "#171717", dark: "#f2f2f2" };
+// Named fill colours, tuned to read on both the light and the dark basemap.
+// Authors pick by name so every map stays legible in either theme.
+export const MAP_COLORS = {
+  blue: "#2563eb",
+  orange: "#e8590c",
+  green: "#2b8a3e",
+  purple: "#7048e8",
+  pink: "#d6336c",
+  teal: "#0c8599",
+  amber: "#c08a00",
+  gray: "#5c677d"
+};
+export const MAP_COLOR_NAMES = Object.keys(MAP_COLORS);
+// Emphasised pins (and `color: ink`) use the app's ink, which flips with
+// the theme.
+export const MAP_INK = { light: "#171717", dark: "#f2f2f2" };
 
-const BASE_GROUP_RE = /^(hotel|hotels|stay|lodging|accommodation|home|base|airbnb|hostel)$/i;
-const KEYWORD_COLORS = [
-  [/^(activit|see|sight|do\b|things|museum|attraction|culture|art)/i, 0],
-  [/^(food|eat|drink|restaurant|bar|cafe|café|coffee|dining|dinner|lunch|breakfast)/i, 1],
-  [/^(nature|park|hike|hiking|outdoor|trail|beach|view)/i, 2],
-  [/^(shop|shopping|store|market)/i, 3],
-  [/^(night|music|show|theat|entertain)/i, 4]
-];
+// Built-in pin icons: 24x24 stroke paths (Lucide), drawn white on the pin.
+export const MAP_ICONS = {
+  pin: "M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0 M15 10a3 3 0 1 1-6 0a3 3 0 1 1 6 0",
+  bed: "M2 4v16 M2 8h18a2 2 0 0 1 2 2v10 M2 17h20 M6 8v9",
+  home: "M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8 M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+  star: "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z",
+  flag: "M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528",
+  food: "M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2 M7 2v20 M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7",
+  coffee: "M10 2v2 M14 2v2 M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1 M6 2v2",
+  camera: "M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z M15 13a3 3 0 1 1-6 0a3 3 0 1 1 6 0"
+};
+export const MAP_ICON_NAMES = Object.keys(MAP_ICONS);
 
 const LAT_KEYS = ["lat", "latitude"];
 const LNG_KEYS = ["lng", "lon", "long", "longitude"];
@@ -98,19 +112,71 @@ function parseKeyValue(text) {
   return [match[1].trim().toLowerCase(), match[2] === undefined ? "" : unquote(match[2])];
 }
 
-// A forgiving subset of YAML: top-level `key: value` options, and a list of
-// places (`- key: value` items with indented continuation lines), either at
-// the top level or under `places:`.
+// `{ color: gray, icon: bed }` on one line.
+function parseFlowMap(text) {
+  const body = text.trim();
+  if (!body.startsWith("{") || !body.endsWith("}")) return null;
+  const out = {};
+  for (const part of body.slice(1, -1).split(",")) {
+    const pair = parseKeyValue(part.trim());
+    if (pair) out[pair[0]] = pair[1];
+  }
+  return out;
+}
+
+// A group name as a map key: any text (quoted or not) before the colon.
+function parseGroupKey(text) {
+  const match = /^("[^"]+"|'[^']+'|[^:{]+?)\s*:(?:\s+(.*))?$/.exec(text);
+  if (!match) return null;
+  return [unquote(match[1]), match[2] ?? ""];
+}
+
+// A forgiving subset of YAML: top-level `key: value` options, a `groups:`
+// map of group styles, and a list of places (`- key: value` items with
+// indented continuation lines), either at the top level or under `places:`.
 function parseYamlish(source) {
   const options = {};
   const items = [];
+  const groups = {};
+  let section = null;
   let current = null;
   let itemIndent = -1;
+  let group = null;
+  let groupIndent = -1;
 
   for (const rawLine of source.split(/\r?\n/)) {
     if (!rawLine.trim() || /^\s*#/.test(rawLine)) continue;
     const indent = rawLine.length - rawLine.trimStart().length;
     const line = rawLine.trim();
+
+    if (indent === 0 && !line.startsWith("-")) {
+      current = null;
+      group = null;
+      const pair = parseKeyValue(line);
+      if (!pair) continue;
+      if (pair[0] === "groups") section = "groups";
+      else if (LIST_KEYS.has(pair[0])) section = "places";
+      else {
+        section = null;
+        options[pair[0]] = pair[1];
+      }
+      continue;
+    }
+
+    if (section === "groups") {
+      if (group && indent > groupIndent) {
+        const pair = parseKeyValue(line);
+        if (pair) group[pair[0]] = pair[1];
+        continue;
+      }
+      const entry = parseGroupKey(line);
+      if (!entry) continue;
+      group = {};
+      groupIndent = indent;
+      groups[entry[0]] = group;
+      Object.assign(group, parseFlowMap(entry[1]) ?? {});
+      continue;
+    }
 
     if (line.startsWith("- ") || line === "-") {
       current = {};
@@ -126,15 +192,9 @@ function parseYamlish(source) {
     }
 
     const pair = parseKeyValue(line);
-    if (!pair) continue;
-    if (current && indent > itemIndent) {
-      current[pair[0]] = pair[1];
-      continue;
-    }
-    current = null;
-    if (!LIST_KEYS.has(pair[0])) options[pair[0]] = pair[1];
+    if (pair && current && indent > itemIndent) current[pair[0]] = pair[1];
   }
-  return { options, items };
+  return { options: { ...options, groups }, items };
 }
 
 function fromJson(data) {
@@ -221,8 +281,18 @@ function safeLink(value) {
   }
 }
 
-export function isBaseGroup(group) {
-  return BASE_GROUP_RE.test(String(group || "").trim());
+function colorName(value) {
+  const name = text(value, 20).toLowerCase().replace(/^grey$/, "gray");
+  return name === "ink" || MAP_COLORS[name] ? name : "";
+}
+
+function iconName(value) {
+  const name = text(value, 20).toLowerCase();
+  return MAP_ICONS[name] ? name : "";
+}
+
+function flag(value) {
+  return value === true || /^(true|yes|1)$/i.test(String(value ?? "").trim());
 }
 
 // Parses a fence body into { title, places, groups, skipped } or returns
@@ -256,45 +326,56 @@ export function parseMapBlock(source) {
     places.push({
       ...point,
       name: text(firstKey(item, ["name", "title"]), 120) || `Place ${places.length + 1}`,
-      group: text(firstKey(item, ["group", "type", "category", "kind"]), 40),
-      label: text(firstKey(item, ["label", "number", "n"]), 3),
-      note: text(firstKey(item, ["note", "description", "desc", "notes"]), 280),
+      group: text(item.group, 40),
+      label: text(item.label, 3),
+      note: text(firstKey(item, ["note", "description"]), 280),
       address: text(item.address, 160),
-      link: safeLink(firstKey(item, ["link", "url", "href"])),
-      directions: safeLink(firstKey(item, ["directions", "maps"]))
+      link: safeLink(item.link),
+      directions: safeLink(item.directions),
+      color: colorName(item.color),
+      icon: iconName(item.icon),
+      emphasis: flag(item.emphasis)
     });
   }
   skipped += Math.max(0, parsed.items.length - MAP_MAX_PLACES);
   if (!places.length) return null;
 
-  // Colour each group: the hotel/base group is ink; familiar groups keep a
-  // stable colour; anything else takes the next unused colour.
+  // Group styles from the optional `groups:` map, matched case-insensitively.
+  const styles = new Map();
+  const groupOptions = options.groups && typeof options.groups === "object" ? options.groups : {};
+  for (const [name, style] of Object.entries(groupOptions)) {
+    const item = lowerKeys(style);
+    styles.set(name.trim().toLowerCase(), {
+      color: colorName(item.color),
+      icon: iconName(item.icon),
+      emphasis: flag(item.emphasis)
+    });
+  }
+
+  // Groups in the order they first appear. A group without a colour takes
+  // the next palette colour no other group asked for by name.
   const groups = [];
-  const used = new Set();
   for (const place of places) {
     const key = place.group.toLowerCase();
     if (groups.some((group) => group.key === key)) continue;
-    groups.push({ key, name: place.group, base: isBaseGroup(place.group), color: -1 });
+    const style = styles.get(key) ?? { color: "", icon: "", emphasis: false };
+    groups.push({ key, name: place.group, ...style });
+  }
+  const claimed = new Set(groups.map((group) => group.color).filter(Boolean));
+  const free = MAP_COLOR_NAMES.filter((name) => !claimed.has(name));
+  let next = 0;
+  for (const group of groups) {
+    if (group.color || group.emphasis) continue;
+    group.color = (free.length ? free : MAP_COLOR_NAMES)[next++ % (free.length || MAP_COLOR_NAMES.length)];
   }
   for (const group of groups) {
-    if (group.base) continue;
-    const keyword = KEYWORD_COLORS.find(([re]) => re.test(group.key));
-    if (keyword && !used.has(keyword[1])) {
-      group.color = keyword[1];
-      used.add(keyword[1]);
-    }
-  }
-  for (const group of groups) {
-    if (group.base || group.color >= 0) continue;
-    let next = 0;
-    while (used.has(next) && next < MAP_GROUP_COLORS.length - 1) next += 1;
-    group.color = next;
-    used.add(next);
+    if (group.emphasis && !group.color) group.color = "ink";
   }
   for (const place of places) {
     const group = groups.find((item) => item.key === place.group.toLowerCase());
-    place.base = group.base;
-    place.color = group.color;
+    place.emphasis ||= group.emphasis;
+    place.color ||= place.emphasis && !group.emphasis ? "ink" : group.color;
+    place.icon ||= group.icon;
   }
 
   return {
@@ -305,8 +386,12 @@ export function parseMapBlock(source) {
   };
 }
 
+export function mapColor(name, theme = "light") {
+  return name === "ink" ? MAP_INK[theme === "dark" ? "dark" : "light"] : MAP_COLORS[name] ?? MAP_COLORS.blue;
+}
+
 export function placeColor(place, theme = "light") {
-  return place.base ? MAP_BASE_COLOR[theme === "dark" ? "dark" : "light"] : MAP_GROUP_COLORS[place.color] ?? MAP_GROUP_COLORS[0];
+  return mapColor(place.color, theme);
 }
 
 export function prefersAppleMaps(userAgent = globalThis.navigator?.userAgent ?? "") {
@@ -323,8 +408,9 @@ export function directionsUrl(place, apple = false) {
 
 const DIRECTIONS_ICON =
   '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>';
-const BED_ICON =
-  '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/></svg>';
+function iconSvg(name) {
+  return `<svg aria-hidden="true" viewBox="0 0 24 24"><path d="${MAP_ICONS[name]}"/></svg>`;
+}
 const PIN_ICON =
   '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>';
 
@@ -338,8 +424,8 @@ export function placesListHtml(model, { apple = false } = {}) {
         : `<span class="map-place-name">${escapeHtml(place.name)}</span>`;
       const detail = place.note || place.address;
       return (
-        `<li class="map-place${place.base ? " map-place-base" : ""}" data-map-place="${index}">` +
-        `<span class="map-place-dot" style="--pin:${placeColor(place)}">${place.base ? BED_ICON : escapeHtml(place.label)}</span>` +
+        `<li class="map-place${place.color === "ink" ? " map-place-ink" : ""}" data-map-place="${index}">` +
+        `<span class="map-place-dot" style="--pin:${placeColor(place)}">${place.label ? escapeHtml(place.label) : place.icon ? iconSvg(place.icon) : ""}</span>` +
         `<span class="map-place-text">${name}` +
         (detail ? `<span class="map-place-note">${escapeHtml(detail)}</span>` : "") +
         `</span>` +

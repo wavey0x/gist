@@ -2712,7 +2712,7 @@ input:disabled {
   stroke-linejoin: round;
 }
 
-.markdown-body .map-place-base .map-place-dot {
+.markdown-body .map-place-ink .map-place-dot {
   background: var(--ink);
   color: var(--bg);
 }
