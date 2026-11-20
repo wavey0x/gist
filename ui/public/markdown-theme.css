@@ -8,6 +8,12 @@
  * colors on machines that prefer dark mode.
  */
 
+.markdown-body small {
+  font-size: 0.8em;
+  font-weight: 400;
+  color: var(--fgColor-muted);
+}
+
 :root[data-theme="light"] .markdown-body {
   color-scheme: light;
   --fgColor-accent: var(--link);

@@ -201,6 +201,10 @@ numbering stays separate from the gallery counter. Saved uploaded images work
 offline within storage limits; external images are not guaranteed offline.
 Opt in when image browsing helps the reader, rather than marking every image.
 
+For an album with a single visible cover, follow the cover image with empty
+links to the other photos in the same group. The reader adds a stack and photo
+count to the first thumbnail. [Copyable gallery and inline metadata examples](https://gist.wavey.info/llms.txt)
+
 ## List Your Gists
 
 Visit `/` to see recently viewed gists stored in this browser. Log in at

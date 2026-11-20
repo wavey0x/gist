@@ -111,6 +111,25 @@ def test_markdown_rendering_uses_gfm_highlighting_links_and_sanitizer():
     assert "highlight/ok" in result.version
 
 
+def test_small_heading_metadata_and_captioned_gallery_links():
+    result = render_markdown_result(
+        '### Museum <small style="color:red" onclick="bad()">'
+        '★ 4.6/5 · 4,129 · [Map](https://example.org/map)</small>\n\n'
+        '![Courtyard](https://example.org/court.jpg#wg-gallery=spa)\n'
+        '[](https://example.org/pool.jpg#wg-gallery=spa "Outdoor pool")'
+    )
+    root = html_parser.fragment_fromstring(result.html, create_parent="div")
+    small, = root.xpath("./h3/small")
+    assert not small.attrib
+    assert small.text_content() == "★ 4.6/5 · 4,129 · Map"
+    assert small.find("a").get("href") == "https://example.org/map"
+    assert root.find("p/img").get("alt") == "Courtyard"
+    extra = root.find("p/a")
+    assert extra.get("href") == "https://example.org/pool.jpg#wg-gallery=spa"
+    assert extra.get("title") == "Outdoor pool"
+    assert not extra.text_content()
+
+
 def test_patch_source_highlights_added_and_removed_lines():
     source = (
         "diff --git a/example.py b/example.py\n"

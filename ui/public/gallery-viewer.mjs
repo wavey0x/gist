@@ -25,10 +25,43 @@ function replaceHistory(value) {
   history.replaceState(state, "");
 }
 
+function pageAddress() {
+  return location.origin + location.pathname + location.search;
+}
+
+// An empty Markdown link can contribute a slide and a title without another opener.
+function isEmptyLink(node) {
+  return node.tagName === "A" && !node.childElementCount &&
+    !node.textContent.trim() && !node.hasAttribute("aria-label") &&
+    !node.hasAttribute("aria-labelledby");
+}
+
+function addCover(trigger, image, count) {
+  const frame = document.createElement("span");
+  frame.className = "wg-gallery-cover";
+  const badge = document.createElement("span");
+  badge.className = "wg-gallery-count";
+  badge.setAttribute("aria-hidden", "true");
+  badge.textContent = `${count} photos`;
+  const previousLabel = trigger.getAttribute("aria-label");
+  const label = previousLabel || image.alt || trigger.textContent.trim() || trigger.title;
+  trigger.setAttribute("aria-label", [label, `Open gallery of ${count} photos`].filter(Boolean).join(". "));
+  image.replaceWith(frame);
+  frame.append(image, badge);
+  return () => {
+    frame.replaceWith(image);
+    if (previousLabel === null) trigger.removeAttribute("aria-label");
+    else trigger.setAttribute("aria-label", previousLabel);
+  };
+}
+
 export function mountGallery(roots, options = galleryOptions(document)) {
   const { groups, triggers } = collectGalleries(roots, options);
   const token = crypto.randomUUID();
-  const pageUrl = location.href;
+  const pageUrl = pageAddress();
+  // Native heading jumps can leave history.state empty. Keep the reader's
+  // route state so Forward can restore the gallery without a document reload.
+  const pageState = history.state;
   const cleanups = [];
   const sizes = new Map();
   let disposed = false;
@@ -78,7 +111,7 @@ export function mountGallery(roots, options = galleryOptions(document)) {
       disposed ||
       opening ||
       historyClosing ||
-      location.href !== pageUrl ||
+      pageAddress() !== pageUrl ||
       !group.root.isConnected
     )
       return;
@@ -94,7 +127,7 @@ export function mountGallery(roots, options = galleryOptions(document)) {
       opening = false;
       trigger?.removeAttribute("aria-busy");
     }
-    if (disposed || location.href !== pageUrl || !group.root.isConnected)
+    if (disposed || pageAddress() !== pageUrl || !group.root.isConnected)
       return;
     activeViewer?.destroy();
     lastTrigger = trigger ?? lastTrigger;
@@ -107,6 +140,7 @@ export function mountGallery(roots, options = galleryOptions(document)) {
     if (!fromHistory) {
       history.pushState(
         {
+          ...pageState,
           ...history.state,
           [HISTORY_KEY]: { token, group: groupIndex, index }
         },
@@ -364,7 +398,7 @@ export function mountGallery(roots, options = galleryOptions(document)) {
       document.documentElement.style.overflow = rootOverflow;
       if (viewer === pswp) viewer = null;
       if (activeViewer === pswp) activeViewer = null;
-      if (location.href === pageUrl) {
+      if (pageAddress() === pageUrl) {
         window.scrollTo(scroll.x, scroll.y);
         const target = lastTrigger?.isConnected
           ? lastTrigger
@@ -383,7 +417,19 @@ export function mountGallery(roots, options = galleryOptions(document)) {
     if (caption) captionObserver.observe(caption);
   }
 
+  const groupsWithOpeners = new Set();
+  for (const [node, { group }] of triggers) {
+    if (!isEmptyLink(node)) groupsWithOpeners.add(group);
+  }
+  const coveredGroups = new Set();
   for (const [node, reference] of triggers) {
+    const { group } = reference;
+    if (group.name !== null && groupsWithOpeners.has(group) && isEmptyLink(node)) {
+      const hidden = node.hidden;
+      node.hidden = true;
+      cleanups.push(() => { node.hidden = hidden; });
+      continue;
+    }
     let trigger = node;
     const wrapped = node.tagName === "IMG";
     if (wrapped) {
@@ -391,6 +437,11 @@ export function mountGallery(roots, options = galleryOptions(document)) {
       trigger.href = node.getAttribute("src");
       node.replaceWith(trigger);
       trigger.append(node);
+    }
+    const image = wrapped ? node : trigger.querySelector("img");
+    if (image && group.items.length > 1 && !coveredGroups.has(group)) {
+      coveredGroups.add(group);
+      cleanups.push(addCover(trigger, image, group.items.length));
     }
     const popup = trigger.getAttribute("aria-haspopup");
     trigger.setAttribute("aria-haspopup", "dialog");
@@ -421,7 +472,7 @@ export function mountGallery(roots, options = galleryOptions(document)) {
   function onPopState() {
     historyClosing = false;
     const state = history.state?.[HISTORY_KEY];
-    if (ownsEntry() && location.href === pageUrl) {
+    if (ownsEntry() && pageAddress() === pageUrl) {
       const group = groups[state.group];
       if (group?.root.isConnected && group.items[state.index])
         void open(group, state.index, lastTrigger, true);

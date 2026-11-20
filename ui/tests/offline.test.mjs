@@ -209,6 +209,7 @@ test("install precaches the complete canonical shell", async () => {
     "/offline-shell.html",
     "/offline-shell.css",
     "/offline-shell.js",
+    "/gallery-viewer.mjs",
     "/standalone-navigation.mjs",
     "/pull-refresh.mjs",
     "/icons/icon-192.png",
@@ -220,7 +221,6 @@ test("install precaches the complete canonical shell", async () => {
     "/gallery-model.mjs",
     "/code-lines.mjs",
     "/offline-table-migration.mjs",
-    "/gallery-viewer.mjs",
     "/gallery-viewer.css",
     "/vendor/photoswipe/photoswipe.esm.js",
     "/vendor/photoswipe/photoswipe.css"
@@ -376,6 +376,7 @@ test("online navigation refreshes unversioned offline-only assets", async () => 
     "/offline-shell.html",
     "/offline-shell.css",
     "/offline-shell.js",
+    "/gallery-viewer.mjs",
     "/standalone-navigation.mjs",
     "/pull-refresh.mjs",
     "/icons/icon-192.png",

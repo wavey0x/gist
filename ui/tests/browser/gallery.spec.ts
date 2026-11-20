@@ -46,6 +46,8 @@ test("deduplicates mixed triggers, isolates files, and restores reading position
   page
 }) => {
   await visit(page);
+  await expect(page.locator(".wg-gallery-count")).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "Lake at dawn. Open gallery of 3 photos" })).toBeVisible();
   const trigger = page.locator("#references a").nth(1);
   await trigger.scrollIntoViewIfNeeded();
   const scroll = await page.evaluate(() => window.scrollY);
@@ -96,7 +98,38 @@ test("Back and Forward restore the selected image without leaving the document",
   expect(await page.evaluate(() => history.state?.wgGallery)).toBeUndefined();
 });
 
-test("the saved text-link album opens offline without ever opening it online", async ({
+test("a cover opens from a section jump and restores its slide, focus, and section", async ({ page }) => {
+  await visit(page, "GalleryOffline01");
+  await page.getByRole("link", { name: "See courtyard" }).click();
+  await expect(page).toHaveURL(/#courtyard$/);
+  const cover = page.locator("#cover-photos").getByRole("link");
+  await expect(cover).toHaveCount(1);
+  await expect(cover).toHaveAccessibleName("Courtyard. Open gallery of 3 photos");
+  await expect(cover.locator(".wg-gallery-count")).toHaveText("3 photos");
+  await expect.poll(() => cover.locator("img").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  const metadata = page.locator("#courtyard small");
+  await expect(metadata).toHaveCSS("vertical-align", "baseline");
+  await expect(metadata).toHaveCSS("font-weight", "400");
+  await cover.focus();
+  const scroll = await page.evaluate(() => scrollY);
+  await page.keyboard.press("Enter");
+  await loaded(page);
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".wg-gallery-caption")).toHaveText("Outdoor pool");
+  await page.goBack();
+  await expect(page.locator(".pswp")).toHaveCount(0);
+  await expect(cover).toBeFocused();
+  await page.goForward();
+  await loaded(page);
+  await expect(page.locator(".pswp__counter")).toHaveText("2 / 3");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".pswp")).toHaveCount(0);
+  await expect(page).toHaveURL(/#courtyard$/);
+  await expect(cover).toBeFocused();
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(scroll);
+});
+
+test("saved text links and a stacked cover open offline without ever opening them online", async ({
   page,
   context,
   browserName
@@ -137,7 +170,7 @@ test("the saved text-link album opens offline without ever opening it online", a
           ).length;
         })
       )
-      .toBe(3);
+      .toBe(4);
     proxy.closeAllConnections();
     await new Promise<void>((resolve, reject) =>
       proxy.close((error) => (error ? reject(error) : resolve()))
@@ -151,6 +184,15 @@ test("the saved text-link album opens offline without ever opening it online", a
     await expect(page.locator(".pswp__counter")).toHaveText("2 / 3");
     await page.getByRole("button", { name: "Close", exact: true }).click();
     await expect(page.locator(".pswp")).toHaveCount(0);
+    await page.getByRole("link", { name: "See courtyard" }).click();
+    const cover = page.locator("#cover-photos").getByRole("link");
+    await expect(cover).toHaveCount(1);
+    await expect(cover.locator(".wg-gallery-count")).toHaveText("3 photos");
+    await cover.click();
+    await loaded(page);
+    await page.keyboard.press("ArrowRight");
+    await loaded(page);
+    await expect(page.locator(".wg-gallery-caption")).toHaveText("Outdoor pool");
     await context.setOffline(false);
   } finally {
     proxy.closeAllConnections();
@@ -371,7 +413,7 @@ for (const mode of ["legacy snapshot", "missing image"] as const) {
           ).length;
         })
       )
-      .toBe(3);
+      .toBe(4);
     const key = await page.evaluate(async (mode) => {
       const cache = await caches.open("waveygist-content-v1");
       const request = (await cache.keys()).find((r) =>

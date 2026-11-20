@@ -97,6 +97,32 @@
 .wg-gallery-trigger:has(> img) {
   cursor: zoom-in;
 }
+.wg-gallery-cover {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  max-width: calc(100% - 6px);
+  margin: 0 6px 6px 0;
+  border-radius: 4px;
+  box-shadow:
+    2px 2px var(--bgColor-default), 3px 3px var(--fgColor-muted),
+    5px 5px var(--bgColor-default), 6px 6px var(--fgColor-muted);
+}
+.wg-gallery-cover > img {
+  display: block;
+  border-radius: inherit;
+}
+.wg-gallery-count {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 80%);
+  color: white;
+  font: 600 12px/1.4 system-ui, sans-serif;
+  white-space: nowrap;
+}
 @media (prefers-reduced-motion: reduce) {
   .wg-gallery *,
   .wg-gallery *::before,

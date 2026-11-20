@@ -20,7 +20,7 @@ from lxml import etree, html
 
 logger = logging.getLogger(__name__)
 
-SANITIZER_CONFIG_VERSION = "2026-09-08.1"
+SANITIZER_CONFIG_VERSION = "2026-11-20.1"
 SYNTAX_CSS_VERSION = "2026-06-02.1"
 ETHEREUM_ENTITY_RENDER_VERSION = "2026-06-18.3"
 MERMAID_RENDER_VERSION = "2026-07-08.2"
@@ -76,6 +76,7 @@ ALLOWED_TAGS = {
     "pre",
     "s",
     "section",
+    "small",
     "span",
     "strong",
     "sup",

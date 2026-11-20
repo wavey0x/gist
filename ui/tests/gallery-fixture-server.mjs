@@ -16,6 +16,12 @@ const mark = (
   `<a href="${image(number)}#${fragment}" title="${title}">${String(number).padStart(2, "0")}</a>`;
 const album = `<h1 id="gallery-test">Field notes</h1><p>Read the numbered photo references without leaving the article.</p>${"<p>We followed the path beside the lake and made these notes along the way.</p>".repeat(12)}<p id="references">${mark(1)} · ${mark(2)} · ${mark(3)}</p><p>${mark(2, "wg-gallery=album", "A duplicate title")}</p><p>Individual previews: ${mark(1, "wg-image", "Standalone lake")} · ${mark(2, "wg-image", "Standalone cabin")}</p><p><img src="${image(1)}#wg-gallery=album" alt="Lake at dawn" title="Inline lake" width="320"></p><p><a href="${image(3)}#wg-gallery=album" title="Full-size landscape"><img src="${image(4)}" alt="Landscape thumbnail" width="200"></a></p><p><a href="${image(2)}"><img src="${image(1)}#wg-gallery=album" width="180" alt="Ordinary linked image"></a></p><p><a href="https://images.example.test/external.png#wg-image" title="External image">External</a> · <a href="${image(9)}#wg-image" title="Missing image">Broken</a></p>${"<p>Continue reading the notes here.</p>".repeat(18)}`;
 const longCodeValue = "abcdefghij".repeat(35);
+const coverAlbum = `<p><a href="#courtyard">See courtyard</a></p>
+<h3 id="courtyard">Courtyard <small>★ 4.6 · <a href="https://example.org/map">Map</a></small></h3>
+<p id="cover-photos"><a href="${image(1)}#wg-gallery=spa"><img src="/api/images/img_0000000000000001" alt="Courtyard" width="240"></a>
+<a href="${image(4)}#wg-gallery=spa" title="Outdoor pool"></a>
+<a href="${image(3)}#wg-gallery=spa" title="Cedar sauna"></a>
+<a href="${image(4)}#wg-gallery=spa" title="Repeated pool"></a></p>`;
 const longCodeLine = `const value = "${longCodeValue}";`;
 const highlightedCode = `<div class="highlight highlight-source-js" dir="auto"><pre><span class="pl-k">const</span> value = "${longCodeValue}";\n\n\t&lt;tag&gt; &amp; \`literal\` $(text)\n</pre></div>`;
 const longPatchLine = `+MIN_A: constant(uint256) = ${"N_CONS*N_CONS*".repeat(24)}`;
@@ -160,7 +166,7 @@ const filesFor = (id) =>
         }
       : id === "GalleryOffline01"
         ? {
-            "README.md": `<h1>Saved album</h1><p>${mark(1)} · ${mark(2)} · ${mark(3)}</p><p>${mark(1, "wg-image", "Standalone lake")}</p>`
+            "README.md": `<h1>Saved album</h1><p>${mark(1)} · ${mark(2)} · ${mark(3)}</p><p>${mark(1, "wg-image", "Standalone lake")}</p>${coverAlbum}`
           }
         : {
             "README.md": album,

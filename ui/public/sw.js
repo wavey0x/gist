@@ -13,7 +13,6 @@ const SHARED_SHELL_ASSETS = [
   "/gallery-model.mjs",
   "/code-lines.mjs",
   "/offline-table-migration.mjs",
-  "/gallery-viewer.mjs",
   "/gallery-viewer.css",
   "/vendor/photoswipe/photoswipe.esm.js",
   "/vendor/photoswipe/photoswipe.css"
@@ -22,6 +21,7 @@ const OFFLINE_SHELL_ASSETS = [
   SHELL_URL,
   "/offline-shell.css",
   "/offline-shell.js",
+  "/gallery-viewer.mjs",
   "/standalone-navigation.mjs",
   "/pull-refresh.mjs",
   "/icons/icon-192.png",
