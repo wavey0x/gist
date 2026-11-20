@@ -68,7 +68,17 @@ function addCover(trigger, image, { group, index }, displaySource) {
     frame.classList.add("wg-gallery-cover-pending");
     image.addEventListener("load", () => frame.classList.remove("wg-gallery-cover-pending"), { once: true });
   }
+  // Tilt bigger covers less, so the corners of the pile stick out by about
+  // the same few pixels at any size instead of crowding the text around it.
+  const tilt = new ResizeObserver(([entry]) => {
+    const half = entry.contentRect.width / 2;
+    if (!half) return;
+    const degrees = Math.min(4, Math.asin(Math.min(1, 9 / half)) * 180 / Math.PI);
+    frame.style.setProperty("--tilt", `${degrees.toFixed(2)}deg`);
+  });
+  tilt.observe(image);
   return () => {
+    tilt.disconnect();
     frame.replaceWith(image);
     if (previousLabel === null) trigger.removeAttribute("aria-label");
     else trigger.setAttribute("aria-label", previousLabel);

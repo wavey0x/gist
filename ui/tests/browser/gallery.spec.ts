@@ -112,9 +112,12 @@ test("a cover opens from a section jump and restores its slide, focus, and secti
     nodes.filter(img => img.naturalWidth > 0).map(img => new URL(img.src).pathname)
   )).toEqual([1, 4, 3].map(id => `/api/images/img_${String(id).padStart(16, "0")}`));
   const rectangles = await images.evaluateAll(nodes => nodes.map(img => img.getBoundingClientRect().toJSON()));
+  // Rear photos tilt behind the cover: their corners show, but the pile adds
+  // only a few pixels around it instead of a column beside it.
   for (let index = 1; index < rectangles.length; index++) {
-    expect(rectangles[index].left).toBeLessThan(rectangles[index - 1].right);
-    expect(rectangles[index].right - rectangles[index - 1].right).toBeGreaterThan(24);
+    expect(Math.abs(rectangles[index].width - rectangles[0].width)).toBeGreaterThan(2);
+    expect(rectangles[index].right - rectangles[0].right).toBeLessThan(12);
+    expect(rectangles[0].left - rectangles[index].left).toBeLessThan(12);
   }
   const metadata = page.locator("#courtyard small");
   await expect(metadata).toHaveCSS("vertical-align", "baseline");
