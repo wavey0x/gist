@@ -104,8 +104,8 @@
   vertical-align: middle;
   max-width: 100%;
   /* Room for the tilted corners, so the pile costs a few pixels, not a column. */
-  margin-block: 12px;
-  margin-inline-end: 6px;
+  margin-block: 18px;
+  margin-inline: 4px 10px;
   cursor: zoom-in;
 }
 .wg-gallery-cover > img {
@@ -122,13 +122,13 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: rotate(calc(var(--tilt, 3deg) * -0.6));
-  filter: brightness(0.85);
+  transform: rotate(calc(var(--tilt, 4deg) * -0.7));
+  filter: brightness(0.9);
 }
 .wg-gallery-layer + .wg-gallery-layer {
   z-index: -2;
-  transform: rotate(var(--tilt, 3deg));
-  filter: brightness(0.7);
+  transform: rotate(var(--tilt, 4deg));
+  filter: brightness(0.78);
 }
 /* Until the cover has a size, the stack and count have nothing to anchor to. */
 .wg-gallery-cover-pending > .wg-gallery-layer,

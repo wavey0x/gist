@@ -73,7 +73,7 @@ function addCover(trigger, image, { group, index }, displaySource) {
   const tilt = new ResizeObserver(([entry]) => {
     const half = entry.contentRect.width / 2;
     if (!half) return;
-    const degrees = Math.min(4, Math.asin(Math.min(1, 9 / half)) * 180 / Math.PI);
+    const degrees = Math.min(6, Math.asin(Math.min(1, 15 / half)) * 180 / Math.PI);
     frame.style.setProperty("--tilt", `${degrees.toFixed(2)}deg`);
   });
   tilt.observe(image);
