@@ -107,8 +107,17 @@ const mermaidHtml = mermaidSources
         .replace(/>/g, "&gt;")}</pre></div><div class="mermaid-render-output js-mermaid-render-output"></div><div class="mermaid-render-error"></div></div>`
   )
   .join("");
+// A trip gist with a ```map fence, as the API renders it (a plain code block).
+const mapFence = readFileSync(new URL("./fixtures/map-santa-fe.md", import.meta.url), "utf8");
+const mapSource = mapFence.replace(/^```map\n|```\n?$/g, "");
+const mapHtml = `<h1 id="santa-fe">Santa Fe · things to do, eat &amp; drink</h1><p><strong>November 21–24, 2026</strong><br><strong>Hotel:</strong> Residence Inn Santa Fe · 1698 Galisteo St.</p><pre><code class="language-map">${mapSource
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")}</code></pre><h2 id="activities">Activities</h2>${"<p>Plenty to do downtown, all within a short walk of the Plaza.</p>".repeat(4)}<h3 id="2-meow-wolf--house-of-eternal-return--475--20996--google-maps--exhibit-tickets">2. Meow Wolf</h3><p>Immersive art.</p>${"<p>More notes.</p>".repeat(30)}`;
 const filesFor = (id) =>
-  id === "GalleryDiff00001"
+  id === "GalleryMap000001"
+    ? { "README.md": mapHtml }
+    : id === "GalleryDiff00001"
     ? { "README.md": "<h1>Oracle markets</h1><p>Diff fixture.</p>", "calc.py": "<pre>def total(values): ...</pre>" }
     : id === "GalleryDiffProse1"
     ? { "README.md": "<h1>Oracle markets</h1><p>Diff fixture.</p>" }

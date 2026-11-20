@@ -13,12 +13,14 @@
     "test:gallery": "node --test tests/gallery.test.mjs",
     "test:browser": "playwright test",
     "test:design": "node --test tests/design-tokens.test.mjs",
-    "test:lines": "node --test tests/code-lines.test.mjs"
+    "test:lines": "node --test tests/code-lines.test.mjs",
+    "test:map": "node --test tests/map-block.test.mjs"
   },
   "dependencies": {
     "diff": "^9.0.0",
     "katex": "^0.19.1",
     "lucide-react": "^0.555.0",
+    "maplibre-gl": "6.16.0",
     "mermaid": "^12.3.0",
     "next": "^16.4.6",
     "photoswipe": "5.4.4",

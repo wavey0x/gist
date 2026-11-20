@@ -31,7 +31,7 @@ export function ListenFromHere() {
       const target = event.target;
       if (
         !(target instanceof Element) ||
-        target.closest("a, button, input, img, pre, table, .mermaid-panzoom") ||
+        target.closest("a, button, input, img, pre, table, .mermaid-panzoom, .map-block") ||
         !window.getSelection()?.isCollapsed
       ) {
         return;

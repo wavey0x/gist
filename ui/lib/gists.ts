@@ -1,4 +1,5 @@
 import { tightenTableCells } from "./table-cells";
+import { enrichMapBlocks } from "../public/map-block.mjs";
 import { notFound } from "next/navigation";
 import { apiUrl } from "./api-base";
 
@@ -180,7 +181,7 @@ export function normalizePublicGistPayload(
       filename,
       {
         ...file,
-        rendered_html: tightenTableCells(lazyLoadImages(file.rendered_html))
+        rendered_html: enrichMapBlocks(tightenTableCells(lazyLoadImages(file.rendered_html)))
       }
     ])
   );
